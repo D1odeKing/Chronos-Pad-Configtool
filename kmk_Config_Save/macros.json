@@ -1,0 +1,30 @@
+{
+    "PASTE": [
+        [
+            "press",
+            "KC.LCTL"
+        ],
+        [
+            "tap",
+            "KC.V"
+        ],
+        [
+            "release",
+            "KC.LCTL"
+        ]
+    ],
+    "COPY": [
+        [
+            "press",
+            "KC.LCTL"
+        ],
+        [
+            "tap",
+            "KC.C"
+        ],
+        [
+            "release",
+            "KC.LCTL"
+        ]
+    ]
+}

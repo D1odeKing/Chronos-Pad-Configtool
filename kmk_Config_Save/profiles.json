@@ -1,0 +1,15 @@
+{
+    "2x2_Test": {
+        "rows": 2,
+        "cols": 2,
+        "col_pins": [
+            "board.GP0",
+            "board.GP1"
+        ],
+        "row_pins": [
+            "board.GP2",
+            "board.GP3"
+        ],
+        "diode_orientation": "COL2ROW"
+    }
+}
