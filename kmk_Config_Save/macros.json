@@ -26,5 +26,39 @@
             "release",
             "KC.LCTL"
         ]
+    ],
+    "STYLE1": [
+        [
+            "press",
+            "KC.LCTL"
+        ],
+        [
+            "press",
+            "KC.LSFT"
+        ],
+        [
+            "press",
+            "KC.D"
+        ],
+        [
+            "press",
+            "KC.A"
+        ],
+        [
+            "release",
+            "KC.A"
+        ],
+        [
+            "release",
+            "KC.D"
+        ],
+        [
+            "release",
+            "KC.LSFT"
+        ],
+        [
+            "release",
+            "KC.LCTL"
+        ]
     ]
 }
