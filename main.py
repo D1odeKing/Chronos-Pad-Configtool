@@ -1,3 +1,22 @@
+"""
+KMK Macropad Configurator - Raspberry Pi Pico Edition
+
+Hardware Configuration (FIXED):
+- Board: Raspberry Pi Pico
+- Matrix: 5 rows x 4 columns (20 keys)
+- Rows: GP8, GP7, GP6, GP5, GP4
+- Columns: GP0, GP1, GP2, GP3
+- Diode Orientation: COL2ROW
+- Encoder: A=GP10, B=GP11, Button=GP14
+- Slider Pot: GP28 (analog input)
+- RGB LEDs: GP9 (WS2812 data line)
+- Display: I2C (SDA=GP20, SCL=GP21)
+
+This configurator allows you to customize key assignments, macros, layers,
+and extensions (encoder, RGB, analog input, display) without changing the
+underlying hardware pin configuration.
+"""
+
 import sys
 import re
 import ast
@@ -17,12 +36,73 @@ from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
 
 # --- Default Values ---
-DEFAULT_ROWS = 3
-DEFAULT_COLS = 4
 DEFAULT_KEY = "KC.NO"
 CONFIG_SAVE_DIR = os.path.join(os.getcwd(), "kmk_Config_Save")
 MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
 PROFILE_FILE = "profiles.json"
+
+# --- Hardware Configuration (Fixed) ---
+# Raspberry Pi Pico 5x4 Custom Configuration
+FIXED_ROWS = 5
+FIXED_COLS = 4
+FIXED_ROW_PINS = ["board.GP8", "board.GP7", "board.GP6", "board.GP5", "board.GP4"]
+FIXED_COL_PINS = ["board.GP0", "board.GP1", "board.GP2", "board.GP3"]
+FIXED_DIODE_ORIENTATION = "COL2ROW"
+FIXED_ENCODER_PINS = {"a": "board.GP10", "b": "board.GP11", "button": "board.GP14"}
+FIXED_ANALOG_PIN = "board.GP28"  # 10k slider pot
+FIXED_RGB_PIN = "board.GP9"
+FIXED_DISPLAY_PINS = {"scl": "board.GP21", "sda": "board.GP20"}
+
+# --- Default Extension Configuration Templates ---
+DEFAULT_ENCODER_CONFIG = '''from kmk.modules.encoder import EncoderHandler
+encoder_handler = EncoderHandler()
+encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)  # (a, b, button)
+encoder_handler.map = [((KC.VOLD, KC.VOLU, KC.MUTE),)]  # (ccw, cw, press)
+keyboard.modules.append(encoder_handler)'''
+
+DEFAULT_ANALOGIN_CONFIG = '''from kmk.extensions.analogin import AnalogIn
+analog_handler = AnalogIn()
+analog_handler.pins = (board.GP28,)  # 10k slider pot
+# analog_handler.evtmap = [KeyCode, ...]  # Optional event mapping
+keyboard.extensions.append(analog_handler)'''
+
+DEFAULT_RGB_CONFIG = '''import neopixel
+from kmk.extensions.peg_rgb_matrix import Rgb_matrix
+
+# WS2812 RGB strip/matrix connected to GP9
+rgb_ext = Rgb_matrix(
+    ledData=neopixel.NeoPixel(board.GP9, 20, brightness=0.2)  # 20 LEDs for 5x4 matrix
+)
+keyboard.extensions.append(rgb_ext)'''
+
+DEFAULT_DISPLAY_CONFIG = '''import board
+import busio
+import displayio
+import terminalio
+import adafruit_displayio_sh1106
+from adafruit_display_text import label
+from i2cdisplaybus import I2CDisplayBus
+
+# I2C Display setup (SDA=GP20, SCL=GP21)
+displayio.release_displays()
+i2c = busio.I2C(scl=board.GP21, sda=board.GP20)
+display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+display = adafruit_displayio_sh1106.SH1106(
+    display_bus,
+    width=128,
+    height=64,
+    rotation=0,
+    colstart=2  # Column offset for proper alignment
+)
+
+# Create display group
+splash = displayio.Group()
+display.root_group = splash
+
+# Add your display content here
+# Example:
+# text_area = label.Label(terminalio.FONT, text="Hello!", color=0xFFFFFF, x=0, y=10)
+# splash.append(text_area)'''
 
 
 # --- KMK Keycode Data ---
@@ -1284,19 +1364,25 @@ class KMKConfigurator(QMainWindow):
         self.selected_key_coords = None
         self.macropad_buttons = {}
         self.current_layer = 0
-        self.rows = DEFAULT_ROWS
-        self.cols = DEFAULT_COLS
+        
+        # Fixed hardware configuration
+        self.rows = FIXED_ROWS
+        self.cols = FIXED_COLS
+        self.row_pins = FIXED_ROW_PINS.copy()
+        self.col_pins = FIXED_COL_PINS.copy()
+        self.diode_orientation = FIXED_DIODE_ORIENTATION
+        
         self.macros = {}
         self.profiles = {}
-        # Extension toggles and configs (simple free-form config text entered by user)
-        self.enable_encoder = False
-        self.encoder_config_str = ""  # user-provided python snippet for encoder setup
-        self.enable_analogin = False
-        self.analogin_config_str = ""
-        self.enable_rgb = False
+        # Extensions are always enabled - user can configure them
+        self.enable_encoder = True
+        self.encoder_config_str = DEFAULT_ENCODER_CONFIG  # Pre-populate with default
+        self.enable_analogin = True
+        self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG  # Pre-populate with default
+        self.enable_rgb = True
         self.rgb_config_str = ""
-        self.col_pins = [f"board.GP{i}" for i in range(self.cols)]
-        self.row_pins = [f"board.GP{i+self.cols}" for i in range(self.rows)]
+        self.enable_display = True
+        self.display_config_str = ""
 
         self.initialize_keymap_data()
 
@@ -1462,10 +1548,12 @@ class KMKConfigurator(QMainWindow):
     def save_extension_configs(self):
         try:
             os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            # All extensions are always enabled
             meta = {
-                "enable_encoder": bool(self.enable_encoder),
-                "enable_analogin": bool(self.enable_analogin),
-                "enable_rgb": bool(self.enable_rgb),
+                "enable_encoder": True,
+                "enable_analogin": True,
+                "enable_rgb": True,
+                "enable_display": True,
             }
             with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
@@ -1477,6 +1565,8 @@ class KMKConfigurator(QMainWindow):
                 f.write(self.analogin_config_str or '')
             with open(os.path.join(CONFIG_SAVE_DIR, 'peg_rgb.py'), 'w') as f:
                 f.write(self.rgb_config_str or '')
+            with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
+                f.write(self.display_config_str or '')
             # Save per-key color map if present
             try:
                 if hasattr(self, 'peg_rgb_colors') and self.peg_rgb_colors:
@@ -1492,9 +1582,11 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(os.path.join(CONFIG_SAVE_DIR, 'extensions.json')):
                 with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'r') as f:
                     meta = json.load(f)
-                self.enable_encoder = bool(meta.get('enable_encoder', False))
-                self.enable_analogin = bool(meta.get('enable_analogin', False))
-                self.enable_rgb = bool(meta.get('enable_rgb', False))
+                # Extensions are always enabled - hardcoded
+                self.enable_encoder = True
+                self.enable_analogin = True
+                self.enable_rgb = True
+                self.enable_display = True
             # Load snippet files if present
             enc_path = os.path.join(CONFIG_SAVE_DIR, 'encoder.py')
             if os.path.exists(enc_path):
@@ -1508,6 +1600,10 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(rgb_path):
                 with open(rgb_path, 'r') as f:
                     self.rgb_config_str = f.read()
+            disp_path = os.path.join(CONFIG_SAVE_DIR, 'display.py')
+            if os.path.exists(disp_path):
+                with open(disp_path, 'r') as f:
+                    self.display_config_str = f.read()
             # load per-key color mapping
             colors_path = os.path.join(CONFIG_SAVE_DIR, 'peg_rgb_colors.json')
             if os.path.exists(colors_path):
@@ -1596,45 +1692,44 @@ class KMKConfigurator(QMainWindow):
         self.populate_config_file_list()
 
     def setup_extensions_ui(self, parent_layout):
-        group = QGroupBox("Extensions")
+        group = QGroupBox("Extensions (Always Enabled)")
         layout = QVBoxLayout()
 
-        # Encoder
+        # Encoder (fixed pins: GP10, GP11, GP14)
         enc_layout = QHBoxLayout()
-        self.encoder_checkbox = QCheckBox("Enable Encoder")
-        self.encoder_checkbox.stateChanged.connect(self.on_encoder_toggled)
-        self.encoder_checkbox.setChecked(bool(self.enable_encoder))
-        enc_layout.addWidget(self.encoder_checkbox)
+        enc_layout.addWidget(QLabel("Encoder (GP10, GP11, GP14):"))
         enc_cfg_btn = QPushButton("Configure")
         enc_cfg_btn.clicked.connect(self.configure_encoder)
         enc_layout.addWidget(enc_cfg_btn)
         layout.addLayout(enc_layout)
 
-        # AnalogIn
+        # AnalogIn (fixed pin: GP28)
         an_layout = QHBoxLayout()
-        self.analog_checkbox = QCheckBox("Enable AnalogIn")
-        self.analog_checkbox.stateChanged.connect(self.on_analog_toggled)
-        self.analog_checkbox.setChecked(bool(self.enable_analogin))
-        an_layout.addWidget(self.analog_checkbox)
+        an_layout.addWidget(QLabel("Analog Input (GP28 - Slider):"))
         an_cfg_btn = QPushButton("Configure")
         an_cfg_btn.clicked.connect(self.configure_analogin)
         an_layout.addWidget(an_cfg_btn)
         layout.addLayout(an_layout)
 
+        # Display (fixed pins: SDA=GP20, SCL=GP21)
+        disp_layout = QHBoxLayout()
+        disp_layout.addWidget(QLabel("Display (I2C: GP20/GP21):"))
+        disp_cfg_btn = QPushButton("Configure")
+        disp_cfg_btn.clicked.connect(self.configure_display)
+        disp_layout.addWidget(disp_cfg_btn)
+        layout.addLayout(disp_layout)
+
         # Peg RGB Matrix
         rgb_layout = QHBoxLayout()
-        self.rgb_checkbox = QCheckBox("Enable Peg RGB Matrix")
-        self.rgb_checkbox.stateChanged.connect(self.on_rgb_toggled)
-        self.rgb_checkbox.setChecked(bool(self.enable_rgb))
-        rgb_layout.addWidget(self.rgb_checkbox)
+        rgb_layout.addWidget(QLabel("RGB Matrix (GP9):"))
         rgb_cfg_btn = QPushButton("Configure")
         rgb_cfg_btn.clicked.connect(self.configure_rgb)
         rgb_layout.addWidget(rgb_cfg_btn)
         # Quick access button for per-key color mapping
         rgb_colors_btn = QPushButton("Per-key Colors")
         def open_per_key_colors():
-            rows = getattr(self, 'rows', DEFAULT_ROWS)
-            cols = getattr(self, 'cols', DEFAULT_COLS)
+            rows = self.rows
+            cols = self.cols
             layers = max(1, len(self.keymap_data) if hasattr(self, 'keymap_data') else 1)
             initial = getattr(self, 'peg_rgb_colors', {})
             pc = PerKeyColorDialog(self, rows=rows, cols=cols, layers=layers, initial_map=initial)
@@ -1663,29 +1758,33 @@ class KMKConfigurator(QMainWindow):
         elif name == 'dark':
             self._apply_dark_stylesheet()
 
-    # --- Extension toggles and configuration handlers ---
-    def on_encoder_toggled(self, state):
-        self.enable_encoder = bool(state == Qt.CheckState.Checked)
 
-    def on_analog_toggled(self, state):
-        self.enable_analogin = bool(state == Qt.CheckState.Checked)
 
-    def on_rgb_toggled(self, state):
-        self.enable_rgb = bool(state == Qt.CheckState.Checked)
-
+    # --- Extension configuration handlers ---
     def configure_encoder(self):
-        dlg = EncoderConfigDialog(self, self.encoder_config_str)
-        # Try to prepopulate dialog from previous snippet (best-effort)
-        try:
-            txt = self.encoder_config_str.strip()
-            if txt.startswith('encoder_handler.pins') or txt.startswith('encoder_handler ='):
-                # put full snippet into map editor so user can edit
-                dlg.map_editor.setPlainText(txt)
-        except Exception:
-            pass
+        """Configure encoder with a simple text editor dialog."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
+        
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Encoder Configuration")
+        dlg.resize(600, 400)
+        layout = QVBoxLayout(dlg)
+        
+        layout.addWidget(QLabel("Encoder Configuration (A=GP10, B=GP11, Button=GP14):"))
+        layout.addWidget(QLabel("Edit the encoder map below (CCW, CW, Button press):"))
+        
+        editor = QTextEdit()
+        editor.setPlainText(self.encoder_config_str or DEFAULT_ENCODER_CONFIG)
+        editor.setFont(QFont("Courier New", 10))
+        layout.addWidget(editor)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+        
         if dlg.exec():
-            self.encoder_config_str = dlg.get_config()
-            self.encoder_checkbox.setChecked(True)
+            self.encoder_config_str = editor.toPlainText()
             self.save_extension_configs()
 
     def configure_analogin(self):
@@ -1699,16 +1798,45 @@ class KMKConfigurator(QMainWindow):
             pass
         if dlg.exec():
             self.analogin_config_str = dlg.get_config()
-            self.analog_checkbox.setChecked(True)
             self.save_extension_configs()
+
+    def configure_display(self):
+        """Configure display settings - shows auto-generated keymap layout."""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
+        
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Display Configuration")
+        dlg.resize(700, 500)
+        layout = QVBoxLayout(dlg)
+        
+        layout.addWidget(QLabel("Display Configuration (I2C on SDA=GP20, SCL=GP21):"))
+        layout.addWidget(QLabel("The display will auto-generate a visual layout of your keymap."))
+        layout.addWidget(QLabel("Preview of generated code:"))
+        
+        editor = QTextEdit()
+        # Show the auto-generated display code
+        editor.setPlainText(self.generate_display_layout_code())
+        editor.setFont(QFont("Courier New", 9))
+        editor.setReadOnly(True)  # Make it read-only since it's auto-generated
+        layout.addWidget(editor)
+        
+        info_label = QLabel("Note: This code is automatically generated based on your Layer 0 keymap.\nIt updates whenever you generate code.py.")
+        info_label.setStyleSheet("color: #666; font-style: italic;")
+        layout.addWidget(info_label)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dlg.accept)
+        layout.addWidget(buttons)
+        
+        dlg.exec()
 
     def configure_rgb(self):
         dlg = PegRgbConfigDialog(self, self.rgb_config_str)
         # Provide access to per-key colors via dialog button
         dlg_colors_btn = QPushButton("Configure per-key colors")
         def open_colors():
-            rows = getattr(self, 'rows', DEFAULT_ROWS)
-            cols = getattr(self, 'cols', DEFAULT_COLS)
+            rows = self.rows
+            cols = self.cols
             layers = max(1, len(self.keymap_data) if hasattr(self, 'keymap_data') else 1)
             initial = getattr(self, 'peg_rgb_colors', {})
             pc = PerKeyColorDialog(self, rows=rows, cols=cols, layers=layers, initial_map=initial)
@@ -1725,7 +1853,6 @@ class KMKConfigurator(QMainWindow):
             dlg_colors_btn.clicked.connect(open_colors)
         if dlg.exec():
             self.rgb_config_str = dlg.get_config()
-            self.rgb_checkbox.setChecked(True)
             self.save_extension_configs()
 
     def populate_config_file_list(self):
@@ -1751,8 +1878,16 @@ class KMKConfigurator(QMainWindow):
         self.config_file_combo.blockSignals(False)
     
     def setup_hardware_profile_ui(self, parent_layout):
-        group = QGroupBox("Hardware")
+        group = QGroupBox("Hardware Configuration")
         layout = QVBoxLayout()
+        
+        # Display fixed hardware info (read-only)
+        info_layout = QGridLayout()
+        info_layout.addWidget(QLabel("Board:"), 0, 0)
+        info_layout.addWidget(QLabel("Raspberry Pi Pico"), 0, 1)
+        info_layout.addWidget(QLabel("Matrix:"), 1, 0)
+        info_layout.addWidget(QLabel(f"{FIXED_ROWS}x{FIXED_COLS} (COL2ROW)"), 1, 1)
+        layout.addLayout(info_layout)
         
         # Profile dropdown and delete button
         profile_selection_layout = QHBoxLayout()
@@ -1767,34 +1902,6 @@ class KMKConfigurator(QMainWindow):
         profile_selection_layout.addWidget(delete_profile_btn)
         
         layout.addLayout(profile_selection_layout)
-
-        # Grid dimensions, diode orientation, and pins
-        current_hw_layout = QGridLayout()
-        current_hw_layout.addWidget(QLabel("Rows:"), 0, 0)
-        self.rows_spinbox = QSpinBox()
-        self.rows_spinbox.setMinimum(1)
-        self.rows_spinbox.setValue(self.rows)
-        current_hw_layout.addWidget(self.rows_spinbox, 0, 1)
-
-        current_hw_layout.addWidget(QLabel("Cols:"), 1, 0)
-        self.cols_spinbox = QSpinBox()
-        self.cols_spinbox.setMinimum(1)
-        self.cols_spinbox.setValue(self.cols)
-        current_hw_layout.addWidget(self.cols_spinbox, 1, 1)
-
-        current_hw_layout.addWidget(QLabel("Diode:"), 2, 0)
-        self.diode_orientation_combo = QComboBox()
-        self.diode_orientation_combo.addItems(["COL2ROW", "ROW2COL"])
-        current_hw_layout.addWidget(self.diode_orientation_combo, 2, 1)
-        layout.addLayout(current_hw_layout)
-
-        update_grid_button = QPushButton("Update Grid")
-        update_grid_button.clicked.connect(self.update_grid_dimensions)
-        layout.addWidget(update_grid_button)
-
-        edit_pins_btn = QPushButton("Edit Pins...")
-        edit_pins_btn.clicked.connect(self.edit_pins)
-        layout.addWidget(edit_pins_btn)
 
         save_profile_btn = QPushButton("Save Profile")
         save_profile_btn.clicked.connect(self.save_current_profile)
@@ -1930,13 +2037,11 @@ class KMKConfigurator(QMainWindow):
     def save_current_profile(self):
         name, ok = QInputDialog.getText(self, "Save Profile", "Enter profile name:")
         if ok and name:
+            # Save only the keymap data - hardware is fixed
             self.profiles[name] = {
-                "rows": self.rows,
-                "cols": self.cols,
-                "col_pins": self.col_pins,
-                "row_pins": self.row_pins,
-                "diode_orientation": self.diode_orientation_combo.currentText()
+                "keymap_data": self.keymap_data
             }
+            self.save_profiles()
             self.load_profiles()
             self.profile_combo.setCurrentText(name)
 
@@ -1945,19 +2050,11 @@ class KMKConfigurator(QMainWindow):
         if profile_name and profile_name != "Custom":
             profile = self.profiles.get(profile_name)
             if profile:
-                self.rows = profile["rows"]
-                self.cols = profile["cols"]
-                self.col_pins = profile["col_pins"]
-                self.row_pins = profile["row_pins"]
-                
-                self.rows_spinbox.setValue(self.rows)
-                self.cols_spinbox.setValue(self.cols)
-                
-                diode_index = self.diode_orientation_combo.findText(profile["diode_orientation"])
-                if diode_index != -1:
-                    self.diode_orientation_combo.setCurrentIndex(diode_index)
-
-                self.update_grid_dimensions(force_update=True)
+                # Load only keymap data - hardware is fixed
+                self.keymap_data = profile.get("keymap_data", [])
+                self.current_layer = 0
+                self.update_layer_tabs()
+                self.update_macropad_display()
 
     def delete_selected_profile(self):
         profile_name = self.profile_combo.currentText()
@@ -1968,12 +2065,7 @@ class KMKConfigurator(QMainWindow):
                     del self.profiles[profile_name]
                     self.load_profiles()
 
-    def edit_pins(self):
-        """Opens a dialog to edit the row and column pin assignments."""
-        dialog = PinEditorDialog(self.rows, self.cols, self.row_pins, self.col_pins, self)
-        if dialog.exec():
-            self.col_pins, self.row_pins = dialog.get_pins()
-            self.profile_combo.setCurrentText("Custom")
+
             
     # --- Key Assignment ---
     def create_keycode_selector(self):
@@ -2170,6 +2262,119 @@ class KMKConfigurator(QMainWindow):
         # However save keymap state via save_configuration_dialog if you want to persist the keymap to disk.
 
     # --- Code Generation and Saving ---
+    def generate_display_layout_code(self):
+        """Generates display code to show keymap layout on OLED."""
+        # Get current layer (layer 0) keymap
+        layer = self.keymap_data[0] if self.keymap_data else []
+        
+        # Helper function to abbreviate key names for display
+        def abbreviate_key(key_str):
+            if not key_str or key_str == "KC.NO" or key_str == "KC.TRNS":
+                return "---"
+            
+            # Handle macros
+            if key_str.startswith("MACRO("):
+                macro_name = key_str[6:-1]  # Extract name from MACRO(name)
+                return macro_name[:6] if len(macro_name) > 6 else macro_name
+            
+            # Handle layer switches
+            if "MO(" in key_str or "TG(" in key_str or "TO(" in key_str:
+                return key_str.replace("KC.", "")[:6]
+            
+            # Handle key combinations (e.g., KC.LCTL(KC.C))
+            if "(" in key_str:
+                # Simplify combinations like LCTL(C) -> C^C
+                parts = key_str.replace("KC.", "").replace("(", "+").replace(")", "")
+                return parts[:6]
+            
+            # Standard keys - remove KC. prefix
+            key = key_str.replace("KC.", "")
+            
+            # Common abbreviations for display
+            abbreviations = {
+                "LCTL": "LCtl", "RCTL": "RCtl",
+                "LSFT": "LSft", "RSFT": "RSft", 
+                "LALT": "LAlt", "RALT": "RAlt",
+                "LGUI": "LGui", "RGUI": "RGui",
+                "BSPC": "BkSp", "ENT": "Entr",
+                "SPC": "Spce", "TAB": "Tab",
+                "ESC": "Esc", "DEL": "Del",
+                "PGUP": "PgUp", "PGDN": "PgDn",
+                "HOME": "Home", "END": "End",
+                "UP": "Up", "DOWN": "Down",
+                "LEFT": "Left", "RGHT": "Rght",
+                "VOLU": "Vol+", "VOLD": "Vol-",
+                "MUTE": "Mute", "MPLY": "Play",
+                "MNXT": "Next", "MPRV": "Prev",
+            }
+            
+            key = abbreviations.get(key, key)
+            return key[:6] if len(key) > 6 else key
+        
+        # Build display code
+        code = '''import board
+import busio
+import displayio
+import terminalio
+import adafruit_displayio_sh1106
+from adafruit_display_text import label
+from i2cdisplaybus import I2CDisplayBus
+
+# I2C Display setup (SDA=GP20, SCL=GP21)
+displayio.release_displays()
+i2c = busio.I2C(scl=board.GP21, sda=board.GP20)
+display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+display = adafruit_displayio_sh1106.SH1106(
+    display_bus,
+    width=128,
+    height=64,
+    rotation=180,  # Rotated 180 degrees
+    colstart=2  # Column offset for proper alignment
+)
+
+# Create display group
+splash = displayio.Group()
+display.root_group = splash
+
+# Keymap layout - Generated from your configuration
+'''
+        
+        # Generate the key labels for 5x4 grid
+        code += "# 5x4 Grid Layout (Row x Col)\n"
+        code += "key_labels = [\n"
+        for r in range(5):
+            row_labels = []
+            for c in range(4):
+                if r < len(layer) and c < len(layer[r]):
+                    key_abbr = abbreviate_key(layer[r][c])
+                    row_labels.append(f'"{key_abbr}"')
+                else:
+                    row_labels.append('"---"')
+            code += f"    [{', '.join(row_labels)}],\n"
+        code += "]\n\n"
+        
+        # Add display rendering code
+        code += '''# Display key layout on OLED (128x64)
+# 5 rows x 4 cols: 64 height / 5 rows = 12.8px per row, 128 width / 4 cols = 32px per col
+# terminalio.FONT is 8px tall, so add offset to center vertically
+for row_idx in range(5):
+    for col_idx in range(4):
+        key_text = key_labels[row_idx][col_idx]
+        x_pos = col_idx * 32 + 1  # 1px left margin
+        y_pos = row_idx * 12 + 8  # Start at y=8 to avoid top cutoff, 12px spacing
+        
+        text_area = label.Label(
+            terminalio.FONT,
+            text=key_text,
+            color=0xFFFFFF,
+            x=x_pos,
+            y=y_pos
+        )
+        splash.append(text_area)
+'''
+        
+        return code
+    
     def get_generated_python_code(self):
         """Constructs the final `code.py` file content as a string."""
         macros_exist = bool(self.macros)
@@ -2208,7 +2413,7 @@ class KMKConfigurator(QMainWindow):
         keymap_str += "]\n"
 
         # --- Python File Template ---
-        diode_orientation = self.diode_orientation_combo.currentText()
+        diode_orientation = FIXED_DIODE_ORIENTATION
         
         imports = [
             "import board",
@@ -2224,8 +2429,7 @@ class KMKConfigurator(QMainWindow):
             imports.append("from kmk.modules.encoder import EncoderHandler")
         if self.enable_analogin:
             imports.append("from kmk.modules.analogin import AnalogInputs, AnalogInput")
-        if self.enable_rgb:
-            imports.append("from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data, Color")
+        # RGB import will be wrapped in try-except in the code body since it requires neopixel
 
         # Build extension snippets provided by the user
         ext_snippets = ""
@@ -2236,8 +2440,20 @@ class KMKConfigurator(QMainWindow):
             ext_snippets += "# AnalogIn configuration provided by user:\n"
             ext_snippets += self.analogin_config_str + "\n\n"
         if self.enable_rgb and self.rgb_config_str:
-            ext_snippets += "# Peg RGB Matrix configuration provided by user:\n"
-            ext_snippets += self.rgb_config_str + "\n\n"
+            # Only add user RGB config if it's not just a comment
+            rgb_code = self.rgb_config_str.strip()
+            if rgb_code and not rgb_code.startswith('#'):
+                ext_snippets += "# Peg RGB Matrix configuration provided by user (requires neopixel):\n"
+                ext_snippets += "try:\n"
+                # Indent user's RGB config
+                indented_rgb = "\n".join("    " + line for line in self.rgb_config_str.split("\n"))
+                ext_snippets += indented_rgb + "\n"
+                ext_snippets += "except ImportError:\n"
+                ext_snippets += "    print('RGB disabled: neopixel library not found')\n\n"
+        if self.enable_display:
+            # Auto-generate display layout showing keymap
+            ext_snippets += "# Display configuration - Auto-generated keymap layout:\n"
+            ext_snippets += self.generate_display_layout_code() + "\n\n"
         # Provide sensible default templates for enabled modules (placed before user snippets)
         default_snippets = ""
         if self.enable_encoder:
@@ -2260,12 +2476,25 @@ class KMKConfigurator(QMainWindow):
             )
         if self.enable_rgb:
             default_snippets += "# --- Peg RGB Matrix (auto-generated) ---\n"
+            default_snippets += "# RGB requires 'neopixel' library in lib folder\n"
+            default_snippets += "try:\n"
+            default_snippets += "    from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data, Color\n"
             num_keys = self.rows * self.cols
             default_snippets += (
-                "# Detected key count (rows * cols) = %d\n" % num_keys
-                + "# Example usage (adjust colors and underglow as needed):\n"
-                + ("rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[Color.WHITE]*%d, underglow=[]))\n" % num_keys)
-                + "# keyboard.extensions.append(rgb)\n\n"
+                "    \n"
+                + "    # Configure RGB settings on keyboard object\n"
+                + "    keyboard.rgb_pixel_pin = board.GP9\n"
+                + ("    keyboard.num_pixels = %d\n" % num_keys)
+                + "    keyboard.brightness_limit = 0.5\n"
+                + ("    keyboard.led_key_pos = list(range(%d))  # Sequential mapping 0-19\n" % num_keys)
+                + "    \n"
+                + "    # Create RGB matrix - all keys white, one dummy underglow\n"
+                + ("    rgb_keys = [Color.WHITE] * %d\n" % num_keys)
+                + "    rgb_underglow = [Color.OFF]\n"
+                + "    rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=rgb_keys, underglow=rgb_underglow))\n"
+                + "    keyboard.extensions.append(rgb)\n"
+                + "except ImportError:\n"
+                + "    print('RGB disabled: neopixel library not found')\n\n"
             )
             # If per-key layer colors exist, emit them as RGB_LAYER_COLORS
             if getattr(self, 'peg_rgb_colors', None):
@@ -2351,9 +2580,65 @@ if __name__ == '__main__':
             py_code_str = self.get_generated_python_code()
 
             try:
+                # Save code.py
                 with open(file_path, 'w') as f:
                     f.write(py_code_str)
-                QMessageBox.information(self, "Success", f"code.py saved successfully to:\n{file_path}")
+                
+                # Check if kmk folder exists, if not copy it
+                kmk_dest = os.path.join(folder_path, "kmk")
+                if not os.path.exists(kmk_dest):
+                    kmk_source = os.path.join(os.path.dirname(__file__), "kmk_firmware-main", "kmk")
+                    if os.path.exists(kmk_source):
+                        import shutil
+                        shutil.copytree(kmk_source, kmk_dest)
+                        kmk_copied = True
+                    else:
+                        QMessageBox.warning(self, "Warning", 
+                            f"KMK firmware source not found at:\n{kmk_source}\n\n"
+                            f"Please manually copy the kmk folder to {folder_path}")
+                        kmk_copied = False
+                else:
+                    kmk_copied = False
+                
+                # Copy required libraries
+                lib_source = os.path.join(os.path.dirname(__file__), "libraries", 
+                                         "adafruit-circuitpython-bundle-9.x-mpy-20251024", "lib")
+                lib_dest = os.path.join(folder_path, "lib")
+                
+                # Create lib folder if it doesn't exist
+                os.makedirs(lib_dest, exist_ok=True)
+                
+                # Required libraries list
+                required_libs = [
+                    "adafruit_displayio_sh1106.mpy",
+                    "adafruit_display_text",  # folder
+                    "neopixel.mpy"
+                ]
+                
+                copied_files = []
+                for lib_name in required_libs:
+                    src = os.path.join(lib_source, lib_name)
+                    dst = os.path.join(lib_dest, lib_name)
+                    
+                    if os.path.exists(src):
+                        if os.path.isdir(src):
+                            # Copy directory
+                            if os.path.exists(dst):
+                                import shutil
+                                shutil.rmtree(dst)
+                            shutil.copytree(src, dst)
+                            copied_files.append(f"{lib_name}/ (folder)")
+                        else:
+                            # Copy file
+                            import shutil
+                            shutil.copy2(src, dst)
+                            copied_files.append(lib_name)
+                
+                msg = f"code.py saved successfully to:\n{file_path}\n\n"
+                if kmk_copied:
+                    msg += f"✓ KMK firmware copied to {kmk_dest}\n\n"
+                msg += f"Libraries copied to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
+                QMessageBox.information(self, "Success", msg)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not save code.py file:\n{e}")
 
@@ -2416,25 +2701,42 @@ if __name__ == '__main__':
                 config_data = json.load(f)
 
             # --- Update state from loaded data ---
-            self.rows = config_data.get("rows", DEFAULT_ROWS)
-            self.cols = config_data.get("cols", DEFAULT_COLS)
-            self.col_pins = config_data.get("col_pins", [f"board.GP{i}" for i in range(self.cols)])
-            self.row_pins = config_data.get("row_pins", [f"board.GP{i+self.cols}" for i in range(self.rows)])
-            diode_orientation = config_data.get("diode_orientation", "COL2ROW")
+            # Hardware is fixed, only load keymap data
             self.keymap_data = config_data.get("keymap_data", [])
             # Do not override the global macros when loading a configuration file
             # Macros are stored independently in macros.json and loaded on startup.
 
-            # --- Refresh UI ---
-            self.rows_spinbox.setValue(self.rows)
-            self.cols_spinbox.setValue(self.cols)
-
-            diode_index = self.diode_orientation_combo.findText(diode_orientation)
-            if diode_index != -1:
-                self.diode_orientation_combo.setCurrentIndex(diode_index)
+            # Note: Rows, cols, and pins are fixed and cannot be changed from config files
             
+            # Validate and adapt keymap to match fixed grid size (5x4)
             if not self.keymap_data:
-                 self.initialize_keymap_data()
+                self.initialize_keymap_data()
+            else:
+                # Check and adapt each layer to match the fixed 5x4 grid
+                adapted_layers = []
+                for layer_idx, layer in enumerate(self.keymap_data):
+                    # Create a new 5x4 layer
+                    new_layer = []
+                    for r in range(FIXED_ROWS):
+                        new_row = []
+                        for c in range(FIXED_COLS):
+                            # Copy data if it exists in the old layer, otherwise use KC.NO
+                            if r < len(layer) and c < len(layer[r]):
+                                new_row.append(layer[r][c])
+                            else:
+                                new_row.append("KC.NO")
+                        new_layer.append(new_row)
+                    adapted_layers.append(new_layer)
+                
+                self.keymap_data = adapted_layers
+                
+                # Inform user if adaptation was needed
+                if len(self.keymap_data) > 0:
+                    orig_size = f"{len(self.keymap_data[0])}x{len(self.keymap_data[0][0]) if self.keymap_data[0] else 0}"
+                    if orig_size != f"{FIXED_ROWS}x{FIXED_COLS}":
+                        QMessageBox.information(self, "Grid Adapted", 
+                            f"Configuration adapted from {orig_size} to {FIXED_ROWS}x{FIXED_COLS} grid.")
+
             
             self.current_layer = 0
             self.profile_combo.setCurrentText("Custom")
@@ -2508,35 +2810,8 @@ if __name__ == '__main__':
         self.update_macropad_display()
 
     def update_grid_dimensions(self, force_update=False):
-        """
-        Resizes the internal keymap data and recreates the UI grid
-        when the user changes the number of rows or columns.
-        """
-        new_rows = self.rows_spinbox.value()
-        new_cols = self.cols_spinbox.value()
-        if force_update or new_rows != self.rows or new_cols != self.cols:
-            old_rows, old_cols = self.rows, self.cols
-            self.rows, self.cols = new_rows, new_cols
-            
-            # Resize pin arrays
-            self.col_pins = (self.col_pins + [''] * self.cols)[:self.cols]
-            self.row_pins = (self.row_pins + [''] * self.rows)[:self.rows]
-
-            # Resize all existing layers, preserving existing key assignments
-            new_keymap_data = []
-            for layer in self.keymap_data:
-                new_layer = self._create_new_layer()
-                for r in range(min(self.rows, old_rows)):
-                    for c in range(min(self.cols, old_cols)):
-                        new_layer[r][c] = layer[r][c]
-                new_keymap_data.append(new_layer)
-            self.keymap_data = new_keymap_data
-
-            self.recreate_macropad_grid()
-            self.current_layer = min(self.current_layer, len(self.keymap_data) - 1)
-            self.update_layer_tabs()
-            self.update_macropad_display()
-            self.profile_combo.setCurrentText("Custom")
+        """Grid dimensions are fixed - this method is kept for compatibility."""
+        pass
 
     def add_layer(self):
         """Adds a new, blank layer to the keymap."""

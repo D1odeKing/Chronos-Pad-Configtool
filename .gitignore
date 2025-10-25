@@ -1,3 +1,6 @@
+# AI Context folder
+ai-Context/
+
 kmk_firmware-main/.dockerignore
 kmk_firmware-main/.gitignore
 kmk_firmware-main/.s3cfg

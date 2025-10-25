@@ -1,5 +1,6 @@
 {
-  "enable_encoder": false,
-  "enable_analogin": false,
-  "enable_rgb": false
+  "enable_encoder": true,
+  "enable_analogin": true,
+  "enable_rgb": true,
+  "enable_display": true
 }
