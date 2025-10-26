@@ -6,14 +6,16 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.0+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
+> **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
+
 ## 🎯 Features
 
 ### Hardware Configuration
 - **Fixed 5×4 Matrix Layout**: Pre-configured for 20-key macropad
 - **Raspberry Pi Pico**: Optimized pin mappings
 - **Hardware Support**:
-  - Rotary Encoder (GP10, GP11, GP14)
-  - Analog Slider Input (GP28)
+  - Rotary Encoder with Layer Cycling (GP10, GP11, GP14)
+  - Analog Volume Slider - 10k Potentiometer (GP28)
   - RGB LEDs (GP9, WS2812 compatible)
   - SH1106 OLED Display (128×64, I2C on GP20/GP21)
 
@@ -43,10 +45,12 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - Custom layer switching logic with wraparound support
 - Seamless layer navigation without modifier keys
 
-#### Analog Input
-- Slider/potentiometer support
-- Event-based analog mapping
-- Threshold configuration
+#### Analog Input (Volume Slider)
+- **System Volume Control**: 10k sliding potentiometer for intuitive volume adjustment
+- **Real-Time Response**: Continuously monitors slider position
+- **Smooth Control**: Threshold-based detection prevents jitter
+- **Hardware Pin**: GP28 with analog-to-digital conversion
+- **Auto-Configuration**: Pre-configured for volume up/down based on slider movement
 
 #### RGB Matrix
 - Per-key RGB LED control
@@ -66,6 +70,13 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - **Tactile Feedback**: Physical rotation provides intuitive layer navigation
 - **Quick Access**: Press encoder button to instantly return to base layer
 - **Automatic Wraparound**: Seamlessly cycle from last layer back to first
+
+### Analog Volume Control
+- **Hardware Volume Slider**: 10k linear potentiometer for precise volume control
+- **Analog Monitoring**: Continuously tracks slider position (0-65535 ADC range)
+- **Smart Threshold**: Filters minor fluctuations to prevent unwanted adjustments
+- **Direct HID Control**: Sends system volume up/down commands based on slider movement
+- **No Modifier Keys Needed**: Pure analog-to-digital volume control
 
 ### Code Generation
 - **One-Click Export**: Generate complete KMK firmware code
@@ -290,7 +301,28 @@ For issues, questions, or contributions:
 - Check the README for configuration examples
 - Refer to [KMK Documentation](https://github.com/KMKfw/kmk_firmware/tree/main/docs/en) for firmware details
 
-## 🔄 Version History
+## � Related Projects
+
+### Chronos Pad Hardware
+**Repository**: [github.com/D1odeKing/Chronos-Pad](https://github.com/D1odeKing/Chronos-Pad)
+
+The Chronos Pad is a custom 5×4 macropad with integrated features:
+- Raspberry Pi Pico microcontroller
+- Rotary encoder with push button
+- 10k linear potentiometer (volume slider)
+- 20 WS2812 RGB LEDs (per-key lighting)
+- SH1106 128×64 OLED display
+- Hot-swap mechanical switches
+- 3D-printed or CNC case designs
+
+Visit the hardware repository for:
+- PCB design files and schematics
+- Bill of Materials (BOM)
+- Build guide and assembly instructions
+- Case design files (STL/STEP)
+- Wiring diagrams
+
+## �🔄 Version History
 
 ### v1.0.0 (2025-10-25)
 - Initial release

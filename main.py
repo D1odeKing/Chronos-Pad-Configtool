@@ -95,11 +95,89 @@ keyboard.modules.append(encoder_handler)
 # Add this line after keyboard.keymap = [...] in your main code:
 # layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))'''
 
-DEFAULT_ANALOGIN_CONFIG = '''from kmk.extensions.analogin import AnalogIn
-analog_handler = AnalogIn()
-analog_handler.pins = (board.GP28,)  # 10k slider pot
-# analog_handler.evtmap = [KeyCode, ...]  # Optional event mapping
-keyboard.extensions.append(analog_handler)'''
+DEFAULT_ANALOGIN_CONFIG = '''from analogio import AnalogIn as AnalogInPin
+import time
+
+# Volume control via 10k sliding potentiometer
+class VolumeSlider:
+    def __init__(self, keyboard, pin, poll_interval=0.05):
+        self.keyboard = keyboard
+        self.analog_pin = AnalogInPin(pin)
+        self.poll_interval = poll_interval
+        self.last_value = self.read_value()
+        self.last_poll = time.monotonic()
+        self.threshold = 2000  # Minimum change to trigger volume adjustment (out of 65535)
+        self.step_size = 1  # Number of volume steps per change
+        
+    def read_value(self):
+        """Read analog value (0-65535)"""
+        return self.analog_pin.value
+    
+    def during_bootup(self, keyboard):
+        """Initialize at boot"""
+        self.last_value = self.read_value()
+        return
+    
+    def before_matrix_scan(self, keyboard):
+        """Check slider position before each matrix scan"""
+        return
+    
+    def after_matrix_scan(self, keyboard):
+        """Check slider position after each matrix scan"""
+        current_time = time.monotonic()
+        
+        # Only poll at specified interval to avoid excessive checking
+        if current_time - self.last_poll < self.poll_interval:
+            return
+        
+        self.last_poll = current_time
+        current_value = self.read_value()
+        delta = current_value - self.last_value
+        
+        # If slider moved significantly
+        if abs(delta) > self.threshold:
+            if delta > 0:
+                # Slider moved up (higher value) - increase volume
+                for _ in range(self.step_size):
+                    keyboard.hid_pending = True
+                    keyboard._send_hid()
+                    keyboard.add_key(KC.VOLU)
+                    keyboard._send_hid()
+                    keyboard.remove_key(KC.VOLU)
+                    keyboard._send_hid()
+            else:
+                # Slider moved down (lower value) - decrease volume
+                for _ in range(self.step_size):
+                    keyboard.hid_pending = True
+                    keyboard._send_hid()
+                    keyboard.add_key(KC.VOLD)
+                    keyboard._send_hid()
+                    keyboard.remove_key(KC.VOLD)
+                    keyboard._send_hid()
+            
+            self.last_value = current_value
+        
+        return
+    
+    def before_hid_send(self, keyboard):
+        """Called before HID report is sent"""
+        return
+    
+    def after_hid_send(self, keyboard):
+        """Called after HID report is sent"""
+        return
+    
+    def on_powersave_enable(self, keyboard):
+        """Called when powersave is enabled"""
+        return
+    
+    def on_powersave_disable(self, keyboard):
+        """Called when powersave is disabled"""
+        return
+
+# Create and register volume slider extension
+volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval=0.05)
+keyboard.modules.append(volume_slider)'''
 
 DEFAULT_RGB_CONFIG = '''import neopixel
 from kmk.extensions.peg_rgb_matrix import Rgb_matrix
