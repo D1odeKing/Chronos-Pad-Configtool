@@ -48,9 +48,8 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - ✅ CircuitPython 9.x installed on your Raspberry Pi Pico
 
 **Hardware:**
-- Raspberry Pi Pico (RP2040) with CircuitPython
-- 5×4 key matrix
-- (Optional) Rotary encoder, RGB LEDs, OLED display
+
+This tool is designed specifically for the **[Chronos Pad](https://github.com/D1odeKing/Chronos-Pad)** macropad. For hardware specifications, PCB files, build instructions, and case designs, visit the [Chronos Pad hardware repository](https://github.com/D1odeKing/Chronos-Pad).
 
 > **Note:** KMK firmware and CircuitPython libraries are included and will be automatically deployed to your device when you save your configuration!
 
