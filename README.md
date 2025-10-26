@@ -333,6 +333,18 @@ Visit the hardware repository for:
 - Profile management system
 - Visual macro builder
 
+## 👏 Credits
+
+**Development**: The majority of the code for this configuration tool was written by **Claude Sonnet 4.5** (Anthropic's AI assistant), working collaboratively with the project maintainer to implement features, debug issues, and create comprehensive documentation.
+
+**Hardware Design**: Chronos Pad macropad by D1odeKing
+
+**Special Thanks**:
+- [KMK Firmware](https://github.com/KMKfw/kmk_firmware) - Keyboard firmware framework (GPL-3.0)
+- [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) - Essential libraries (MIT)
+- PyQt6 - GUI framework
+- The mechanical keyboard community
+
 ---
 
 **Made with ❤️ for the mechanical keyboard community**
