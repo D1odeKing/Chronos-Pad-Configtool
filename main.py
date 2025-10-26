@@ -23,11 +23,13 @@ import ast
 import json
 import os
 import time
+import traceback
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
-    QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog
+    QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
+    QFormLayout, QDoubleSpinBox
 )
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject
@@ -106,8 +108,11 @@ class VolumeSlider:
         self.poll_interval = poll_interval
         self.last_value = self.read_value()
         self.last_poll = time.monotonic()
+        self.last_movement = time.monotonic()
         self.threshold = 2000  # Minimum change to trigger volume adjustment (out of 65535)
         self.step_size = 1  # Number of volume steps per change
+        self.idle_timeout = 2.0  # Seconds of no movement before requiring re-sync
+        self.synced = False  # Track if we've established direction after idle
         
     def read_value(self):
         """Read analog value (0-65535)"""
@@ -116,6 +121,7 @@ class VolumeSlider:
     def during_bootup(self, keyboard):
         """Initialize at boot"""
         self.last_value = self.read_value()
+        self.synced = False  # Require initial movement to establish baseline
         return
     
     def before_matrix_scan(self, keyboard):
@@ -134,8 +140,21 @@ class VolumeSlider:
         current_value = self.read_value()
         delta = current_value - self.last_value
         
+        # Check if we've been idle too long (user may have adjusted volume elsewhere)
+        time_since_movement = current_time - self.last_movement
+        if time_since_movement > self.idle_timeout:
+            self.synced = False  # Need to re-sync on next movement
+        
         # If slider moved significantly
         if abs(delta) > self.threshold:
+            # If we're not synced (first movement after idle), just update position without sending
+            if not self.synced:
+                self.last_value = current_value
+                self.last_movement = current_time
+                self.synced = True
+                return
+            
+            # Normal operation: send volume commands based on direction
             if delta > 0:
                 # Slider moved up (higher value) - increase volume
                 for _ in range(self.step_size):
@@ -156,6 +175,7 @@ class VolumeSlider:
                     keyboard._send_hid()
             
             self.last_value = current_value
+            self.last_movement = current_time
         
         return
     
@@ -248,6 +268,13 @@ KEYCODES = {
         "KC.VOLU", "KC.VOLD", "KC.MUTE", "KC.PLAY",
         "KC.NEXT", "KC.PREV", "KC.STOP", "KC.EJCT"
     ],
+    "Numpad": [
+        "KC.KP_0", "KC.KP_1", "KC.KP_2", "KC.KP_3", "KC.KP_4",
+        "KC.KP_5", "KC.KP_6", "KC.KP_7", "KC.KP_8", "KC.KP_9",
+        "KC.KP_SLASH", "KC.KP_ASTERISK", "KC.KP_MINUS", "KC.KP_PLUS",
+        "KC.KP_ENTER", "KC.KP_DOT", "KC.KP_EQUAL", "KC.KP_COMMA",
+        "KC.NUMLOCK"
+    ],
     "Mouse": [
         "KC.MS_UP", "KC.MS_DOWN", "KC.MS_LEFT", "KC.MS_RIGHT",
         "KC.MW_UP", "KC.MW_DOWN", "KC.MB_L", "KC.MB_R", "KC.MB_M"
@@ -290,7 +317,9 @@ QT_TO_KMK = {
     Qt.Key.Key_3: "KC.N3", Qt.Key.Key_4: "KC.N4", Qt.Key.Key_5: "KC.N5",
     Qt.Key.Key_6: "KC.N6", Qt.Key.Key_7: "KC.N7", Qt.Key.Key_8: "KC.N8",
     Qt.Key.Key_9: "KC.N9", Qt.Key.Key_Semicolon: "KC.SCLN",
-    Qt.Key.Key_Equal: "KC.EQL", Qt.Key.Key_A: "KC.A", Qt.Key.Key_B: "KC.B",
+    Qt.Key.Key_Equal: "KC.EQL",
+    # Letters
+    Qt.Key.Key_A: "KC.A", Qt.Key.Key_B: "KC.B",
     Qt.Key.Key_C: "KC.C", Qt.Key.Key_D: "KC.D", Qt.Key.Key_E: "KC.E",
     Qt.Key.Key_F: "KC.F", Qt.Key.Key_G: "KC.G", Qt.Key.Key_H: "KC.H",
     Qt.Key.Key_I: "KC.I", Qt.Key.Key_J: "KC.J", Qt.Key.Key_K: "KC.K",
@@ -470,14 +499,34 @@ class MacroRecorderDialog(QDialog):
 
         self.pressed_keys.add(key)
         
-        keycode = QT_TO_KMK.get(key)
+        # Check if this is a numpad key
+        modifiers = event.modifiers()
+        is_numpad = bool(modifiers & Qt.KeyboardModifier.KeypadModifier)
+        
+        # Map numpad numbers to KP_ keycodes
+        keycode = None
+        if is_numpad:
+            numpad_map = {
+                Qt.Key.Key_0: "KC.KP_0", Qt.Key.Key_1: "KC.KP_1", Qt.Key.Key_2: "KC.KP_2",
+                Qt.Key.Key_3: "KC.KP_3", Qt.Key.Key_4: "KC.KP_4", Qt.Key.Key_5: "KC.KP_5",
+                Qt.Key.Key_6: "KC.KP_6", Qt.Key.Key_7: "KC.KP_7", Qt.Key.Key_8: "KC.KP_8",
+                Qt.Key.Key_9: "KC.KP_9", Qt.Key.Key_Period: "KC.KP_DOT",
+                Qt.Key.Key_Slash: "KC.KP_SLASH", Qt.Key.Key_Asterisk: "KC.KP_ASTERISK",
+                Qt.Key.Key_Minus: "KC.KP_MINUS", Qt.Key.Key_Plus: "KC.KP_PLUS",
+                Qt.Key.Key_Enter: "KC.KP_ENTER", Qt.Key.Key_Equal: "KC.KP_EQUAL",
+                Qt.Key.Key_Comma: "KC.KP_COMMA",
+            }
+            keycode = numpad_map.get(key)
+        
+        if not keycode:
+            keycode = QT_TO_KMK.get(key)
+        
         if keycode:
             # Record the press and remember when/where it was added so we
             # can convert it to a 'tap' later if released quickly.
             now = time.monotonic()
             self.sequence.append(('press', keycode))
             self.sequence_list.addItem(f"Press: {keycode}")
-            self.press_timestamps[key] = (now, len(self.sequence) - 1)
             self.press_timestamps[key] = (now, len(self.sequence) - 1)
 
     def keyReleaseEvent(self, event):
@@ -491,7 +540,28 @@ class MacroRecorderDialog(QDialog):
             
         self.pressed_keys.discard(key)
         
-        keycode = QT_TO_KMK.get(key)
+        # Check if this is a numpad key
+        modifiers = event.modifiers()
+        is_numpad = bool(modifiers & Qt.KeyboardModifier.KeypadModifier)
+        
+        # Map numpad numbers to KP_ keycodes
+        keycode = None
+        if is_numpad:
+            numpad_map = {
+                Qt.Key.Key_0: "KC.KP_0", Qt.Key.Key_1: "KC.KP_1", Qt.Key.Key_2: "KC.KP_2",
+                Qt.Key.Key_3: "KC.KP_3", Qt.Key.Key_4: "KC.KP_4", Qt.Key.Key_5: "KC.KP_5",
+                Qt.Key.Key_6: "KC.KP_6", Qt.Key.Key_7: "KC.KP_7", Qt.Key.Key_8: "KC.KP_8",
+                Qt.Key.Key_9: "KC.KP_9", Qt.Key.Key_Period: "KC.KP_DOT",
+                Qt.Key.Key_Slash: "KC.KP_SLASH", Qt.Key.Key_Asterisk: "KC.KP_ASTERISK",
+                Qt.Key.Key_Minus: "KC.KP_MINUS", Qt.Key.Key_Plus: "KC.KP_PLUS",
+                Qt.Key.Key_Enter: "KC.KP_ENTER", Qt.Key.Key_Equal: "KC.KP_EQUAL",
+                Qt.Key.Key_Comma: "KC.KP_COMMA",
+            }
+            keycode = numpad_map.get(key)
+        
+        if not keycode:
+            keycode = QT_TO_KMK.get(key)
+        
         if keycode:
             now = time.monotonic()
             press_info = self.press_timestamps.pop(key, None)
@@ -659,6 +729,30 @@ class KeyCaptureDialog(QDialog):
         if event.isAutoRepeat():
             return
         key = event.key()
+        modifiers = event.modifiers()
+        
+        # Check if this is a numpad key
+        is_numpad = bool(modifiers & Qt.KeyboardModifier.KeypadModifier)
+        
+        # Map numpad numbers to KP_ keycodes
+        if is_numpad:
+            numpad_map = {
+                Qt.Key.Key_0: "KC.KP_0", Qt.Key.Key_1: "KC.KP_1", Qt.Key.Key_2: "KC.KP_2",
+                Qt.Key.Key_3: "KC.KP_3", Qt.Key.Key_4: "KC.KP_4", Qt.Key.Key_5: "KC.KP_5",
+                Qt.Key.Key_6: "KC.KP_6", Qt.Key.Key_7: "KC.KP_7", Qt.Key.Key_8: "KC.KP_8",
+                Qt.Key.Key_9: "KC.KP_9", Qt.Key.Key_Period: "KC.KP_DOT",
+                Qt.Key.Key_Slash: "KC.KP_SLASH", Qt.Key.Key_Asterisk: "KC.KP_ASTERISK",
+                Qt.Key.Key_Minus: "KC.KP_MINUS", Qt.Key.Key_Plus: "KC.KP_PLUS",
+                Qt.Key.Key_Enter: "KC.KP_ENTER", Qt.Key.Key_Equal: "KC.KP_EQUAL",
+                Qt.Key.Key_Comma: "KC.KP_COMMA",
+            }
+            keycode = numpad_map.get(key)
+            if keycode:
+                self.captured = keycode
+                self.accept()
+                return
+        
+        # Otherwise use the standard mapping
         keycode = QT_TO_KMK.get(key)
         if keycode:
             self.captured = keycode
@@ -1002,90 +1096,315 @@ class EncoderConfigDialog(QDialog):
 
 
 class AnalogInConfigDialog(QDialog):
-    """Form-based editor for AnalogIn configuration.
-    Lets you add Analog inputs (pin) and an optional evtmap as a Python literal.
+    """Configuration dialog for Chronos Pad Analog Slider.
+    Hardware: 10k potentiometer on GP28
     """
     def __init__(self, parent=None, initial_text=""):
         super().__init__(parent)
-        self.setWindowTitle("AnalogIn Configuration")
-        self.resize(700, 500)
-
-        self.inputs = []
+        self.setWindowTitle("Analog Slider Configuration (GP28)")
+        self.resize(550, 500)
 
         main_layout = QVBoxLayout(self)
-
-        top_layout = QHBoxLayout()
-        self.analog_list = QListWidget()
-        top_layout.addWidget(self.analog_list, 2)
-
-        form_layout = QVBoxLayout()
-        form_layout.addWidget(QLabel("Analog Pin (e.g., board.A0):"))
-        self.analog_pin_input = QLineEdit()
-        form_layout.addWidget(self.analog_pin_input)
-        add_btn = QPushButton("Add Analog Input")
-        add_btn.clicked.connect(self.add_analog_input)
-        form_layout.addWidget(add_btn)
-        remove_btn = QPushButton("Remove Selected")
-        remove_btn.clicked.connect(self.remove_selected_analog)
-        form_layout.addWidget(remove_btn)
-        top_layout.addLayout(form_layout, 1)
-
-        main_layout.addLayout(top_layout)
-
-        main_layout.addWidget(QLabel("Optional evtmap (Python list literal). Example: [[AnalogKey(KC.X)], [KC.TRNS]]"))
-        self.evtmap_editor = QTextEdit()
-        if initial_text:
-            self.evtmap_editor.setPlainText(initial_text)
-        main_layout.addWidget(self.evtmap_editor)
+        
+        # Info label
+        info_label = QLabel(
+            "<b>Chronos Pad Analog Slider</b><br>"
+            "Hardware: 10k potentiometer connected to GP28<br>"
+            "Choose function: Volume control or LED brightness control"
+        )
+        info_label.setWordWrap(True)
+        main_layout.addWidget(info_label)
+        
+        main_layout.addSpacing(20)
+        
+        # Mode selection
+        mode_group = QGroupBox("Slider Function")
+        mode_layout = QVBoxLayout()
+        
+        self.mode_volume = QCheckBox("Volume Control")
+        self.mode_volume.setChecked(True)
+        self.mode_volume.setToolTip("Use slider to control system volume (up/down)")
+        self.mode_volume.toggled.connect(self.on_mode_changed)
+        mode_layout.addWidget(self.mode_volume)
+        
+        self.mode_brightness = QCheckBox("LED Brightness Control")
+        self.mode_brightness.setToolTip("Use slider to control RGB LED brightness (0-100%)")
+        self.mode_brightness.toggled.connect(self.on_mode_changed)
+        mode_layout.addWidget(self.mode_brightness)
+        
+        mode_group.setLayout(mode_layout)
+        main_layout.addWidget(mode_group)
+        
+        main_layout.addSpacing(10)
+        
+        # Configuration parameters
+        form_layout = QFormLayout()
+        
+        # Poll interval
+        self.poll_interval_spin = QDoubleSpinBox()
+        self.poll_interval_spin.setRange(0.01, 1.0)
+        self.poll_interval_spin.setSingleStep(0.01)
+        self.poll_interval_spin.setValue(0.05)
+        self.poll_interval_spin.setSuffix(" sec")
+        self.poll_interval_spin.setToolTip("How often to check the slider position (seconds)")
+        form_layout.addRow("Poll Interval:", self.poll_interval_spin)
+        
+        # Threshold
+        self.threshold_spin = QSpinBox()
+        self.threshold_spin.setRange(100, 10000)
+        self.threshold_spin.setSingleStep(100)
+        self.threshold_spin.setValue(2000)
+        self.threshold_spin.setToolTip("Minimum slider movement to trigger change (0-65535 range)")
+        form_layout.addRow("Sensitivity Threshold:", self.threshold_spin)
+        
+        # Step size (only for volume mode)
+        self.step_size_label = QLabel("Volume Step Size:")
+        self.step_size_spin = QSpinBox()
+        self.step_size_spin.setRange(1, 5)
+        self.step_size_spin.setValue(1)
+        self.step_size_spin.setToolTip("Number of volume steps per slider movement")
+        form_layout.addRow(self.step_size_label, self.step_size_spin)
+        
+        main_layout.addLayout(form_layout)
+        
+        main_layout.addSpacing(20)
+        
+        # Advanced: custom code editor (optional)
+        main_layout.addWidget(QLabel("<b>Advanced:</b> Custom Configuration (leave empty to use defaults above)"))
+        self.custom_code_editor = QTextEdit()
+        self.custom_code_editor.setPlaceholderText("Optional: Paste custom slider configuration here...")
+        self.custom_code_editor.setMaximumHeight(150)
+        if initial_text and "slider" not in initial_text.lower():
+            # Only populate if it's truly custom code
+            self.custom_code_editor.setPlainText(initial_text)
+        main_layout.addWidget(self.custom_code_editor)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)
-
-        self.analog_list.itemClicked.connect(self.on_analog_item_clicked)
-
-    def add_analog_input(self):
-        pin = self.analog_pin_input.text().strip()
-        if not pin:
-            QMessageBox.warning(self, "Invalid", "Analog pin is required")
-            return
-        self.inputs.append(pin)
-        self.analog_list.addItem(pin)
-
-    def remove_selected_analog(self):
-        sel = self.analog_list.selectedItems()
-        if not sel:
-            return
-        idx = self.analog_list.row(sel[0])
-        self.analog_list.takeItem(idx)
-        del self.inputs[idx]
-
-    def on_analog_item_clicked(self, item):
-        self.analog_pin_input.setText(item.text())
+        
+        # Initialize UI state
+        self.on_mode_changed()
+    
+    def on_mode_changed(self):
+        """Handle mode toggle - ensure only one mode is selected"""
+        sender = self.sender()
+        
+        if sender == self.mode_volume and self.mode_volume.isChecked():
+            self.mode_brightness.setChecked(False)
+            self.step_size_label.setEnabled(True)
+            self.step_size_spin.setEnabled(True)
+        elif sender == self.mode_brightness and self.mode_brightness.isChecked():
+            self.mode_volume.setChecked(False)
+            self.step_size_label.setEnabled(False)
+            self.step_size_spin.setEnabled(False)
+        elif sender is None:
+            # Initial setup - volume is default
+            if not self.mode_volume.isChecked() and not self.mode_brightness.isChecked():
+                self.mode_volume.setChecked(True)
 
     def get_config(self):
-        lines = []
-        if self.inputs:
-            lines.append("# Analog inputs")
-            for i, pin in enumerate(self.inputs):
-                lines.append(f"a{i} = AnalogInput(AnalogIn({pin}))")
-            var_list = ", ".join([f"a{i}" for i in range(len(self.inputs))])
-            lines.append(f"analog = AnalogInputs([{var_list}], {self.evtmap_editor.toPlainText().strip() or '[]'})")
-            lines.append("keyboard.modules.append(analog)")
+        """Generate the slider configuration code"""
+        # If custom code is provided, use it
+        custom_code = self.custom_code_editor.toPlainText().strip()
+        if custom_code:
+            return custom_code
+        
+        # Check which mode is selected
+        is_volume_mode = self.mode_volume.isChecked()
+        
+        # Get form values
+        poll_interval = self.poll_interval_spin.value()
+        threshold = self.threshold_spin.value()
+        step_size = self.step_size_spin.value()
+        
+        if is_volume_mode:
+            # Generate volume control code
+            config = f'''from analogio import AnalogIn as AnalogInPin
+import time
+
+# Volume control via 10k sliding potentiometer on GP28
+class VolumeSlider:
+    def __init__(self, keyboard, pin, poll_interval={poll_interval}):
+        self.keyboard = keyboard
+        self.analog_pin = AnalogInPin(pin)
+        self.poll_interval = poll_interval
+        self.last_value = self.read_value()
+        self.last_poll = time.monotonic()
+        self.last_movement = time.monotonic()
+        self.threshold = {threshold}  # Minimum change to trigger volume adjustment (out of 65535)
+        self.step_size = {step_size}  # Number of volume steps per change
+        self.idle_timeout = 2.0  # Seconds of no movement before requiring re-sync
+        self.synced = False  # Track if we've established direction after idle
+        
+    def read_value(self):
+        """Read analog value (0-65535)"""
+        return self.analog_pin.value
+    
+    def during_bootup(self, keyboard):
+        """Initialize at boot"""
+        self.last_value = self.read_value()
+        self.synced = False  # Require initial movement to establish baseline
+        return
+    
+    def before_matrix_scan(self, keyboard):
+        """Check slider position before each matrix scan"""
+        return
+    
+    def after_matrix_scan(self, keyboard):
+        """Check slider position after each matrix scan"""
+        current_time = time.monotonic()
+        
+        # Only poll at specified interval to avoid excessive checking
+        if current_time - self.last_poll < self.poll_interval:
+            return
+        
+        self.last_poll = current_time
+        current_value = self.read_value()
+        delta = current_value - self.last_value
+        
+        # Check if we've been idle too long (user may have adjusted volume elsewhere)
+        time_since_movement = current_time - self.last_movement
+        if time_since_movement > self.idle_timeout:
+            self.synced = False  # Need to re-sync on next movement
+        
+        # If slider moved significantly
+        if abs(delta) > self.threshold:
+            # If we're not synced (first movement after idle), just update position without sending
+            if not self.synced:
+                self.last_value = current_value
+                self.last_movement = current_time
+                self.synced = True
+                return
+            
+            # Normal operation: send volume commands based on direction
+            if delta > 0:
+                # Slider moved up (higher value) - increase volume
+                for _ in range(self.step_size):
+                    keyboard.hid_pending = True
+                    keyboard._send_hid()
+                    keyboard.add_key(KC.VOLU)
+                    keyboard._send_hid()
+                    keyboard.remove_key(KC.VOLU)
+                    keyboard._send_hid()
+            else:
+                # Slider moved down (lower value) - decrease volume
+                for _ in range(self.step_size):
+                    keyboard.hid_pending = True
+                    keyboard._send_hid()
+                    keyboard.add_key(KC.VOLD)
+                    keyboard._send_hid()
+                    keyboard.remove_key(KC.VOLD)
+                    keyboard._send_hid()
+            
+            self.last_value = current_value
+            self.last_movement = current_time
+        
+        return
+    
+    def before_hid_send(self, keyboard):
+        """Called before HID report is sent"""
+        return
+    
+    def after_hid_send(self, keyboard):
+        """Called after HID report is sent"""
+        return
+    
+    def on_powersave_enable(self, keyboard):
+        """Called when powersave is enabled"""
+        return
+    
+    def on_powersave_disable(self, keyboard):
+        """Called when powersave is disabled"""
+        return
+
+# Create and register volume slider extension
+volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval={poll_interval})
+keyboard.extensions.append(volume_slider)
+'''
         else:
-            # If only an evtmap is provided, include it as a hint
-            evtmap_text = self.evtmap_editor.toPlainText().strip()
-            if evtmap_text:
-                lines.append(f"# evtmap provided:\n# analog = AnalogInputs([a0], {evtmap_text})")
-        return "\n".join(lines)
+            # Generate brightness control code
+            config = f'''from analogio import AnalogIn as AnalogInPin
+import time
+
+# LED brightness control via 10k sliding potentiometer on GP28
+class BrightnessSlider:
+    def __init__(self, keyboard, pin, poll_interval={poll_interval}):
+        self.keyboard = keyboard
+        self.analog_pin = AnalogInPin(pin)
+        self.poll_interval = poll_interval
+        self.last_poll = time.monotonic()
+        self.threshold = {threshold}  # Minimum change to trigger brightness adjustment (out of 65535)
+        
+    def read_value(self):
+        """Read analog value (0-65535)"""
+        return self.analog_pin.value
+    
+    def during_bootup(self, keyboard):
+        """Initialize at boot"""
+        return
+    
+    def before_matrix_scan(self, keyboard):
+        """Check slider position before each matrix scan"""
+        return
+    
+    def after_matrix_scan(self, keyboard):
+        """Check slider position after each matrix scan"""
+        current_time = time.monotonic()
+        
+        # Only poll at specified interval to avoid excessive checking
+        if current_time - self.last_poll < self.poll_interval:
+            return
+        
+        self.last_poll = current_time
+        current_value = self.read_value()
+        
+        # Convert 16-bit ADC value (0-65535) to brightness (0.0-1.0)
+        # Using 0.3 as max to reduce current consumption
+        target_brightness = (current_value / 65535.0) * 0.3
+        
+        # Check if keyboard has RGB extension
+        if hasattr(keyboard, 'extensions'):
+            for ext in keyboard.extensions:
+                if hasattr(ext, 'set_brightness'):
+                    ext.set_brightness(target_brightness)
+                elif hasattr(ext, 'brightness'):
+                    ext.brightness = target_brightness
+                    if hasattr(ext, 'neopixel') and ext.neopixel:
+                        ext.neopixel.brightness = target_brightness
+        
+        return
+    
+    def before_hid_send(self, keyboard):
+        """Called before HID report is sent"""
+        return
+    
+    def after_hid_send(self, keyboard):
+        """Called after HID report is sent"""
+        return
+    
+    def on_powersave_enable(self, keyboard):
+        """Called when powersave is enabled"""
+        return
+    
+    def on_powersave_disable(self, keyboard):
+        """Called when powersave is disabled"""
+        return
+
+# Create and register brightness slider extension
+brightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval={poll_interval})
+keyboard.extensions.append(brightness_slider)
+'''
+        
+        return config
 
 
 class PegRgbConfigDialog(QDialog):
     def __init__(self, parent=None, initial_text=""):
         super().__init__(parent)
         self.setWindowTitle("Peg RGB Matrix Configuration")
-        self.resize(600, 380)
+        self.resize(600, 300)
         layout = QVBoxLayout(self)
 
         # Default num keys based on parent rows/cols if available
@@ -1105,30 +1424,17 @@ class PegRgbConfigDialog(QDialog):
         if default_keys:
             self.num_keys_spin.setValue(default_keys)
         else:
-            self.num_keys_spin.setValue(12)
+            self.num_keys_spin.setValue(20)
         hl.addWidget(self.num_keys_spin)
         layout.addLayout(hl)
 
-        # Underglow count
-        hl2 = QHBoxLayout()
-        hl2.addWidget(QLabel("Number of underglow LEDs:"))
-        self.underglow_spin = QSpinBox()
-        self.underglow_spin.setMinimum(0)
-        self.underglow_spin.setMaximum(1000)
-        self.underglow_spin.setValue(0)
-        hl2.addWidget(self.underglow_spin)
-        layout.addLayout(hl2)
-
-        # Key color and underglow color fields (accept Color.* or [r,g,b])
-        layout.addWidget(QLabel("Key color (Color.* or [r,g,b]):"))
+        # Key color field (accept Color.* or [r,g,b])
+        layout.addWidget(QLabel("Default key color (Color.* or [r,g,b]):"))
         self.key_color_input = QLineEdit()
         self.key_color_input.setText("Color.WHITE")
         layout.addWidget(self.key_color_input)
-
-        layout.addWidget(QLabel("Underglow color (Color.* or [r,g,b]):"))
-        self.ug_color_input = QLineEdit()
-        self.ug_color_input.setText("Color.OFF")
-        layout.addWidget(self.ug_color_input)
+        
+        layout.addWidget(QLabel("Note: Keys with KC.NO will be set to Color.OFF (not illuminated)"))
 
         layout.addWidget(QLabel("Optional extra snippet (appended):"))
         self.extra_editor = QTextEdit()
@@ -1144,13 +1450,12 @@ class PegRgbConfigDialog(QDialog):
 
     def get_config(self):
         num_keys = self.num_keys_spin.value()
-        ug = self.underglow_spin.value()
         key_col = self.key_color_input.text().strip() or 'Color.WHITE'
-        ug_col = self.ug_color_input.text().strip() or 'Color.OFF'
 
         lines = []
-        lines.append(f"# Peg RGB Matrix configuration (auto-generated)")
-        lines.append(f"rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[{key_col}]*{num_keys}, underglow=[{ug_col}]*{ug}))")
+        lines.append(f"# Peg RGB Matrix configuration (per-key only, no underglow)")
+        lines.append(f"# Keys with KC.NO assigned will be turned OFF")
+        lines.append(f"rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[{key_col}]*{num_keys}))")
         lines.append("keyboard.extensions.append(rgb)")
         extra = self.extra_editor.toPlainText().strip()
         if extra:
@@ -2521,7 +2826,7 @@ for row_idx in range(5):
                         row_str.append(macro_match.group(1)) # Use the macro variable name
                     else:
                         row_str.append(key) # This is a regular keycode or combo
-                keymap_str += "        " + ", ".join(row_str) + ",\n"
+                keymap_str += "        [" + ", ".join(row_str) + "],\n"
             keymap_str += "    ],\n"
         keymap_str += "]\n"
 
@@ -2587,8 +2892,10 @@ for row_idx in range(5):
                 "# analog = AnalogInputs([a0], [[AnalogKey(KC.X)]])\n"
                 "# keyboard.modules.append(analog)\n\n"
             )
+        # RGB will be initialized AFTER keymap definition
+        rgb_init_code = ""
         if self.enable_rgb:
-            default_snippets += "# --- Peg RGB Matrix (auto-generated) ---\n"
+            default_snippets += "# --- Peg RGB Matrix Setup (auto-generated) ---\n"
             default_snippets += "# RGB requires 'neopixel' library in lib folder\n"
             default_snippets += "try:\n"
             default_snippets += "    from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data, Color\n"
@@ -2598,16 +2905,30 @@ for row_idx in range(5):
                 + "    # Configure RGB settings on keyboard object\n"
                 + "    keyboard.rgb_pixel_pin = board.GP9\n"
                 + ("    keyboard.num_pixels = %d\n" % num_keys)
-                + "    keyboard.brightness_limit = 0.5\n"
-                + ("    keyboard.led_key_pos = list(range(%d))  # Sequential mapping 0-19\n" % num_keys)
-                + "    \n"
-                + "    # Create RGB matrix - all keys white, one dummy underglow\n"
-                + ("    rgb_keys = [Color.WHITE] * %d\n" % num_keys)
-                + "    rgb_underglow = [Color.OFF]\n"
-                + "    rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=rgb_keys, underglow=rgb_underglow))\n"
-                + "    keyboard.extensions.append(rgb)\n"
+                + "    keyboard.brightness_limit = 0.3  # Reduced for lower current consumption\n"
+                + ("    keyboard.led_key_pos = list(range(%d))  # Sequential mapping 0-%d\n" % (num_keys, num_keys-1))
                 + "except ImportError:\n"
                 + "    print('RGB disabled: neopixel library not found')\n\n"
+            )
+            
+            # RGB initialization happens AFTER keymap is defined
+            rgb_init_code = (
+                "# --- RGB Matrix Initialization (must come after keymap) ---\n"
+                + "try:\n"
+                + "    # Create RGB matrix - keys with KC.NO are OFF, others default to WHITE\n"
+                + "    rgb_keys = []\n"
+                + "    for row in keyboard.keymap[0]:\n"
+                + "        for key in row:\n"
+                + "            if key == KC.NO:\n"
+                + "                rgb_keys.append(Color.OFF)  # No key assigned = no light\n"
+                + "            else:\n"
+                + "                rgb_keys.append(Color.WHITE)  # Default color for assigned keys\n"
+                + "    \n"
+                + "    # Note: Rgb_matrix_data requires non-empty underglow, so we pass the keys list directly\n"
+                + "    rgb = Rgb_matrix(ledDisplay=rgb_keys)\n"
+                + "    keyboard.extensions.append(rgb)\n"
+                + "except (ImportError, NameError):\n"
+                + "    pass  # RGB not available\n\n"
             )
             # If per-key layer colors exist, emit them as RGB_LAYER_COLORS
             if getattr(self, 'peg_rgb_colors', None):
@@ -2653,7 +2974,7 @@ keyboard.row_pins = ({', '.join(self.row_pins)},)
 
 {ext_snippets_final}{macros_def_str}# --- Keymap ---
 {keymap_str}
-"""
+{rgb_init_code}"""
         # Add layer cycler initialization if encoder is enabled
         if self.enable_encoder and "layer_cycler" in ext_snippets_final:
             code_template += """# Initialize layer cycler for encoder
@@ -2767,10 +3088,13 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         save_dir = "kmk_Config_Save"
         os.makedirs(save_dir, exist_ok=True)
         
+        # Set the initial directory to kmk_Config_Save
+        initial_path = os.path.join(save_dir, "config.json")
+        
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Configuration As",
-            save_dir,
+            initial_path,
             "JSON Files (*.json)"
         )
 
@@ -2781,18 +3105,47 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             try:
                 self.save_configuration_to_path(file_path)
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
-            except Exception:
-                # The helper function already shows a critical error message
-                pass
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{e}\n\nTraceback:\n{traceback.format_exc()}")
+        else:
+            # User cancelled the dialog
+            print("Save cancelled by user")
 
     def save_configuration_to_path(self, file_path):
+        """Save complete configuration including all layers, RGB colors, macros, and extension settings"""
         config_data = {
-            "rows": self.rows,
-            "cols": self.cols,
-            "col_pins": self.col_pins,
-            "row_pins": self.row_pins,
-            "diode_orientation": self.diode_orientation_combo.currentText(),
-            "keymap_data": self.keymap_data,
+            "version": "2.0",  # New version format
+            "hardware": {
+                "rows": self.rows,
+                "cols": self.cols,
+                "col_pins": self.col_pins,
+                "row_pins": self.row_pins,
+                "diode_orientation": self.diode_orientation,
+            },
+            "keymap": {
+                "layers": self.keymap_data,
+                "current_layer": self.current_layer,
+            },
+            "macros": self.macros,
+            "rgb": {
+                "enabled": self.enable_rgb,
+                "config_str": self.rgb_config_str,
+                "colors": getattr(self, 'peg_rgb_colors', {}),
+            },
+            "extensions": {
+                "encoder": {
+                    "enabled": self.enable_encoder,
+                    "config_str": self.encoder_config_str,
+                },
+                "analogin": {
+                    "enabled": self.enable_analogin,
+                    "config_str": self.analogin_config_str,
+                },
+                "display": {
+                    "enabled": self.enable_display,
+                    "config_str": self.display_config_str,
+                },
+            },
         }
 
         try:
@@ -2821,13 +3174,45 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             with open(file_path, 'r') as f:
                 config_data = json.load(f)
 
-            # --- Update state from loaded data ---
-            # Hardware is fixed, only load keymap data
-            self.keymap_data = config_data.get("keymap_data", [])
-            # Do not override the global macros when loading a configuration file
-            # Macros are stored independently in macros.json and loaded on startup.
-
-            # Note: Rows, cols, and pins are fixed and cannot be changed from config files
+            # Check version format
+            version = config_data.get("version", "1.0")
+            
+            if version == "2.0":
+                # New format with complete configuration
+                
+                # Load keymap
+                keymap_section = config_data.get("keymap", {})
+                self.keymap_data = keymap_section.get("layers", [])
+                current_layer = keymap_section.get("current_layer", 0)
+                
+                # Load macros
+                self.macros = config_data.get("macros", {})
+                
+                # Load RGB settings
+                rgb_section = config_data.get("rgb", {})
+                self.enable_rgb = rgb_section.get("enabled", True)
+                self.rgb_config_str = rgb_section.get("config_str", "")
+                self.peg_rgb_colors = rgb_section.get("colors", {})
+                
+                # Load extension settings
+                extensions = config_data.get("extensions", {})
+                
+                encoder_section = extensions.get("encoder", {})
+                self.enable_encoder = encoder_section.get("enabled", True)
+                self.encoder_config_str = encoder_section.get("config_str", DEFAULT_ENCODER_CONFIG)
+                
+                analogin_section = extensions.get("analogin", {})
+                self.enable_analogin = analogin_section.get("enabled", True)
+                self.analogin_config_str = analogin_section.get("config_str", DEFAULT_ANALOGIN_CONFIG)
+                
+                display_section = extensions.get("display", {})
+                self.enable_display = display_section.get("enabled", True)
+                self.display_config_str = display_section.get("config_str", "")
+                
+            else:
+                # Old format (v1.0) - backward compatibility
+                self.keymap_data = config_data.get("keymap_data", [])
+                # Old format doesn't have macros, RGB colors, or extension configs
             
             # Validate and adapt keymap to match fixed grid size (5x4)
             if not self.keymap_data:
@@ -2850,27 +3235,31 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     adapted_layers.append(new_layer)
                 
                 self.keymap_data = adapted_layers
-                
-                # Inform user if adaptation was needed
-                if len(self.keymap_data) > 0:
-                    orig_size = f"{len(self.keymap_data[0])}x{len(self.keymap_data[0][0]) if self.keymap_data[0] else 0}"
-                    if orig_size != f"{FIXED_ROWS}x{FIXED_COLS}":
-                        QMessageBox.information(self, "Grid Adapted", 
-                            f"Configuration adapted from {orig_size} to {FIXED_ROWS}x{FIXED_COLS} grid.")
-
             
-            self.current_layer = 0
+            # Set current layer (with validation)
+            if version == "2.0":
+                self.current_layer = min(current_layer, len(self.keymap_data) - 1)
+            else:
+                self.current_layer = 0
+            
             self.profile_combo.setCurrentText("Custom")
 
+            # Refresh UI - order matters!
+            self.update_layer_tabs()  # First update tabs to match layer count
+            self.layer_tabs.setCurrentIndex(self.current_layer)  # Then select the correct tab
             self.recreate_macropad_grid()
-            self.update_layer_tabs()
             self.update_macro_list()
             self.update_macropad_display()
             
-            QMessageBox.information(self, "Success", "Configuration loaded successfully.")
+            QMessageBox.information(self, "Success", 
+                f"Configuration loaded successfully.\n"
+                f"Format: v{version}\n"
+                f"Layers: {len(self.keymap_data)}\n"
+                f"Macros: {len(self.macros)}\n"
+                f"RGB Colors: {len(self.peg_rgb_colors)} layers configured")
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not load configuration:\n{e}")
+            QMessageBox.critical(self, "Error", f"Could not load configuration:\n{e}\n\nTraceback: {traceback.format_exc()}")
     
     # --- Grid and Layer UI Management ---
     
@@ -3028,9 +3417,23 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     # Apply RGB color if assigned to this key
                     if str(idx) in layer_colors:
                         color = layer_colors[str(idx)]
-                        button.setStyleSheet(f'background-color: {color}; color: #ffffff;')
+                        # Use white text for dark colors, black text for light colors
+                        # Simple luminance check
+                        try:
+                            # Remove # and convert to RGB
+                            rgb = color.lstrip('#')
+                            r_val = int(rgb[0:2], 16)
+                            g_val = int(rgb[2:4], 16)
+                            b_val = int(rgb[4:6], 16)
+                            # Calculate perceived luminance
+                            luminance = (0.299 * r_val + 0.587 * g_val + 0.114 * b_val)
+                            text_color = '#000000' if luminance > 128 else '#FFFFFF'
+                        except:
+                            text_color = '#FFFFFF'
+                        
+                        button.setStyleSheet(f'background-color: {color}; color: {text_color}; font-weight: bold;')
                     else:
-                        # Clear any previous color styling but keep checked state styling
+                        # Clear any previous color styling but keep the default button style
                         button.setStyleSheet('')
                 idx += 1
         self.macropad_group.setTitle(f"Keymap (Layer {self.current_layer})")

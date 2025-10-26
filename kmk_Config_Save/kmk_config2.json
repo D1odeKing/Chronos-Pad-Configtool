@@ -1,0 +1,218 @@
+{
+    "version": "2.0",
+    "hardware": {
+        "rows": 5,
+        "cols": 4,
+        "col_pins": [
+            "board.GP0",
+            "board.GP1",
+            "board.GP2",
+            "board.GP3"
+        ],
+        "row_pins": [
+            "board.GP8",
+            "board.GP7",
+            "board.GP6",
+            "board.GP5",
+            "board.GP4"
+        ],
+        "diode_orientation": "COL2ROW"
+    },
+    "keymap": {
+        "layers": [
+            [
+                [
+                    "KC.G",
+                    "MACRO(COPY)",
+                    "KC.I",
+                    "KC.L"
+                ],
+                [
+                    "KC.TG(1)",
+                    "MACRO(PASTE)",
+                    "KC.NO",
+                    "KC.NO"
+                ],
+                [
+                    "KC.DEL",
+                    "KC.NO",
+                    "KC.NO",
+                    "KC.O"
+                ],
+                [
+                    "KC.NO",
+                    "KC.END",
+                    "KC.G",
+                    "KC.NO"
+                ],
+                [
+                    "KC.NO",
+                    "KC.INS",
+                    "KC.NO",
+                    "KC.NO"
+                ]
+            ],
+            [
+                [
+                    "KC.C",
+                    "KC.D",
+                    "KC.NO",
+                    "KC.NO"
+                ],
+                [
+                    "KC.TG(1)",
+                    "KC.VOLU",
+                    "KC.HOME",
+                    "KC.NO"
+                ],
+                [
+                    "KC.NO",
+                    "KC.NO",
+                    "KC.NO",
+                    "KC.NO"
+                ],
+                [
+                    "KC.NO",
+                    "KC.PGDN",
+                    "KC.NO",
+                    "KC.NO"
+                ],
+                [
+                    "KC.NO",
+                    "KC.NO",
+                    "KC.NO",
+                    "KC.HOME"
+                ]
+            ]
+        ],
+        "current_layer": 1
+    },
+    "macros": {
+        "PASTE": [
+            [
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "tap",
+                "KC.V"
+            ],
+            [
+                "release",
+                "KC.LCTL"
+            ]
+        ],
+        "COPY": [
+            [
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "tap",
+                "KC.C"
+            ],
+            [
+                "release",
+                "KC.LCTL"
+            ]
+        ],
+        "STYLE1": [
+            [
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "press",
+                "KC.LSFT"
+            ],
+            [
+                "press",
+                "KC.D"
+            ],
+            [
+                "press",
+                "KC.A"
+            ],
+            [
+                "release",
+                "KC.A"
+            ],
+            [
+                "release",
+                "KC.D"
+            ],
+            [
+                "release",
+                "KC.LSFT"
+            ],
+            [
+                "release",
+                "KC.LCTL"
+            ]
+        ]
+    },
+    "rgb": {
+        "enabled": true,
+        "config_str": "# Peg RGB Matrix configuration (per-key only, no underglow)\n# Keys with KC.NO assigned will be turned OFF\nrgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[Color.WHITE]*20))\nkeyboard.extensions.append(rgb)\n\n# Extra user snippet:\n# Peg RGB Matrix configuration (auto-generated)\nrgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[Color.WHITE]*20, underglow=[Color.OFF]*0))\nkeyboard.extensions.append(rgb)\n\n# Extra user snippet:\n# RGB configuration cleared - will use auto-generated default",
+        "colors": {
+            "1": {
+                "0": "#4ECDC4",
+                "1": "#4ECDC4",
+                "2": "#B4B4B4",
+                "3": "#B4B4B4",
+                "5": "#F38181",
+                "4": "#FCBAD3",
+                "6": "#FFD93D",
+                "7": "#B4B4B4",
+                "8": "#B4B4B4",
+                "9": "#B4B4B4",
+                "10": "#B4B4B4",
+                "11": "#B4B4B4",
+                "12": "#B4B4B4",
+                "13": "#FFD93D",
+                "14": "#B4B4B4",
+                "15": "#B4B4B4",
+                "16": "#B4B4B4",
+                "17": "#B4B4B4",
+                "18": "#B4B4B4",
+                "19": "#FFD93D"
+            },
+            "0": {
+                "0": "#4ECDC4",
+                "1": "#FF6B6B",
+                "5": "#FF6B6B",
+                "4": "#FCBAD3",
+                "2": "#4ECDC4",
+                "6": "#B4B4B4",
+                "3": "#4ECDC4",
+                "7": "#B4B4B4",
+                "8": "#FFD93D",
+                "9": "#B4B4B4",
+                "10": "#B4B4B4",
+                "11": "#4ECDC4",
+                "12": "#B4B4B4",
+                "13": "#FFD93D",
+                "14": "#4ECDC4",
+                "15": "#B4B4B4",
+                "16": "#B4B4B4",
+                "17": "#FFD93D",
+                "18": "#B4B4B4",
+                "19": "#B4B4B4"
+            }
+        }
+    },
+    "extensions": {
+        "encoder": {
+            "enabled": true,
+            "config_str": "encoder_handler = EncoderHandler()\nkeyboard.modules.append(encoder_handler)"
+        },
+        "analogin": {
+            "enabled": true,
+            "config_str": ""
+        },
+        "display": {
+            "enabled": true,
+            "config_str": ""
+        }
+    }
+}
