@@ -10,15 +10,6 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 
 ## 🎯 Features
 
-### Hardware Configuration
-- **Fixed 5×4 Matrix Layout**: Pre-configured for 20-key macropad
-- **Raspberry Pi Pico**: Optimized pin mappings
-- **Hardware Support**:
-  - Rotary Encoder with Layer Cycling (GP10, GP11, GP14)
-  - Analog Volume Slider - 10k Potentiometer (GP28)
-  - RGB LEDs (GP9, WS2812 compatible)
-  - SH1106 OLED Display (128×64, I2C on GP20/GP21)
-
 ### Keymap Editor
 - **Visual Grid Interface**: Intuitive button-based key assignment
 - **Multi-Layer Support**: Create and manage multiple keyboard layers
@@ -33,50 +24,6 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
   - Key press/release
   - Delays
 - **Macro Assignment**: Directly assign macros to any key
-
-### Extensions Configuration
-
-#### Rotary Encoder
-- **Layer Cycling Mode**: Encoder automatically cycles through keyboard layers
-  - **Counter-Clockwise**: Switch to previous layer
-  - **Clockwise**: Switch to next layer
-  - **Button Press**: Return to base layer (Layer 0)
-- Single encoder configuration (GP10/GP11/GP14)
-- Custom layer switching logic with wraparound support
-- Seamless layer navigation without modifier keys
-
-#### Analog Input (Volume Slider)
-- **System Volume Control**: 10k sliding potentiometer for intuitive volume adjustment
-- **Real-Time Response**: Continuously monitors slider position
-- **Smooth Control**: Threshold-based detection prevents jitter
-- **Hardware Pin**: GP28 with analog-to-digital conversion
-- **Auto-Configuration**: Pre-configured for volume up/down based on slider movement
-
-#### RGB Matrix
-- Per-key RGB LED control
-- WS2812/NeoPixel support
-- Brightness control
-- Auto-configured for 20 LEDs
-
-#### OLED Display
-- **Auto-Generated Keymap Layout**: Display shows current key assignments
-- Visual 5×4 grid on 128×64 display
-- Abbreviated key names for readability
-- Updates with keymap changes
-- Shows current layer layout at a glance
-
-### Encoder Layer Navigation
-- **Hardware-Based Layer Switching**: Use the rotary encoder to cycle through layers
-- **Tactile Feedback**: Physical rotation provides intuitive layer navigation
-- **Quick Access**: Press encoder button to instantly return to base layer
-- **Automatic Wraparound**: Seamlessly cycle from last layer back to first
-
-### Analog Volume Control
-- **Hardware Volume Slider**: 10k linear potentiometer for precise volume control
-- **Analog Monitoring**: Continuously tracks slider position (0-65535 ADC range)
-- **Smart Threshold**: Filters minor fluctuations to prevent unwanted adjustments
-- **Direct HID Control**: Sends system volume up/down commands based on slider movement
-- **No Modifier Keys Needed**: Pure analog-to-digital volume control
 
 ### Code Generation
 - **One-Click Export**: Generate complete KMK firmware code
@@ -107,11 +54,31 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 
 > **Note:** KMK firmware and CircuitPython libraries are included and will be automatically deployed to your device when you save your configuration!
 
+
+### Installing CircuitPython 9.x on Raspberry Pi Pico
+
+To use this configuration tool, your Raspberry Pi Pico must have CircuitPython 9.x installed.
+
+**Important:**
+- This tool is only tested with CircuitPython 9.x. Using newer versions (such as CircuitPython 10.x) may cause unexpected errors or break functionality.
+
+**Use the included CircuitPython 9.x .uf2 file:**
+- In this repository, navigate to the `libraries` folder.
+- Use the file: `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2`
+
+**Install CircuitPython:**
+1. Hold down the BOOTSEL button on your Pico and plug it into your computer via USB.
+2. Release the BOOTSEL button. The Pico will appear as a USB drive named `RPI-RP2`.
+3. Drag and drop the `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file onto the `RPI-RP2` drive.
+4. The Pico will reboot and appear as a new USB drive named `CIRCUITPY`.
+
+Your Pico is now running CircuitPython 9.x and ready for use with this tool!
+
 ### Installation
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/yourusername/Chronos-Pad-Configtool.git
+   git clone https://github.com/D1odeKing/Chronos-Pad-Configtool.git
    cd Chronos-Pad-Configtool
    ```
 
@@ -125,33 +92,7 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
    python main.py
    ```
 
-### Hardware Setup
 
-#### Pin Configuration
-```
-Matrix:
-  Rows: GP8, GP7, GP6, GP5, GP4 (5 rows)
-  Cols: GP0, GP1, GP2, GP3 (4 columns)
-  Diode: COL2ROW
-
-Encoder:
-  Pin A: GP10
-  Pin B: GP11
-  Button: GP14
-
-Analog Input:
-  Slider: GP28 (ADC2)
-
-RGB LEDs:
-  Data Pin: GP9
-  Type: WS2812/NeoPixel
-
-Display:
-  Type: SH1106 OLED (128×64)
-  SDA: GP20
-  SCL: GP21
-  I2C Address: 0x3C
-```
 
 ## 📖 Usage Guide
 
@@ -301,28 +242,17 @@ For issues, questions, or contributions:
 - Check the README for configuration examples
 - Refer to [KMK Documentation](https://github.com/KMKfw/kmk_firmware/tree/main/docs/en) for firmware details
 
-## � Related Projects
+
+## 🔗 Related Projects
 
 ### Chronos Pad Hardware
-**Repository**: [github.com/D1odeKing/Chronos-Pad](https://github.com/D1odeKing/Chronos-Pad)
+For all hardware details, PCB files, build instructions, and case designs, please visit the official hardware repository:
 
-The Chronos Pad is a custom 5×4 macropad with integrated features:
-- Raspberry Pi Pico microcontroller
-- Rotary encoder with push button
-- 10k linear potentiometer (volume slider)
-- 20 WS2812 RGB LEDs (per-key lighting)
-- SH1106 128×64 OLED display
-- Hot-swap mechanical switches
-- 3D-printed or CNC case designs
+**Repository:** [github.com/D1odeKing/Chronos-Pad](https://github.com/D1odeKing/Chronos-Pad)
 
-Visit the hardware repository for:
-- PCB design files and schematics
-- Bill of Materials (BOM)
-- Build guide and assembly instructions
-- Case design files (STL/STEP)
-- Wiring diagrams
+This configuration tool is designed specifically for the Chronos Pad. All hardware-specific documentation and setup are maintained in the hardware repo.
 
-## �🔄 Version History
+## 🔄 Version History
 
 ### v1.0.0 (2025-10-25)
 - Initial release
