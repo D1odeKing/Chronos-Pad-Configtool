@@ -35,9 +35,13 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ### Extensions Configuration
 
 #### Rotary Encoder
+- **Layer Cycling Mode**: Encoder automatically cycles through keyboard layers
+  - **Counter-Clockwise**: Switch to previous layer
+  - **Clockwise**: Switch to next layer
+  - **Button Press**: Return to base layer (Layer 0)
 - Single encoder configuration (GP10/GP11/GP14)
-- Configure clockwise/counter-clockwise/press actions
-- Customizable keycode mapping per action
+- Custom layer switching logic with wraparound support
+- Seamless layer navigation without modifier keys
 
 #### Analog Input
 - Slider/potentiometer support
@@ -55,6 +59,13 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - Visual 5×4 grid on 128×64 display
 - Abbreviated key names for readability
 - Updates with keymap changes
+- Shows current layer layout at a glance
+
+### Encoder Layer Navigation
+- **Hardware-Based Layer Switching**: Use the rotary encoder to cycle through layers
+- **Tactile Feedback**: Physical rotation provides intuitive layer navigation
+- **Quick Access**: Press encoder button to instantly return to base layer
+- **Automatic Wraparound**: Seamlessly cycle from last layer back to first
 
 ### Code Generation
 - **One-Click Export**: Generate complete KMK firmware code

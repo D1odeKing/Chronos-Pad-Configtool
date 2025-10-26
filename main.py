@@ -55,10 +55,45 @@ FIXED_DISPLAY_PINS = {"scl": "board.GP21", "sda": "board.GP20"}
 
 # --- Default Extension Configuration Templates ---
 DEFAULT_ENCODER_CONFIG = '''from kmk.modules.encoder import EncoderHandler
+
+# Custom layer cycling for encoder
+class LayerCycler:
+    def __init__(self, keyboard, num_layers=6):
+        self.keyboard = keyboard
+        self.num_layers = num_layers
+        self.current_layer = 0
+    
+    def next_layer(self):
+        self.current_layer = (self.current_layer + 1) % self.num_layers
+        self.keyboard.active_layers[0] = self.current_layer
+        return False
+    
+    def prev_layer(self):
+        self.current_layer = (self.current_layer - 1) % self.num_layers
+        self.keyboard.active_layers[0] = self.current_layer
+        return False
+    
+    def reset_layer(self):
+        self.current_layer = 0
+        self.keyboard.active_layers[0] = 0
+        return False
+
+# Create layer cycler (will be bound after keyboard setup)
+layer_cycler = None
+
+# Custom key codes for layer cycling
+KC.LAYER_NEXT = KC.make_key(on_press=lambda k, *args: layer_cycler.next_layer() if layer_cycler else None)
+KC.LAYER_PREV = KC.make_key(on_press=lambda k, *args: layer_cycler.prev_layer() if layer_cycler else None)
+KC.LAYER_RESET = KC.make_key(on_press=lambda k, *args: layer_cycler.reset_layer() if layer_cycler else None)
+
 encoder_handler = EncoderHandler()
 encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)  # (a, b, button)
-encoder_handler.map = [((KC.VOLD, KC.VOLU, KC.MUTE),)]  # (ccw, cw, press)
-keyboard.modules.append(encoder_handler)'''
+encoder_handler.map = [((KC.LAYER_PREV, KC.LAYER_NEXT, KC.LAYER_RESET),)]  # CCW=prev, CW=next, Press=reset to layer 0
+keyboard.modules.append(encoder_handler)
+
+# Initialize layer cycler after keyboard is set up (do this after keymap is defined)
+# Add this line after keyboard.keymap = [...] in your main code:
+# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))'''
 
 DEFAULT_ANALOGIN_CONFIG = '''from kmk.extensions.analogin import AnalogIn
 analog_handler = AnalogIn()
@@ -2540,7 +2575,15 @@ keyboard.row_pins = ({', '.join(self.row_pins)},)
 
 {ext_snippets_final}{macros_def_str}# --- Keymap ---
 {keymap_str}
-if __name__ == '__main__':
+"""
+        # Add layer cycler initialization if encoder is enabled
+        if self.enable_encoder and "layer_cycler" in ext_snippets_final:
+            code_template += """# Initialize layer cycler for encoder
+layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
+
+"""
+        
+        code_template += """if __name__ == '__main__':
     keyboard.go()
 """
         return code_template.strip()
