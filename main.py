@@ -50,7 +50,6 @@ PROFILE_FILE = "profiles.json"
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
 CIRCUITPYTHON_BUNDLE_URL = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/latest/download/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
-CIRCUITPYTHON_UF2_URL = "https://downloads.circuitpython.org/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2"
 
 class DependencyDownloader(QThread):
     """Downloads KMK firmware and CircuitPython libraries automatically"""
@@ -69,9 +68,8 @@ class DependencyDownloader(QThread):
             # Check if already downloaded
             kmk_path = os.path.join(self.libraries_dir, "kmk_firmware-main")
             bundle_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
-            uf2_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
             
-            if os.path.exists(kmk_path) and os.path.exists(bundle_path) and os.path.exists(uf2_path):
+            if os.path.exists(kmk_path) and os.path.exists(bundle_path):
                 self.progress.emit("Dependencies already installed", 100)
                 self.finished.emit(True)
                 return
@@ -85,11 +83,6 @@ class DependencyDownloader(QThread):
             if not os.path.exists(bundle_path):
                 self.progress.emit("Downloading CircuitPython Bundle...", 50)
                 self.download_and_extract_bundle()
-            
-            # Download CircuitPython UF2
-            if not os.path.exists(uf2_path):
-                self.progress.emit("Downloading CircuitPython UF2...", 80)
-                self.download_uf2()
             
             self.progress.emit("Dependencies installed successfully!", 100)
             self.finished.emit(True)
@@ -148,12 +141,6 @@ class DependencyDownloader(QThread):
                 continue
         else:
             raise Exception("Could not download CircuitPython bundle from recent dates")
-    
-    def download_uf2(self):
-        """Download CircuitPython UF2 file"""
-        uf2_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
-        urllib.request.urlretrieve(CIRCUITPYTHON_UF2_URL, uf2_path)
-
 # --- Hardware Configuration (Fixed) ---
 # Raspberry Pi Pico 5x4 Custom Configuration
 FIXED_ROWS = 5
@@ -2034,8 +2021,7 @@ class KMKConfigurator(QMainWindow):
                 "Please check your internet connection and try again,\n"
                 "or download manually from:\n\n"
                 "• KMK: https://github.com/KMKfw/kmk_firmware\n"
-                "• CircuitPython Bundle: https://circuitpython.org/libraries\n"
-                "• CircuitPython UF2: https://circuitpython.org/board/raspberry_pi_pico/"
+                "• CircuitPython Bundle: https://circuitpython.org/libraries"
             )
 
     def _set_stylesheet(self):
