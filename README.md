@@ -5,6 +5,8 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.0+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![CircuitPython](https://img.shields.io/badge/CircuitPython-9.x-blueviolet.svg)
+![KMK Firmware](https://img.shields.io/badge/KMK-GPL--3.0-orange.svg)
 
 > **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
 
@@ -42,10 +44,9 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - Python 3.8 or higher
 - PyQt6 (`pip install PyQt6`)
 
-**For the Macropad (Auto-downloaded when needed):**
-- ✅ [KMK Firmware](https://github.com/KMKfw/kmk_firmware) - Downloaded automatically on first run
-- ✅ [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) - Downloaded automatically on first run
-- ✅ CircuitPython 9.x UF2 file - Downloaded automatically on first run
+**For the Macropad (Auto-downloaded by the tool):**
+- ✅ [KMK Firmware](https://github.com/KMKfw/kmk_firmware) (GPL-3.0 License) - Downloaded automatically on first run
+- ✅ [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) (MIT License) - Downloaded automatically on first run
 
 **Hardware:**
 
@@ -56,21 +57,41 @@ This tool is designed specifically for the **[Chronos Pad](https://github.com/D1
 
 ### Installing CircuitPython 9.x on Raspberry Pi Pico
 
-To use this configuration tool, your Raspberry Pi Pico must have CircuitPython 9.x installed.
+**⚠️ IMPORTANT: CircuitPython Version Requirement**
 
-**Important:**
-- This tool is only tested with CircuitPython 9.x. Using newer versions (such as CircuitPython 10.x) may cause unexpected errors or break functionality.
+This tool requires **CircuitPython 9.x** to be installed on your Raspberry Pi Pico. 
+- ✅ **CircuitPython 9.x is supported**
+- ❌ **CircuitPython 10.x is NOT currently supported** and may cause errors or break functionality
 
-**Auto-downloaded CircuitPython 9.x .uf2 file:**
-- When you first run the tool, it will automatically download the CircuitPython UF2 file to `libraries/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2`
+**Download CircuitPython 9.x:**
 
-**Install CircuitPython:**
-1. Hold down the BOOTSEL button on your Pico and plug it into your computer via USB.
-2. Release the BOOTSEL button. The Pico will appear as a USB drive named `RPI-RP2`.
-3. Drag and drop the downloaded `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file from the `libraries` folder onto the `RPI-RP2` drive.
-4. The Pico will reboot and appear as a new USB drive named `CIRCUITPY`.
+You must manually download and install CircuitPython 9.x from the official Adafruit website:
+- Download: [CircuitPython 9.x for Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
+- **Select version 9.x** (e.g., 9.2.9 or the latest 9.x release)
+- Do NOT download version 10.x or higher
 
-Your Pico is now running CircuitPython 9.x and ready for use with this tool!
+**Installation Steps:**
+
+1. **Download the UF2 file**: 
+   - Visit https://circuitpython.org/board/raspberry_pi_pico/
+   - Find and download the latest **9.x version** (NOT 10.x)
+
+2. **Enter bootloader mode**:
+   - Hold down the **BOOTSEL** button on your Raspberry Pi Pico
+   - While holding BOOTSEL, plug the Pico into your computer via USB
+   - Release the BOOTSEL button
+   - The Pico will appear as a USB drive named `RPI-RP2`
+
+3. **Install CircuitPython**:
+   - Drag and drop the downloaded `.uf2` file onto the `RPI-RP2` drive
+   - The Pico will automatically reboot
+   - After rebooting, it will appear as a new USB drive named `CIRCUITPY`
+
+4. **Verify installation**:
+   - You should see a `CIRCUITPY` drive with a `boot_out.txt` file
+   - Open `boot_out.txt` to confirm the version is **9.x.x**
+
+Your Pico is now ready for use with this configuration tool!
 
 ### Installation
 
@@ -177,20 +198,21 @@ Chronos-Pad-Configtool/
 │   ├── analogin.py           # Analog input config
 │   ├── peg_rgb.py            # RGB config
 │   └── macros.json           # Macro definitions
-├── libraries/                # Auto-downloaded dependencies
-│   ├── kmk_firmware-main/    # KMK firmware source
-│   ├── adafruit-circuitpython-bundle-9.x-mpy/ # CircuitPython libraries
-│   └── adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2
+├── libraries/                # Auto-downloaded dependencies (not in repo)
+│   ├── kmk_firmware-main/    # KMK firmware (auto-downloaded)
+│   └── adafruit-circuitpython-bundle-9.x-mpy/ # CP libraries (auto-downloaded)
 └── scripts/                  # Utility scripts
 ```
+
+> **Note:** The `libraries/` folder is automatically created and populated when you first run the tool. These files are not included in the repository to comply with licensing requirements.
 
 ## 🛠️ Development
 
 ### Requirements
 - Python 3.8+
 - PyQt6 6.0+
-- KMK firmware (included)
-- CircuitPython libraries (included)
+- KMK firmware (auto-downloaded on first run)
+- CircuitPython libraries (auto-downloaded on first run)
 
 ### Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -201,37 +223,45 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🙏 Acknowledgments & Dependencies
 
-This configurator relies on and distributes the following open-source projects:
+This configurator automatically downloads and uses the following open-source projects:
 
-### Core Dependencies
+### Runtime Dependencies (Auto-Downloaded)
 
 **[KMK Firmware](https://github.com/KMKfw/kmk_firmware)** 🎹
 - License: GPL-3.0
 - Purpose: Complete keyboard firmware for CircuitPython
 - Used for: All keyboard functionality, key mapping, macros, and extensions
-- Location: `kmk_firmware-main/`
+- Auto-downloaded to: `libraries/kmk_firmware-main/`
+- Status: ✅ **Automatically downloaded on first run**
 - The heart of this project - KMK makes programmable keyboards accessible!
 
 **[Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle)** 📚
 - License: MIT  
 - Purpose: Hardware drivers and libraries for CircuitPython
 - Used for: Display drivers (SH1106), RGB control (NeoPixel), I2C/SPI communication
-- Location: `libraries/adafruit-circuitpython-bundle-9.x-mpy-20251024/`
-- Key libraries: `adafruit_displayio_sh1106`, `adafruit_display_text`, `neopixel`
+- Auto-downloaded to: `libraries/adafruit-circuitpython-bundle-9.x-mpy/`
+- Status: ✅ **Automatically downloaded on first run**
+- Key libraries used: `adafruit_displayio_sh1106`, `adafruit_display_text`, `neopixel`
 
-### UI Framework
+> **Note:** These dependencies are automatically downloaded from their official sources on first run. The configurator acts as a convenience wrapper to help you configure and deploy these amazing open-source tools. This repository does not include the actual library files to comply with license requirements and ensure you always get the latest versions.
+
+### Development Dependencies
 
 **PyQt6**
 - Python GUI framework for the configurator application
+- Install via: `pip install PyQt6`
 
 ### Hardware Platform
 
-**CircuitPython by Adafruit**
+**CircuitPython 9.x by Adafruit** ⚠️
 - Python for microcontrollers running on Raspberry Pi Pico (RP2040)
+- **Version requirement:** CircuitPython 9.x (NOT 10.x)
+- **Must be manually installed** on your Raspberry Pi Pico
+- Download from: https://circuitpython.org/board/raspberry_pi_pico/
 
 ---
 
-**Note:** The included libraries are redistributed in accordance with their respective open-source licenses. This configurator simply provides a graphical interface to configure and deploy these amazing tools. All credit goes to the original authors and maintainers of KMK Firmware and the Adafruit CircuitPython Bundle.
+**Attribution:** All credit goes to the original authors and maintainers of KMK Firmware and the Adafruit CircuitPython Bundle. This configurator simply provides a graphical interface to make their excellent work more accessible.
 
 ## 📞 Support
 
