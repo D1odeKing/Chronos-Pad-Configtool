@@ -63,18 +63,20 @@ This tool requires **CircuitPython 9.x** to be installed on your Raspberry Pi Pi
 - ✅ **CircuitPython 9.x is supported**
 - ❌ **CircuitPython 10.x is NOT currently supported** and may cause errors or break functionality
 
-**Download CircuitPython 9.x:**
+**Download CircuitPython 9.2.9 (Recommended):**
 
-You must manually download and install CircuitPython 9.x from the official Adafruit website:
-- Download: [CircuitPython 9.x for Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
-- **Select version 9.x** (e.g., 9.2.9 or the latest 9.x release)
+**Direct Download:** [CircuitPython 9.2.9 UF2 for Raspberry Pi Pico](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2)
+
+Or browse all versions at: [CircuitPython Downloads for Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
+- **Select version 9.x** (e.g., 9.2.9 or any 9.x release)
 - Do NOT download version 10.x or higher
 
 **Installation Steps:**
 
 1. **Download the UF2 file**: 
+   - Click the direct download link above, or
    - Visit https://circuitpython.org/board/raspberry_pi_pico/
-   - Find and download the latest **9.x version** (NOT 10.x)
+   - Find and download **CircuitPython 9.2.9** or the latest **9.x version** (NOT 10.x)
 
 2. **Enter bootloader mode**:
    - Hold down the **BOOTSEL** button on your Raspberry Pi Pico
@@ -83,13 +85,13 @@ You must manually download and install CircuitPython 9.x from the official Adafr
    - The Pico will appear as a USB drive named `RPI-RP2`
 
 3. **Install CircuitPython**:
-   - Drag and drop the downloaded `.uf2` file onto the `RPI-RP2` drive
+   - Drag and drop the downloaded `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file onto the `RPI-RP2` drive
    - The Pico will automatically reboot
    - After rebooting, it will appear as a new USB drive named `CIRCUITPY`
 
 4. **Verify installation**:
    - You should see a `CIRCUITPY` drive with a `boot_out.txt` file
-   - Open `boot_out.txt` to confirm the version is **9.x.x**
+   - Open `boot_out.txt` to confirm the version is **9.2.9** (or your installed 9.x version)
 
 Your Pico is now ready for use with this configuration tool!
 
