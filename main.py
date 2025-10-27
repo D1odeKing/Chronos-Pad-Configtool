@@ -1955,9 +1955,8 @@ class KMKConfigurator(QMainWindow):
         libraries_dir = os.path.join(os.getcwd(), "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
         bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
-        uf2_path = os.path.join(libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
         
-        if os.path.exists(kmk_path) and os.path.exists(bundle_path) and os.path.exists(uf2_path):
+        if os.path.exists(kmk_path) and os.path.exists(bundle_path):
             return  # Dependencies already exist
         
         # Show download dialog
@@ -1968,8 +1967,7 @@ class KMKConfigurator(QMainWindow):
             "Would you like to download them automatically?\n\n"
             "This will download:\n"
             "• KMK Firmware (GPL-3.0 license)\n"
-            "• Adafruit CircuitPython Bundle (MIT license)\n"
-            "• CircuitPython 9.x UF2 file\n\n"
+            "• Adafruit CircuitPython Bundle (MIT license)\n\n"
             "Files will be downloaded to the 'libraries' folder.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
