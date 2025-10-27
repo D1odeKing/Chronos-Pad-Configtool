@@ -24,15 +24,19 @@ import json
 import os
 import time
 import traceback
+import urllib.request
+import zipfile
+import shutil
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
-    QFormLayout, QDoubleSpinBox
+    QFormLayout, QDoubleSpinBox, QProgressDialog
 )
 from PyQt6.QtWidgets import QTextEdit
-from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject
+from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
@@ -42,6 +46,113 @@ DEFAULT_KEY = "KC.NO"
 CONFIG_SAVE_DIR = os.path.join(os.getcwd(), "kmk_Config_Save")
 MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
 PROFILE_FILE = "profiles.json"
+
+# --- Dependency URLs ---
+KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
+CIRCUITPYTHON_BUNDLE_URL = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/latest/download/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
+CIRCUITPYTHON_UF2_URL = "https://downloads.circuitpython.org/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2"
+
+class DependencyDownloader(QThread):
+    """Downloads KMK firmware and CircuitPython libraries automatically"""
+    progress = pyqtSignal(str, int)  # message, percentage
+    finished = pyqtSignal(bool)  # success
+    
+    def __init__(self):
+        super().__init__()
+        self.libraries_dir = os.path.join(os.getcwd(), "libraries")
+        
+    def run(self):
+        """Download all required dependencies"""
+        try:
+            os.makedirs(self.libraries_dir, exist_ok=True)
+            
+            # Check if already downloaded
+            kmk_path = os.path.join(self.libraries_dir, "kmk_firmware-main")
+            bundle_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+            uf2_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
+            
+            if os.path.exists(kmk_path) and os.path.exists(bundle_path) and os.path.exists(uf2_path):
+                self.progress.emit("Dependencies already installed", 100)
+                self.finished.emit(True)
+                return
+            
+            # Download KMK Firmware
+            if not os.path.exists(kmk_path):
+                self.progress.emit("Downloading KMK Firmware...", 10)
+                self.download_and_extract_kmk()
+            
+            # Download CircuitPython Bundle
+            if not os.path.exists(bundle_path):
+                self.progress.emit("Downloading CircuitPython Bundle...", 50)
+                self.download_and_extract_bundle()
+            
+            # Download CircuitPython UF2
+            if not os.path.exists(uf2_path):
+                self.progress.emit("Downloading CircuitPython UF2...", 80)
+                self.download_uf2()
+            
+            self.progress.emit("Dependencies installed successfully!", 100)
+            self.finished.emit(True)
+            
+        except Exception as e:
+            self.progress.emit(f"Error downloading dependencies: {str(e)}", 0)
+            self.finished.emit(False)
+    
+    def download_and_extract_kmk(self):
+        """Download and extract KMK firmware"""
+        zip_path = os.path.join(self.libraries_dir, "kmk_firmware.zip")
+        
+        # Download
+        urllib.request.urlretrieve(KMK_FIRMWARE_URL, zip_path)
+        
+        # Extract
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(self.libraries_dir)
+        
+        # Clean up
+        os.remove(zip_path)
+    
+    def download_and_extract_bundle(self):
+        """Download and extract CircuitPython bundle"""
+        # Get latest bundle URL (try a few recent dates)
+        import datetime
+        today = datetime.date.today()
+        
+        for days_back in range(7):  # Try last 7 days
+            date = (today - datetime.timedelta(days=days_back)).strftime("%Y%m%d")
+            url = CIRCUITPYTHON_BUNDLE_URL.format(date=date)
+            
+            try:
+                zip_path = os.path.join(self.libraries_dir, "circuitpython_bundle.zip")
+                urllib.request.urlretrieve(url, zip_path)
+                
+                # Extract
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(self.libraries_dir)
+                
+                # Rename to consistent name
+                extracted_dirs = [d for d in os.listdir(self.libraries_dir) 
+                                if d.startswith("adafruit-circuitpython-bundle-9.x-mpy-")]
+                if extracted_dirs:
+                    old_path = os.path.join(self.libraries_dir, extracted_dirs[0])
+                    new_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+                    if os.path.exists(new_path):
+                        shutil.rmtree(new_path)
+                    os.rename(old_path, new_path)
+                
+                # Clean up
+                os.remove(zip_path)
+                break
+                
+            except Exception:
+                continue
+        else:
+            raise Exception("Could not download CircuitPython bundle from recent dates")
+    
+    def download_uf2(self):
+        """Download CircuitPython UF2 file"""
+        uf2_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
+        urllib.request.urlretrieve(CIRCUITPYTHON_UF2_URL, uf2_path)
 
 # --- Hardware Configuration (Fixed) ---
 # Raspberry Pi Pico 5x4 Custom Configuration
@@ -1772,6 +1883,9 @@ class KMKConfigurator(QMainWindow):
         self.setWindowTitle("KMK Macropad Configurator")
         self.setGeometry(100, 100, 1400, 900)
 
+        # Check and download dependencies first
+        self.check_dependencies()
+
         # default theme (can be changed by the user)
         self.current_theme = 'Dark'
         # Load persisted UI settings (theme) if available
@@ -1848,6 +1962,81 @@ class KMKConfigurator(QMainWindow):
             self.install_global_hover_effects()
         except Exception:
             pass
+
+    def check_dependencies(self):
+        """Check if KMK firmware and CircuitPython libraries are available, download if not"""
+        libraries_dir = os.path.join(os.getcwd(), "libraries")
+        kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
+        bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+        uf2_path = os.path.join(libraries_dir, "adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2")
+        
+        if os.path.exists(kmk_path) and os.path.exists(bundle_path) and os.path.exists(uf2_path):
+            return  # Dependencies already exist
+        
+        # Show download dialog
+        reply = QMessageBox.question(
+            self, 
+            "Download Dependencies",
+            "This tool requires KMK firmware and CircuitPython libraries.\n"
+            "Would you like to download them automatically?\n\n"
+            "This will download:\n"
+            "• KMK Firmware (GPL-3.0 license)\n"
+            "• Adafruit CircuitPython Bundle (MIT license)\n"
+            "• CircuitPython 9.x UF2 file\n\n"
+            "Files will be downloaded to the 'libraries' folder.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            QMessageBox.warning(
+                self,
+                "Dependencies Required",
+                "This tool requires KMK firmware and CircuitPython libraries to function.\n"
+                "Please download them manually or restart and choose to download automatically."
+            )
+            return
+        
+        # Show progress dialog and start download
+        self.progress_dialog = QProgressDialog("Preparing download...", "Cancel", 0, 100, self)
+        self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress_dialog.setAutoClose(False)
+        self.progress_dialog.setAutoReset(False)
+        self.progress_dialog.show()
+        
+        # Start download thread
+        self.downloader = DependencyDownloader()
+        self.downloader.progress.connect(self.on_download_progress)
+        self.downloader.finished.connect(self.on_download_finished)
+        self.downloader.start()
+    
+    def on_download_progress(self, message, percentage):
+        """Handle download progress updates"""
+        self.progress_dialog.setLabelText(message)
+        self.progress_dialog.setValue(percentage)
+        QApplication.processEvents()
+    
+    def on_download_finished(self, success):
+        """Handle download completion"""
+        self.progress_dialog.close()
+        
+        if success:
+            QMessageBox.information(
+                self,
+                "Download Complete",
+                "Dependencies downloaded successfully!\n"
+                "KMK firmware and CircuitPython libraries are now available."
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Download Failed",
+                "Failed to download dependencies.\n"
+                "Please check your internet connection and try again,\n"
+                "or download manually from:\n\n"
+                "• KMK: https://github.com/KMKfw/kmk_firmware\n"
+                "• CircuitPython Bundle: https://circuitpython.org/libraries\n"
+                "• CircuitPython UF2: https://circuitpython.org/board/raspberry_pi_pico/"
+            )
 
     def _set_stylesheet(self):
         """Sets the application's stylesheet based on current_theme."""
@@ -3029,7 +3218,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Check if kmk folder exists, if not copy it
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
-                    kmk_source = os.path.join(os.path.dirname(__file__), "kmk_firmware-main", "kmk")
+                    kmk_source = os.path.join(os.path.dirname(__file__), "libraries", "kmk_firmware-main", "kmk")
                     if os.path.exists(kmk_source):
                         import shutil
                         shutil.copytree(kmk_source, kmk_dest)
@@ -3037,14 +3226,14 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     else:
                         QMessageBox.warning(self, "Warning", 
                             f"KMK firmware source not found at:\n{kmk_source}\n\n"
-                            f"Please manually copy the kmk folder to {folder_path}")
+                            f"Please run the application to auto-download dependencies or manually copy the kmk folder to {folder_path}")
                         kmk_copied = False
                 else:
                     kmk_copied = False
                 
                 # Copy required libraries
                 lib_source = os.path.join(os.path.dirname(__file__), "libraries", 
-                                         "adafruit-circuitpython-bundle-9.x-mpy-20251024", "lib")
+                                         "adafruit-circuitpython-bundle-9.x-mpy", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
                 
                 # Create lib folder if it doesn't exist

@@ -42,16 +42,16 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - Python 3.8 or higher
 - PyQt6 (`pip install PyQt6`)
 
-**For the Macropad (Included in this repository):**
-- ✅ [KMK Firmware](https://github.com/KMKfw/kmk_firmware) - Included in `kmk_firmware-main/`
-- ✅ [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) - Included in `libraries/`
-- ✅ CircuitPython 9.x installed on your Raspberry Pi Pico
+**For the Macropad (Auto-downloaded when needed):**
+- ✅ [KMK Firmware](https://github.com/KMKfw/kmk_firmware) - Downloaded automatically on first run
+- ✅ [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) - Downloaded automatically on first run
+- ✅ CircuitPython 9.x UF2 file - Downloaded automatically on first run
 
 **Hardware:**
 
 This tool is designed specifically for the **[Chronos Pad](https://github.com/D1odeKing/Chronos-Pad)** macropad. For hardware specifications, PCB files, build instructions, and case designs, visit the [Chronos Pad hardware repository](https://github.com/D1odeKing/Chronos-Pad).
 
-> **Note:** KMK firmware and CircuitPython libraries are included and will be automatically deployed to your device when you save your configuration!
+> **Note:** KMK firmware and CircuitPython libraries are automatically downloaded on first run and will be deployed to your device when you save your configuration!
 
 
 ### Installing CircuitPython 9.x on Raspberry Pi Pico
@@ -61,14 +61,13 @@ To use this configuration tool, your Raspberry Pi Pico must have CircuitPython 9
 **Important:**
 - This tool is only tested with CircuitPython 9.x. Using newer versions (such as CircuitPython 10.x) may cause unexpected errors or break functionality.
 
-**Use the included CircuitPython 9.x .uf2 file:**
-- In this repository, navigate to the `libraries` folder.
-- Use the file: `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2`
+**Auto-downloaded CircuitPython 9.x .uf2 file:**
+- When you first run the tool, it will automatically download the CircuitPython UF2 file to `libraries/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2`
 
 **Install CircuitPython:**
 1. Hold down the BOOTSEL button on your Pico and plug it into your computer via USB.
 2. Release the BOOTSEL button. The Pico will appear as a USB drive named `RPI-RP2`.
-3. Drag and drop the `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file onto the `RPI-RP2` drive.
+3. Drag and drop the downloaded `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file from the `libraries` folder onto the `RPI-RP2` drive.
 4. The Pico will reboot and appear as a new USB drive named `CIRCUITPY`.
 
 Your Pico is now running CircuitPython 9.x and ready for use with this tool!
@@ -178,10 +177,10 @@ Chronos-Pad-Configtool/
 │   ├── analogin.py           # Analog input config
 │   ├── peg_rgb.py            # RGB config
 │   └── macros.json           # Macro definitions
-├── kmk_firmware-main/        # KMK firmware source
-│   └── kmk/                  # KMK modules
-├── libraries/                # CircuitPython libraries
-│   └── adafruit-circuitpython-bundle-9.x-mpy-20251024/
+├── libraries/                # Auto-downloaded dependencies
+│   ├── kmk_firmware-main/    # KMK firmware source
+│   ├── adafruit-circuitpython-bundle-9.x-mpy/ # CircuitPython libraries
+│   └── adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2
 └── scripts/                  # Utility scripts
 ```
 
