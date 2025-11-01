@@ -359,8 +359,8 @@ Save multiple named configurations:
 
 ### Prerequisites
 
-- CircuitPython 9.x or later installed on Pico (see [CIRCUITPYTHON_SETUP.md](../docs/CIRCUITPYTHON_SETUP.md))
-- Pico connected via USB
+- CircuitPython 10.0.3 installed on Pico 2 (see [CIRCUITPYTHON_SETUP.md](../docs/CIRCUITPYTHON_SETUP.md))
+- Pico 2 connected via USB
 - `CIRCUITPY` drive visible on your computer
 
 ### Step 1: Generate Code
@@ -389,7 +389,7 @@ The tool automatically:
 
 ### Step 4: Test Your Configuration
 
-1. Your Pico reboots automatically
+1. Your Pico 2 reboots automatically
 2. Try pressing keys - they should work!
 3. If using display, you should see the keymap
 4. If using encoder, rotate to switch layers
@@ -398,19 +398,19 @@ The tool automatically:
 ### Troubleshooting Deployment
 
 **"CIRCUITPY drive not found"**
-- Make sure Pico is connected
-- Check Device Manager for the Pico
+- Make sure Pico 2 is connected
+- Check Device Manager for the Pico 2
 - Reconnect the USB cable
 
 **"Failed to copy code.py"**
-- The Pico might be busy
+- The Pico 2 might be busy
 - Safely eject it from Windows/macOS
 - Reconnect and try again
 
 **Code runs but keys don't work**
 - Check matrix pins in Hardware Configuration
 - Verify diode orientation setting
-- Check CircuitPython version (must be 9.x or later)
+- Check CircuitPython version (must be 10.0.3)
 
 **Display shows scrambled text**
 - Enable Display extension in Extensions panel

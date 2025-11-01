@@ -19,7 +19,7 @@ Choose your preferred installation method:
 - Internet connection (for first-time library downloads)
 
 ### For CircuitPython Device
-- Raspberry Pi Pico with **CircuitPython 9.x or later** installed
+- Raspberry Pi Pico 2 with **CircuitPython 10.0.3** installed
 - See [CIRCUITPYTHON_SETUP.md](CIRCUITPYTHON_SETUP.md) for installation instructions
 
 ---

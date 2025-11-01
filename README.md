@@ -5,7 +5,7 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.0+-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![CircuitPython](https://img.shields.io/badge/CircuitPython-9.x+-blueviolet.svg)
+![CircuitPython](https://img.shields.io/badge/CircuitPython-10.0.3-blueviolet.svg)
 ![KMK Firmware](https://img.shields.io/badge/KMK-GPL--3.0-orange.svg)
 
 > **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
@@ -19,7 +19,7 @@ Complete documentation is organized in the [`docs/`](docs/) folder for easy navi
 | Document | Purpose |
 |----------|---------|
 | **[Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
-| **[CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 9.x+ on Pico |
+| **[CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 10.0.3 on Pico 2 |
 | **[Usage Guide](docs/USAGE.md)** | How to use the configurator |
 | **[Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
 | **[Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
@@ -75,10 +75,10 @@ python main.py
 
 ### 2️⃣ Setup CircuitPython on Pico
 
-1. Download [CircuitPython 9.x+ UF2](https://circuitpython.org/board/raspberry_pi_pico/) (9.2.9 or latest 9.x version)
-2. Hold BOOTSEL on Pico, plug into USB
+1. Download [CircuitPython 10.0.3 UF2](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico2/en_US/adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2)
+2. Hold BOOTSEL on Pico 2, plug into USB
 3. Drag UF2 file onto RPI-RP2 drive
-4. Pico reboots with CIRCUITPY drive
+4. Pico 2 reboots with CIRCUITPY drive
 
 👉 **Full details**: See [CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)
 
@@ -116,7 +116,7 @@ Learn how to use the configurator to create your custom keyboard:
 Chronos-Pad-Configtool/
 ├── docs/                          # 📚 Complete documentation
 │   ├── INSTALLATION.md           # Installation & setup
-│   ├── CIRCUITPYTHON_SETUP.md    # CircuitPython 9.x+ installation
+│   ├── CIRCUITPYTHON_SETUP.md    # CircuitPython 10.0.3 installation for Pico 2
 │   ├── USAGE.md                  # Usage guide
 │   ├── EXTENSIONS.md             # Hardware configuration
 │   ├── DISPLAY.md                # OLED display guide
@@ -188,11 +188,11 @@ This configurator automatically downloads and uses the following open-source pro
 
 ### Hardware Platform
 
-**CircuitPython 9.x+ by Adafruit**
-- Python for microcontrollers running on Raspberry Pi Pico (RP2040)
-- **Version requirement:** CircuitPython 9.x or later
-- **Must be manually installed** on your Raspberry Pi Pico
-- Download from: https://circuitpython.org/board/raspberry_pi_pico/
+**CircuitPython 10.0.3 by Adafruit**
+- Python for microcontrollers running on Raspberry Pi Pico 2 (RP2350)
+- **Version requirement:** CircuitPython 10.0.3 (latest)
+- **Must be manually installed** on your Raspberry Pi Pico 2
+- Download from: https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico2/en_US/adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2
 
 ---
 

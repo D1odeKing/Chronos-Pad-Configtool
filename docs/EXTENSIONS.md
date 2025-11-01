@@ -137,7 +137,7 @@ keyboard.modules.append(encoder_handler)
 
 **Encoder doesn't respond**
 - Check pin mappings (should be GP10, GP11, GP14)
-- Verify CircuitPython version is 9.x
+- Verify CircuitPython version is 10.0.3
 - Check wiring on your PCB
 
 **Layers won't cycle**
@@ -410,7 +410,7 @@ update_display_for_layer(0)
 
 **Display is blank**
 - Check I2C wiring (GP20=SDA, GP21=SCL)
-- Verify CircuitPython version is 9.x or later
+- Verify CircuitPython version is 10.0.3
 - Check if OLED display is powered
 - Try: Press a key - if display updates briefly, wiring is OK
 

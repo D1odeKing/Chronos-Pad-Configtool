@@ -93,10 +93,10 @@ Custom codes  → Abbreviation or ?
 
 ### Hardware Wiring
 
-Connect your OLED display to the Pico:
+Connect your OLED display to the Pico 2:
 
 ```
-OLED Display    Raspberry Pi Pico
+OLED Display    Raspberry Pi Pico 2
 VCC      ─────→ 3V3 (pin 36)
 GND      ─────→ GND (pin 38)
 SDA      ─────→ GP20 (pin 26)
@@ -454,7 +454,7 @@ update_display_for_layer(0)
    - Avoid long names
 
 3. **Check CircuitPython version**
-   - Use 9.x or later (any version 9.2.9+ recommended)
+   - Use 10.0.3 (required for Pico 2)
 
 ---
 

@@ -2,20 +2,26 @@
 
 ## ⚠️ Important Version Requirement
 
-This tool **requires CircuitPython 9.x or later** to be installed on your Raspberry Pi Pico.
+This tool **requires CircuitPython 10.0.3** to be installed on your **Raspberry Pi Pico 2 (RP2350)**.
 
-- ✅ **CircuitPython 9.x** - Fully supported
-- ✅ **CircuitPython 10.x+** - Fully supported
+- ✅ **CircuitPython 10.0.3** - Fully supported and recommended
+- ℹ️ **Pico 2 (RP2350)** - Required hardware (not Pico 1/RP2040)
 
 ---
 
-## Download CircuitPython 9.x or Later
+## Download CircuitPython 10.0.3
 
-### Option 1: Direct Download (Recommended)
+### Direct Download (Recommended)
 
-Choose the latest 9.x or any supported version and download the UF2 file.
+**[CircuitPython 10.0.3 for Raspberry Pi Pico 2 (RP2350)](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico2/en_US/adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2)**
 
-**Latest versions available at:** [CircuitPython Downloads - Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
+### Or Browse All Versions
+
+Visit: [CircuitPython Downloads - Raspberry Pi Pico 2](https://circuitpython.org/board/raspberry_pi_pico2/)
+
+1. Click on **Raspberry Pi Pico 2** (not Pico)
+2. Download the latest `.uf2` file
+3. Use the downloaded UF2 file in the installation steps below
 
 ---
 
@@ -23,38 +29,31 @@ Choose the latest 9.x or any supported version and download the UF2 file.
 
 ### Step 1: Enter Bootloader Mode
 
-1. **Hold down** the **BOOTSEL** button on your Pico
-2. **While holding BOOTSEL**, connect the Pico to your computer via USB
+1. **Hold down** the **BOOTSEL** button on your Pico 2
+2. **While holding BOOTSEL**, connect the Pico 2 to your computer via USB
 3. **Release** the BOOTSEL button
-4. Your Pico will appear as a USB drive named `RPI-RP2`
+4. Your Pico 2 will appear as a USB drive named `RPI-RP2`
 
-**Visual Guide:**
-```
-BOOTSEL button (on top of Pico)
-    ↓
-┌─────────────────────┐
-│  ◯ ◯ ◯  BOOTSEL    │
-│ (GPIO pads)         │
-│  ◯ ◯ ◯              │
-└─────────────────────┘
-```
 
-### Step 2: Drag and Drop CircuitPython
+### Step 2: Copy CircuitPython UF2 File
 
-1. Download the `.uf2` file (see above)
+1. Download the CircuitPython 10.0.3 UF2 file:
+   - **Direct Download**: [adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico2/en_US/adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2)
+   - Or get it from [CircuitPython Downloads](https://circuitpython.org/board/raspberry_pi_pico2/)
+
 2. Locate the `RPI-RP2` drive on your computer
 3. **Drag and drop** the UF2 file onto the `RPI-RP2` drive
-4. The Pico will automatically reboot
+4. The Pico 2 will automatically flash and reboot
 
 **What you should see:**
 ```
 Computer > This PC > RPI-RP2 (USB Drive)
-    └── adafruit-circuitpython-raspberry_pi_pico-en_US-<version>.uf2
+    └── adafruit-circuitpython-raspberry_pi_pico2-en_US-10.0.3.uf2
 ```
 
 ### Step 3: Verify Installation
 
-After reboot, your Pico should appear as a new drive called `CIRCUITPY`:
+After reboot, your Pico 2 should appear as a new drive called `CIRCUITPY`:
 
 ```
 Computer > This PC > CIRCUITPY (USB Drive)
@@ -72,12 +71,12 @@ Computer > This PC > CIRCUITPY (USB Drive)
 3. Look for the version line:
 
 ```
-Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
+Adafruit CircuitPython 10.0.3 on 2024-10-18; Raspberry Pi Pico 2 with RP2350
 ```
 
-✅ If you see **9.x.x or higher**, you're all set!
+✅ If you see **CircuitPython 10.0.3**, you're all set!
 
-❌ If you see a version lower than 9.x, please reinstall using version 9.x or later
+❌ If you see a different version, please reinstall using the correct UF2 file above
 
 ---
 
@@ -94,7 +93,7 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 2. Configure extensions (encoder, display, RGB, etc.)
 3. Create any macros you need
 
-### Step 3: Deploy to Your Pico
+### Step 3: Deploy to Your Pico 2
 
 1. Click **"Save code.py"**
 2. The configurator will auto-detect your `CIRCUITPY` drive
@@ -103,11 +102,11 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
    - Generate complete KMK code
    - Copy KMK firmware (if needed)
    - Install required libraries
-   - Save `code.py` to your Pico
+   - Save `code.py` to your Pico 2
 
 ### Step 4: Test Your Configuration
 
-1. Your Pico will automatically reboot
+1. Your Pico 2 will automatically reboot
 2. Try pressing keys - they should work!
 3. If using an OLED display, you should see the keymap
 4. If using an encoder, turn it to cycle layers
@@ -116,7 +115,7 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 
 ## Troubleshooting
 
-### Pico Won't Enter Bootloader Mode
+### Pico 2 Won't Enter Bootloader Mode
 
 **Issue**: The `RPI-RP2` drive doesn't appear
 
@@ -124,18 +123,18 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 1. Try a different USB cable (some cables are power-only)
 2. Press and hold BOOTSEL **before** plugging in
 3. Try a different USB port
-4. Update your Pico's bootloader if it has one
+4. Update your Pico 2's bootloader if it has one
 
 ### CircuitPython Won't Install
 
 **Issue**: UF2 file won't copy to RPI-RP2 drive
 
 **Solutions**:
-1. Erase the Pico first:
-   - Download [flash_nuke.uf2](https://adafruit-circuit-python.s3.amazonaws.com/bin/rp2040/flash_nuke.uf2)
+1. Erase the Pico 2 first:
+   - Download [flash_nuke.uf2](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico2/flash_nuke.uf2)
    - Copy it to RPI-RP2 (same as CircuitPython)
    - Wait 30 seconds
-   - Pico will reboot and be erased
+   - Pico 2 will reboot and be erased
 2. Then copy the CircuitPython UF2 file again
 
 ### CIRCUITPY Drive Won't Appear
@@ -150,22 +149,22 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 
 ### Wrong CircuitPython Version
 
-**Issue**: `boot_out.txt` shows version lower than 9.x
+**Issue**: `boot_out.txt` shows version lower than 10.0.3
 
 **Solutions**:
-1. Download CircuitPython 9.x or later UF2 file
+1. Download CircuitPython 10.0.3 UF2 file (see top of this guide)
 2. Re-enter bootloader mode
 3. Copy the UF2 file to RPI-RP2
-4. Verify version in `boot_out.txt` shows 9.x or higher
+4. Verify version in `boot_out.txt` shows 10.0.3
 
 ### Configurator Can't Find CIRCUITPY
 
 **Issue**: "No CIRCUITPY drive detected" message
 
 **Solutions**:
-1. Make sure CircuitPython is installed on your Pico
-2. Ensure the Pico is connected via USB
-3. Check Device Manager to see if Pico is visible
+1. Make sure CircuitPython 10.0.3 is installed on your Pico 2
+2. Ensure the Pico 2 is connected via USB
+3. Check Device Manager to see if Pico 2 is visible
 4. Try a different USB port
 5. Manually browse to your CIRCUITPY drive when prompted
 
@@ -173,7 +172,7 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 
 ## Next Steps
 
-Once CircuitPython 9.x or later is installed on your Pico:
+Once CircuitPython 10.0.3 is installed on your Pico 2:
 
 1. ➡️ Open the **Chronos Pad Configurator**
 2. ➡️ Design your keymap
@@ -188,7 +187,7 @@ Once CircuitPython 9.x or later is installed on your Pico:
 - [CircuitPython Official Documentation](https://docs.circuitpython.org/)
 - [Adafruit Learning Guides](https://learn.adafruit.com/)
 - [KMK Firmware Documentation](https://docs.keymak.info/)
-- [Raspberry Pi Pico Documentation](https://www.raspberrypi.com/products/raspberry-pi-pico/)
+- [Raspberry Pi Pico 2 Documentation](https://www.raspberrypi.com/products/raspberry-pi-pico-2/)
 
 ---
 
