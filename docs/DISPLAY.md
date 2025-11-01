@@ -454,8 +454,7 @@ update_display_for_layer(0)
    - Avoid long names
 
 3. **Check CircuitPython version**
-   - Use 9.x (9.2.9+ recommended)
-   - Newer versions are faster
+   - Use 9.x or later (any version 9.2.9+ recommended)
 
 ---
 

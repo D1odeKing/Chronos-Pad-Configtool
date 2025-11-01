@@ -359,7 +359,7 @@ Save multiple named configurations:
 
 ### Prerequisites
 
-- CircuitPython 9.x installed on Pico (see [CIRCUITPYTHON_SETUP.md](../docs/CIRCUITPYTHON_SETUP.md))
+- CircuitPython 9.x or later installed on Pico (see [CIRCUITPYTHON_SETUP.md](../docs/CIRCUITPYTHON_SETUP.md))
 - Pico connected via USB
 - `CIRCUITPY` drive visible on your computer
 
@@ -410,7 +410,7 @@ The tool automatically:
 **Code runs but keys don't work**
 - Check matrix pins in Hardware Configuration
 - Verify diode orientation setting
-- Check CircuitPython version (must be 9.x)
+- Check CircuitPython version (must be 9.x or later)
 
 **Display shows scrambled text**
 - Enable Display extension in Extensions panel

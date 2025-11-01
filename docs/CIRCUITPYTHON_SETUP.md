@@ -2,26 +2,20 @@
 
 ## ⚠️ Important Version Requirement
 
-This tool **requires CircuitPython 9.x** to be installed on your Raspberry Pi Pico.
+This tool **requires CircuitPython 9.x or later** to be installed on your Raspberry Pi Pico.
 
 - ✅ **CircuitPython 9.x** - Fully supported
-- ❌ **CircuitPython 10.x** - NOT supported (may break functionality)
+- ✅ **CircuitPython 10.x+** - Fully supported
 
 ---
 
-## Download CircuitPython 9.x
+## Download CircuitPython 9.x or Later
 
 ### Option 1: Direct Download (Recommended)
 
-**[CircuitPython 9.2.9 UF2 for Raspberry Pi Pico](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2)**
+Choose the latest 9.x or any supported version and download the UF2 file.
 
-### Option 2: Browse All 9.x Versions
-
-Visit: [CircuitPython Downloads - Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
-
-1. Scroll to find your Pico board
-2. Select **version 9.x** (e.g., 9.2.9, 9.3.0, etc.)
-3. Click the `.uf2` file to download
+**Latest versions available at:** [CircuitPython Downloads - Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
 
 ---
 
@@ -55,7 +49,7 @@ BOOTSEL button (on top of Pico)
 **What you should see:**
 ```
 Computer > This PC > RPI-RP2 (USB Drive)
-    └── adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2
+    └── adafruit-circuitpython-raspberry_pi_pico-en_US-<version>.uf2
 ```
 
 ### Step 3: Verify Installation
@@ -81,9 +75,9 @@ Computer > This PC > CIRCUITPY (USB Drive)
 Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 ```
 
-✅ If you see **9.x.x**, you're all set!
+✅ If you see **9.x.x or higher**, you're all set!
 
-❌ If you see **10.x** or higher, please reinstall using version 9.x
+❌ If you see a version lower than 9.x, please reinstall using version 9.x or later
 
 ---
 
@@ -156,13 +150,13 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 
 ### Wrong CircuitPython Version
 
-**Issue**: `boot_out.txt` shows version 10.x instead of 9.x
+**Issue**: `boot_out.txt` shows version lower than 9.x
 
 **Solutions**:
-1. Download the correct 9.x UF2 file (not 10.x)
+1. Download CircuitPython 9.x or later UF2 file
 2. Re-enter bootloader mode
-3. Copy the 9.x UF2 file to RPI-RP2
-4. Verify version in `boot_out.txt` shows 9.x
+3. Copy the UF2 file to RPI-RP2
+4. Verify version in `boot_out.txt` shows 9.x or higher
 
 ### Configurator Can't Find CIRCUITPY
 
@@ -179,7 +173,7 @@ Adafruit CircuitPython 9.2.9 on 2024-10-18; Raspberry Pi Pico with RP2040
 
 ## Next Steps
 
-Once CircuitPython 9.x is installed on your Pico:
+Once CircuitPython 9.x or later is installed on your Pico:
 
 1. ➡️ Open the **Chronos Pad Configurator**
 2. ➡️ Design your keymap

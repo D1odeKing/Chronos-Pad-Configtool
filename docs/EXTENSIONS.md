@@ -410,7 +410,7 @@ update_display_for_layer(0)
 
 **Display is blank**
 - Check I2C wiring (GP20=SDA, GP21=SCL)
-- Verify CircuitPython version is 9.x
+- Verify CircuitPython version is 9.x or later
 - Check if OLED display is powered
 - Try: Press a key - if display updates briefly, wiring is OK
 
