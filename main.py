@@ -41,11 +41,26 @@ from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
 
+# --- Path Resolution for PyInstaller ---
+def get_application_path():
+    """Get the directory where the application is running from.
+    Works correctly whether running as script or frozen exe."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe
+        application_path = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        application_path = os.path.dirname(os.path.abspath(__file__))
+    return application_path
+
+# Set base directory for all file operations
+BASE_DIR = get_application_path()
+
 # --- Default Values ---
 DEFAULT_KEY = "KC.NO"
-CONFIG_SAVE_DIR = os.path.join(os.getcwd(), "kmk_Config_Save")
+CONFIG_SAVE_DIR = os.path.join(BASE_DIR, "kmk_Config_Save")
 MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
-PROFILE_FILE = "profiles.json"
+PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
@@ -58,7 +73,7 @@ class DependencyDownloader(QThread):
     
     def __init__(self):
         super().__init__()
-        self.libraries_dir = os.path.join(os.getcwd(), "libraries")
+        self.libraries_dir = os.path.join(BASE_DIR, "libraries")
         
     def run(self):
         """Download all required dependencies"""
@@ -2390,7 +2405,7 @@ class KMKConfigurator(QMainWindow):
         """Check if KMK firmware and CircuitPython libraries are available, download if not"""
         if os.environ.get("KMK_SKIP_DEP_CHECK"):
             return
-        libraries_dir = os.path.join(os.getcwd(), "libraries")
+        libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
         bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
         
@@ -3060,15 +3075,15 @@ class KMKConfigurator(QMainWindow):
                     full = os.path.join(save_dir, f)
                     paths.append(full)
 
-        for f in os.listdir(os.getcwd()):
+        for f in os.listdir(BASE_DIR):
             if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                full = os.path.join(os.getcwd(), f)
+                full = os.path.join(BASE_DIR, f)
                 if full not in paths:
                     paths.append(full)
 
         self.config_file_combo.blockSignals(True)
         self.config_file_combo.clear()
-        display_names = [os.path.relpath(p, os.getcwd()) for p in paths]
+        display_names = [os.path.relpath(p, BASE_DIR) for p in paths]
         self.config_file_combo.addItems(display_names)
         self.config_file_combo.blockSignals(False)
     
@@ -4057,7 +4072,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 path = os.path.join(base_path, "CIRCUITPY")
                 if os.path.exists(path):
                     return path
-        return os.getcwd() # Fallback to current directory
+        return BASE_DIR  # Fallback to application directory
 
     def generate_code_py_dialog(self):
         default_path = self.find_circuitpy_drive()
@@ -4080,7 +4095,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Check if kmk folder exists, if not copy it
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
-                    kmk_source = os.path.join(os.path.dirname(__file__), "libraries", "kmk_firmware-main", "kmk")
+                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk_firmware-main", "kmk")
                     if os.path.exists(kmk_source):
                         import shutil
                         shutil.copytree(kmk_source, kmk_dest)
@@ -4094,7 +4109,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     kmk_copied = False
                 
                 # Copy required libraries
-                lib_source = os.path.join(os.path.dirname(__file__), "libraries", 
+                lib_source = os.path.join(BASE_DIR, "libraries", 
                                          "adafruit-circuitpython-bundle-9.x-mpy", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
                 
@@ -4219,7 +4234,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             if hasattr(self, 'config_file_combo') and self.config_file_combo.count() > 0:
                 sel = self.config_file_combo.currentText()
                 if sel:
-                    candidate = os.path.join(os.getcwd(), sel)
+                    candidate = os.path.join(BASE_DIR, sel)
                     if os.path.exists(candidate):
                         selected_path = candidate
 
