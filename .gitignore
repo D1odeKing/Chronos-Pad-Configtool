@@ -4,6 +4,12 @@ ai-Context/
 # Auto-downloaded dependencies - these will be downloaded automatically
 libraries/
 
+# PyInstaller build artifacts
+build/
+dist/
+# Keep the spec file for rebuilding
+#*.spec
+
 # Python cache
 __pycache__/
 *.pyc

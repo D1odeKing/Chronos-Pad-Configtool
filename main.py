@@ -2,14 +2,14 @@
 KMK Macropad Configurator - Raspberry Pi Pico Edition
 
 Hardware Configuration (FIXED):
-- Board: Raspberry Pi Pico
+- Board: Raspberry Pi Pico 2
 - Matrix: 5 rows x 4 columns (20 keys)
 - Rows: GP8, GP7, GP6, GP5, GP4
 - Columns: GP0, GP1, GP2, GP3
 - Diode Orientation: COL2ROW
 - Encoder: A=GP10, B=GP11, Button=GP14
 - Slider Pot: GP28 (analog input)
-- RGB LEDs: GP9 (WS2812 data line)
+- RGB LEDs: GP9 (SK6812MINI - GRB pixel order)
 - Display: I2C (SDA=GP20, SCL=GP21)
 
 This configurator allows you to customize key assignments, macros, layers,
@@ -41,11 +41,26 @@ from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
 
+# --- Path Resolution for PyInstaller ---
+def get_application_path():
+    """Get the directory where the application is running from.
+    Works correctly whether running as script or frozen exe."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe
+        application_path = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        application_path = os.path.dirname(os.path.abspath(__file__))
+    return application_path
+
+# Set base directory for all file operations
+BASE_DIR = get_application_path()
+
 # --- Default Values ---
 DEFAULT_KEY = "KC.NO"
-CONFIG_SAVE_DIR = os.path.join(os.getcwd(), "kmk_Config_Save")
+CONFIG_SAVE_DIR = os.path.join(BASE_DIR, "kmk_Config_Save")
 MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
-PROFILE_FILE = "profiles.json"
+PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
@@ -58,7 +73,7 @@ class DependencyDownloader(QThread):
     
     def __init__(self):
         super().__init__()
-        self.libraries_dir = os.path.join(os.getcwd(), "libraries")
+        self.libraries_dir = os.path.join(BASE_DIR, "libraries")
         
     def run(self):
         """Download all required dependencies"""
@@ -153,6 +168,66 @@ FIXED_ANALOG_PIN = "board.GP28"  # 10k slider pot
 FIXED_RGB_PIN = "board.GP9"
 FIXED_DISPLAY_PINS = {"scl": "board.GP21", "sda": "board.GP20"}
 
+
+def build_default_rgb_matrix_config():
+    """Create a fresh RGB matrix configuration with sane defaults."""
+    return {
+        "pixel_pin": FIXED_RGB_PIN,
+        "brightness_limit": 0.5,
+        "rgb_order": "GRB",
+        "disable_auto_write": True,
+        "num_underglow": 0,
+        "default_key_color": "#FFFFFF",
+        "default_underglow_color": "#000000",
+        "key_colors": {},
+        "underglow_colors": {},
+    }
+
+
+RGB_ORDER_TUPLES = {
+    "RGB": (0, 1, 2),
+    "RBG": (0, 2, 1),
+    "GRB": (1, 0, 2),
+    "GBR": (1, 2, 0),
+    "BRG": (2, 0, 1),
+    "BGR": (2, 1, 0),
+}
+
+
+def hex_to_rgb_list(color: str) -> list[int]:
+    """Convert a hex color string (e.g. #FFAABB) into an [r, g, b] list."""
+    if not isinstance(color, str):
+        color = "#000000"
+    clean = color.strip().lstrip('#')
+    if len(clean) != 6:
+        clean = "000000"
+    try:
+        r = int(clean[0:2], 16)
+        g = int(clean[2:4], 16)
+        b = int(clean[4:6], 16)
+        return [r, g, b]
+    except ValueError:
+        return [0, 0, 0]
+
+
+def ensure_hex_prefix(color: str, fallback: str) -> str:
+    """Return a canonical '#RRGGBB' string, falling back when invalid."""
+    if not isinstance(color, str):
+        return fallback
+    value = color.strip()
+    if not value:
+        return fallback
+    if not value.startswith('#'):
+        value = f"#{value}"
+    clean = value.lstrip('#')
+    if len(clean) != 6:
+        return fallback
+    try:
+        int(clean, 16)
+    except ValueError:
+        return fallback
+    return f"#{clean.upper()}"
+
 # --- Default Extension Configuration Templates ---
 DEFAULT_ENCODER_CONFIG = '''from kmk.modules.encoder import EncoderHandler
 
@@ -166,16 +241,28 @@ class LayerCycler:
     def next_layer(self):
         self.current_layer = (self.current_layer + 1) % self.num_layers
         self.keyboard.active_layers[0] = self.current_layer
+        try:
+            update_display_for_layer(self.current_layer)
+        except:
+            pass
         return False
     
     def prev_layer(self):
         self.current_layer = (self.current_layer - 1) % self.num_layers
         self.keyboard.active_layers[0] = self.current_layer
+        try:
+            update_display_for_layer(self.current_layer)
+        except:
+            pass
         return False
     
     def reset_layer(self):
         self.current_layer = 0
         self.keyboard.active_layers[0] = 0
+        try:
+            update_display_for_layer(0)
+        except:
+            pass
         return False
 
 # Create layer cycler (will be bound after keyboard setup)
@@ -279,7 +366,8 @@ class VolumeSlider:
     
     def before_hid_send(self, keyboard):
         """Called before HID report is sent"""
-        return
+
+                return
     
     def after_hid_send(self, keyboard):
         """Called after HID report is sent"""
@@ -298,11 +386,11 @@ volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval=0.05)
 keyboard.modules.append(volume_slider)'''
 
 DEFAULT_RGB_CONFIG = '''import neopixel
-from kmk.extensions.peg_rgb_matrix import Rgb_matrix
+from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data
 
-# WS2812 RGB strip/matrix connected to GP9
+# SK6812MINI RGB LEDs connected to GP9 (GRB pixel order)
 rgb_ext = Rgb_matrix(
-    ledData=neopixel.NeoPixel(board.GP9, 20, brightness=0.2)  # 20 LEDs for 5x4 matrix
+    ledData=neopixel.NeoPixel(board.GP9, 20, brightness=0.2, pixel_order=neopixel.GRB)  # 20 LEDs for 5x4 matrix
 )
 keyboard.extensions.append(rgb_ext)'''
 
@@ -363,8 +451,11 @@ KEYCODES = {
         "KC.F19", "KC.F20", "KC.F21", "KC.F22", "KC.F23", "KC.F24",
     ],
     "Media": [
-        "KC.VOLU", "KC.VOLD", "KC.MUTE", "KC.PLAY",
-        "KC.NEXT", "KC.PREV", "KC.STOP", "KC.EJCT"
+        "KC.MUTE", "KC.VOLU", "KC.VOLD",
+        "KC.BRIU", "KC.BRID",
+        "KC.MNXT", "KC.MPRV", "KC.MSTP",
+        "KC.MPLY", "KC.EJCT",
+        "KC.MFFD", "KC.MRWD"
     ],
     "Numpad": [
         "KC.KP_0", "KC.KP_1", "KC.KP_2", "KC.KP_3", "KC.KP_4",
@@ -383,8 +474,8 @@ KEYCODES = {
         "KC.DF(0)", "KC.DF(1)", "KC.DF(2)", "KC.DF(3)", "KC.DF(4)", "KC.DF(5)"
     ],
     "Misc": [
-        "KC.NO", "KC.TRNS", "KC.RESET", "KC.CAPS", "KC.PSCR", "KC.SLCK",
-        "KC.PAUS", "KC.NUM", "KC.APP"
+        "KC.NO", "KC.TRNS", "KC.RESET", "KC.CLCK", "KC.PSCR", "KC.SLCK",
+        "KC.PAUS", "KC.NLCK", "KC.APP"
     ]
 }
 
@@ -1070,126 +1161,215 @@ class PinEditorDialog(QDialog):
 
 
 class EncoderConfigDialog(QDialog):
-    """Form-based editor for Encoder configuration.
-    Produces a small Python snippet that sets up encoder_handler.pins and encoder_handler.map.
-    """
-    def __init__(self, parent=None, initial_text=""):
+    """Enhanced encoder configuration dialog with automatic layer cycling and display updates."""
+    def __init__(self, parent=None, initial_text="", num_layers=1):
         super().__init__(parent)
-        self.setWindowTitle("Encoder Configuration")
-        self.resize(700, 500)
-
-        self.encoders = []  # list of dicts
+        self.setWindowTitle("Rotary Encoder Configuration")
+        self.resize(600, 550)
+        self.num_layers = num_layers
 
         main_layout = QVBoxLayout(self)
-
-        # List of encoders
-        enc_list_layout = QHBoxLayout()
-        self.encoder_list = QListWidget()
-        enc_list_layout.addWidget(self.encoder_list, 2)
-
-        enc_form_layout = QVBoxLayout()
-        enc_form_layout.addWidget(QLabel("Pin A:"))
-        self.pin_a_input = QLineEdit()
-        enc_form_layout.addWidget(self.pin_a_input)
-        enc_form_layout.addWidget(QLabel("Pin B:"))
-        self.pin_b_input = QLineEdit()
-        enc_form_layout.addWidget(self.pin_b_input)
-        enc_form_layout.addWidget(QLabel("Button Pin (or leave blank):"))
-        self.button_pin_input = QLineEdit()
-        enc_form_layout.addWidget(self.button_pin_input)
-        self.invert_checkbox = QCheckBox("Invert direction")
-        enc_form_layout.addWidget(self.invert_checkbox)
-        enc_form_layout.addWidget(QLabel("Divisor (2 or 4):"))
-        self.divisor_input = QLineEdit()
-        self.divisor_input.setText("4")
-        enc_form_layout.addWidget(self.divisor_input)
-
-        add_enc_btn = QPushButton("Add / Update Encoder")
-        add_enc_btn.clicked.connect(self.add_or_update_encoder)
-        enc_form_layout.addWidget(add_enc_btn)
-
-        remove_enc_btn = QPushButton("Remove Selected Encoder")
-        remove_enc_btn.clicked.connect(self.remove_selected_encoder)
-        enc_form_layout.addWidget(remove_enc_btn)
-        enc_list_layout.addLayout(enc_form_layout, 1)
-
-        main_layout.addLayout(enc_list_layout)
-
-        # Encoder map area (simple free text; user can paste a list structure)
-        main_layout.addWidget(QLabel("Optional encoder.map (Python list literal). Example: [( (KC.VOLD, KC.VOLU, KC.MUTE), ), ]"))
-        self.map_editor = QTextEdit()
-        main_layout.addWidget(self.map_editor)
-
+        
+        # Info label
+        info = QLabel(
+            "Configure your rotary encoder for layer cycling with automatic display updates.\n"
+            "Hardware: Pin A=GP10, Pin B=GP11, Button=GP14"
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("background-color: #E3F2FD; padding: 8px; border-radius: 4px;")
+        main_layout.addWidget(info)
+        
+        # Hardware pins (fixed for Chronos Pad)
+        hw_group = QGroupBox("Hardware Configuration (Fixed)")
+        hw_layout = QFormLayout()
+        self.pin_a = QLineEdit("board.GP10")
+        self.pin_a.setReadOnly(True)
+        self.pin_b = QLineEdit("board.GP11")
+        self.pin_b.setReadOnly(True)
+        self.pin_button = QLineEdit("board.GP14")
+        self.pin_button.setReadOnly(True)
+        hw_layout.addRow("Pin A:", self.pin_a)
+        hw_layout.addRow("Pin B:", self.pin_b)
+        hw_layout.addRow("Button:", self.pin_button)
+        hw_group.setLayout(hw_layout)
+        main_layout.addWidget(hw_group)
+        
+        # Rotation behavior
+        rotation_group = QGroupBox("Rotation Behavior")
+        rotation_layout = QVBoxLayout()
+        
+        self.rotation_action = QComboBox()
+        self.rotation_action.addItems([
+            "Cycle Layers (Recommended)",
+            "Volume Control (Vol Down / Vol Up)",
+            "Brightness (Down / Up)",
+            "Media (Prev Track / Next Track)",
+            "Custom Actions"
+        ])
+        rotation_layout.addWidget(QLabel("Rotation Action:"))
+        rotation_layout.addWidget(self.rotation_action)
+        
+        self.invert_direction = QCheckBox("Invert rotation direction")
+        self.invert_direction.setToolTip("Swap clockwise and counter-clockwise actions")
+        rotation_layout.addWidget(self.invert_direction)
+        
+        rotation_group.setLayout(rotation_layout)
+        main_layout.addWidget(rotation_group)
+        
+        # Button press behavior
+        button_group = QGroupBox("Center Button Press")
+        button_layout = QVBoxLayout()
+        
+        self.button_action = QComboBox()
+        self.button_action.addItems([
+            "Reset to Layer 0 (Recommended)",
+            "Toggle Layer 1",
+            "Mute",
+            "Play/Pause",
+            "Custom Action"
+        ])
+        button_layout.addWidget(QLabel("Button Action:"))
+        button_layout.addWidget(self.button_action)
+        
+        button_group.setLayout(button_layout)
+        main_layout.addWidget(button_group)
+        
+        # Display updates
+        display_group = QGroupBox("Display Integration")
+        display_layout = QVBoxLayout()
+        
+        self.enable_display_updates = QCheckBox("Update display on layer change")
+        self.enable_display_updates.setChecked(True)
+        self.enable_display_updates.setToolTip("Automatically refresh OLED display when changing layers")
+        display_layout.addWidget(self.enable_display_updates)
+        
+        self.show_layer_number = QCheckBox("Show current layer number on display")
+        self.show_layer_number.setChecked(True)
+        display_layout.addWidget(self.show_layer_number)
+        
+        display_group.setLayout(display_layout)
+        main_layout.addWidget(display_group)
+        
+        # Custom actions (initially hidden)
+        self.custom_group = QGroupBox("Custom Actions")
+        custom_layout = QFormLayout()
+        self.custom_ccw = QLineEdit()
+        self.custom_ccw.setPlaceholderText("e.g., KC.LEFT")
+        self.custom_cw = QLineEdit()
+        self.custom_cw.setPlaceholderText("e.g., KC.RGHT")
+        self.custom_press = QLineEdit()
+        self.custom_press.setPlaceholderText("e.g., KC.ENT")
+        custom_layout.addRow("Counter-Clockwise:", self.custom_ccw)
+        custom_layout.addRow("Clockwise:", self.custom_cw)
+        custom_layout.addRow("Button Press:", self.custom_press)
+        self.custom_group.setLayout(custom_layout)
+        self.custom_group.setVisible(False)
+        main_layout.addWidget(self.custom_group)
+        
+        # Connect signals
+        self.rotation_action.currentTextChanged.connect(self._on_action_changed)
+        self.button_action.currentTextChanged.connect(self._on_action_changed)
+        
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         main_layout.addWidget(buttons)
-
-        # If initial_text is provided, attempt to load it into map_editor
-        if initial_text:
-            self.map_editor.setPlainText(initial_text)
-
-        # Wire list selection
-        self.encoder_list.itemClicked.connect(self.on_encoder_item_clicked)
-
-    def add_or_update_encoder(self):
-        a = self.pin_a_input.text().strip()
-        b = self.pin_b_input.text().strip()
-        btn = self.button_pin_input.text().strip() or None
-        inv = bool(self.invert_checkbox.isChecked())
-        try:
-            divisor = int(self.divisor_input.text().strip())
-        except Exception:
-            divisor = 4
-
-        if not a or not b:
-            QMessageBox.warning(self, "Invalid", "Pin A and Pin B are required")
-            return
-
-        entry = {"a": a, "b": b, "btn": btn, "invert": inv, "divisor": divisor}
-
-        # If an item is selected, update it; otherwise append
-        sel = self.encoder_list.selectedItems()
-        if sel:
-            idx = self.encoder_list.row(sel[0])
-            self.encoders[idx] = entry
-            sel[0].setText(f"{a},{b},{btn or 'None'}, inv={inv}, div={divisor}")
-        else:
-            self.encoders.append(entry)
-            self.encoder_list.addItem(f"{a},{b},{btn or 'None'}, inv={inv}, div={divisor}")
-
-    def remove_selected_encoder(self):
-        sel = self.encoder_list.selectedItems()
-        if not sel:
-            return
-        idx = self.encoder_list.row(sel[0])
-        self.encoder_list.takeItem(idx)
-        del self.encoders[idx]
-
-    def on_encoder_item_clicked(self, item):
-        idx = self.encoder_list.row(item)
-        e = self.encoders[idx]
-        self.pin_a_input.setText(e['a'])
-        self.pin_b_input.setText(e['b'])
-        self.button_pin_input.setText(e['btn'] or '')
-        self.invert_checkbox.setChecked(bool(e['invert']))
-        self.divisor_input.setText(str(e.get('divisor', 4)))
+    
+    def _on_action_changed(self):
+        """Show/hide custom action fields based on selection"""
+        show_custom = (self.rotation_action.currentText() == "Custom Actions" or 
+                      self.button_action.currentText() == "Custom Action")
+        self.custom_group.setVisible(show_custom)
 
     def get_config(self):
-        # Build a Python snippet from entries
+        """Generate encoder configuration code"""
         lines = []
-        lines.append("encoder_handler = EncoderHandler()")
-        pins_repr = []
-        for e in self.encoders:
-            btn = 'None' if e['btn'] is None else e['btn']
-            pins_repr.append(f"({e['a']}, {e['b']}, {btn}, {str(bool(e['invert']))}, {e.get('divisor',4)})")
-        if pins_repr:
-            lines.append(f"encoder_handler.pins = ({', '.join(pins_repr)},)")
-        map_text = self.map_editor.toPlainText().strip()
-        if map_text:
-            lines.append(f"encoder_handler.map = {map_text}")
-        lines.append("keyboard.modules.append(encoder_handler)")
+        lines.append("# --- Rotary Encoder Configuration ---")
+        lines.append("from kmk.modules.encoder import EncoderHandler")
+        lines.append("")
+        
+        # Determine rotation actions
+        rotation = self.rotation_action.currentText()
+        invert = self.invert_direction.isChecked()
+        
+        if rotation == "Cycle Layers (Recommended)":
+            ccw_action = "KC.LAYER_PREV"
+            cw_action = "KC.LAYER_NEXT"
+        elif rotation == "Volume Control (Vol Down / Vol Up)":
+            ccw_action = "KC.VOLD"
+            cw_action = "KC.VOLU"
+        elif rotation == "Brightness (Down / Up)":
+            ccw_action = "KC.BRID"
+            cw_action = "KC.BRIU"
+        elif rotation == "Media (Prev Track / Next Track)":
+            ccw_action = "KC.MPRV"
+            cw_action = "KC.MNXT"
+        else:  # Custom
+            ccw_action = self.custom_ccw.text().strip() or "KC.NO"
+            cw_action = self.custom_cw.text().strip() or "KC.NO"
+        
+        # Swap if inverted
+        if invert:
+            ccw_action, cw_action = cw_action, ccw_action
+        
+        # For layer cycling, use our custom keys instead of KC references
+        if rotation == "Cycle Layers (Recommended)":
+            if invert:
+                ccw_action = "LAYER_NEXT_KEY"
+                cw_action = "LAYER_PREV_KEY"
+            else:
+                ccw_action = "LAYER_PREV_KEY"
+                cw_action = "LAYER_NEXT_KEY"
+        
+        # Determine button action
+        button = self.button_action.currentText()
+        if button == "Reset to Layer 0 (Recommended)":
+            if rotation == "Cycle Layers (Recommended)":
+                press_action = "LAYER_RESET_KEY"
+            else:
+                press_action = "KC.NO"  # No custom reset if not using layer cycling
+        elif button == "Toggle Layer 1":
+            press_action = "KC.TG(1)"
+        elif button == "Mute":
+            press_action = "KC.MUTE"
+        elif button == "Play/Pause":
+            press_action = "KC.MPLY"
+        else:  # Custom
+            press_action = self.custom_press.text().strip() or "KC.NO"
+        
+        # Generate layer cycler if needed
+        if rotation == "Cycle Layers (Recommended)":
+            lines.append("# Encoder configuration with layer cycling using KC.TO()")
+            lines.append("encoder_handler = EncoderHandler()")
+            lines.append(f"encoder_handler.pins = ((board.GP10, board.GP11, board.GP14, {invert}),)")
+            lines.append("")
+            lines.append("# Build encoder map for each layer")
+            lines.append("# Each layer's encoder: (CCW action, CW action, Button press action)")
+            lines.append("encoder_map = []")
+            lines.append(f"for i in range({self.num_layers}):")
+            lines.append(f"    next_layer = (i + 1) % {self.num_layers}")
+            lines.append(f"    prev_layer = (i - 1) % {self.num_layers}")
+            lines.append(f"    # CCW=prev layer, CW=next layer, Press=layer 0")
+            lines.append(f"    encoder_map.append(((KC.TO(prev_layer), KC.TO(next_layer), KC.TO(0)),))")
+            lines.append("")
+            lines.append("encoder_handler.map = encoder_map")
+            lines.append("keyboard.modules.append(encoder_handler)")
+            lines.append("")
+        else:
+            # Non-layer cycling modes
+            lines.append("# Configure encoder")
+            lines.append("encoder_handler = EncoderHandler()")
+            lines.append(f"encoder_handler.pins = ((board.GP10, board.GP11, board.GP14, {invert}),)")
+            lines.append(f"encoder_handler.map = [(({ccw_action}, {cw_action}, {press_action}),)]")
+            lines.append("keyboard.modules.append(encoder_handler)")
+            lines.append("")
+        
+        if rotation == "Cycle Layers (Recommended)":
+            lines.append("# Initialize layer cycler after keymap is defined")
+            lines.append("# NOTE: Add this line AFTER keyboard.keymap = [...] in your code.py:")
+            lines.append(f"# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))")
+        
         return "\n".join(lines)
 
 
@@ -1320,6 +1500,7 @@ class AnalogInConfigDialog(QDialog):
         if is_volume_mode:
             # Generate volume control code
             config = f'''from analogio import AnalogIn as AnalogInPin
+from kmk.keys import KC
 import time
 
 # Volume control via 10k sliding potentiometer on GP28
@@ -1380,26 +1561,18 @@ class VolumeSlider:
             if delta > 0:
                 # Slider moved up (higher value) - increase volume
                 for _ in range(self.step_size):
-                    keyboard.hid_pending = True
-                    keyboard._send_hid()
-                    keyboard.add_key(KC.VOLU)
-                    keyboard._send_hid()
-                    keyboard.remove_key(KC.VOLU)
-                    keyboard._send_hid()
+                    # Tap volume up key
+                    self.keyboard.add_key(KC.VOLU)
+                    self.keyboard.remove_key(KC.VOLU)
             else:
                 # Slider moved down (lower value) - decrease volume
                 for _ in range(self.step_size):
-                    keyboard.hid_pending = True
-                    keyboard._send_hid()
-                    keyboard.add_key(KC.VOLD)
-                    keyboard._send_hid()
-                    keyboard.remove_key(KC.VOLD)
-                    keyboard._send_hid()
+                    # Tap volume down key
+                    self.keyboard.add_key(KC.VOLD)
+                    self.keyboard.remove_key(KC.VOLD)
             
             self.last_value = current_value
             self.last_movement = current_time
-        
-        return
     
     def before_hid_send(self, keyboard):
         """Called before HID report is sent"""
@@ -1415,6 +1588,10 @@ class VolumeSlider:
     
     def on_powersave_disable(self, keyboard):
         """Called when powersave is disabled"""
+        return
+    
+    def deinit(self, keyboard):
+        """Clean up when keyboard is shutting down"""
         return
 
 # Create and register volume slider extension
@@ -1499,183 +1676,368 @@ keyboard.extensions.append(brightness_slider)
 
 
 class PegRgbConfigDialog(QDialog):
-    def __init__(self, parent=None, initial_text=""):
+    """Dialog for configuring global RGB matrix settings."""
+
+    def __init__(self, parent=None, config=None):
         super().__init__(parent)
         self.setWindowTitle("Peg RGB Matrix Configuration")
-        self.resize(600, 300)
+        self.resize(520, 320)
+
         layout = QVBoxLayout(self)
+        cfg = config or build_default_rgb_matrix_config()
+        self._base_config = cfg
 
-        # Default num keys based on parent rows/cols if available
-        default_keys = None
-        try:
-            if parent and hasattr(parent, 'rows') and hasattr(parent, 'cols'):
-                default_keys = parent.rows * parent.cols
-        except Exception:
-            default_keys = None
+        form = QFormLayout()
 
-        # Number of keys
-        hl = QHBoxLayout()
-        hl.addWidget(QLabel("Number of per-key LEDs (keys):"))
-        self.num_keys_spin = QSpinBox()
-        self.num_keys_spin.setMinimum(1)
-        self.num_keys_spin.setMaximum(1000)
-        if default_keys:
-            self.num_keys_spin.setValue(default_keys)
-        else:
-            self.num_keys_spin.setValue(20)
-        hl.addWidget(self.num_keys_spin)
-        layout.addLayout(hl)
+        self.pixel_pin_edit = QLineEdit(cfg.get("pixel_pin", FIXED_RGB_PIN))
+        form.addRow("Pixel pin:", self.pixel_pin_edit)
 
-        # Key color field (accept Color.* or [r,g,b])
-        layout.addWidget(QLabel("Default key color (Color.* or [r,g,b]):"))
-        self.key_color_input = QLineEdit()
-        self.key_color_input.setText("Color.WHITE")
-        layout.addWidget(self.key_color_input)
-        
-        layout.addWidget(QLabel("Note: Keys with KC.NO will be set to Color.OFF (not illuminated)"))
+        self.brightness_spin = QDoubleSpinBox()
+        self.brightness_spin.setRange(0.0, 1.0)
+        self.brightness_spin.setSingleStep(0.05)
+        self.brightness_spin.setDecimals(2)
+        self.brightness_spin.setValue(float(cfg.get("brightness_limit", 0.5)))
+        form.addRow("Brightness limit:", self.brightness_spin)
 
-        layout.addWidget(QLabel("Optional extra snippet (appended):"))
-        self.extra_editor = QTextEdit()
-        if initial_text:
-            # If previous content exists, try to pre-fill extra editor
-            self.extra_editor.setPlainText(initial_text)
-        layout.addWidget(self.extra_editor)
+        self.underglow_spin = QSpinBox()
+        self.underglow_spin.setRange(0, 128)
+        self.underglow_spin.setValue(int(cfg.get("num_underglow", 0)))
+        form.addRow("Underglow LEDs:", self.underglow_spin)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.rgb_order_combo = QComboBox()
+        self.rgb_order_combo.addItems(list(RGB_ORDER_TUPLES.keys()))
+        order = cfg.get("rgb_order", "GRB")
+        if order not in RGB_ORDER_TUPLES:
+            order = "GRB"
+        self.rgb_order_combo.setCurrentText(order)
+        form.addRow("RGB order:", self.rgb_order_combo)
+
+        self.disable_auto_write_checkbox = QCheckBox("Disable auto write (recommended)")
+        self.disable_auto_write_checkbox.setChecked(bool(cfg.get("disable_auto_write", True)))
+        form.addRow("", self.disable_auto_write_checkbox)
+
+        self.default_key_color = ensure_hex_prefix(cfg.get("default_key_color", "#FFFFFF"), "#FFFFFF")
+        self.default_underglow_color = ensure_hex_prefix(cfg.get("default_underglow_color", "#000000"), "#000000")
+
+        self.key_color_btn = self._make_color_button(self.default_key_color, self._pick_key_color)
+        form.addRow("Default key color:", self.key_color_btn)
+
+        self.underglow_color_btn = self._make_color_button(self.default_underglow_color, self._pick_underglow_color)
+        form.addRow("Default underglow color:", self.underglow_color_btn)
+
+        layout.addLayout(form)
+
+        info = QLabel(
+            "Peg RGB Matrix sets static per-key and underglow colors. "
+            "Use the per-key editor to override individual LEDs."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #777; font-size: 10px;")
+        layout.addWidget(info)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def get_config(self):
-        num_keys = self.num_keys_spin.value()
-        key_col = self.key_color_input.text().strip() or 'Color.WHITE'
+    def _make_color_button(self, color: str, handler):
+        button = QPushButton(color)
+        button.setFixedWidth(120)
+        button.clicked.connect(handler)
+        self._update_color_button(button, color)
+        return button
 
-        lines = []
-        lines.append(f"# Peg RGB Matrix configuration (per-key only, no underglow)")
-        lines.append(f"# Keys with KC.NO assigned will be turned OFF")
-        lines.append(f"rgb = Rgb_matrix(ledDisplay=Rgb_matrix_data(keys=[{key_col}]*{num_keys}))")
-        lines.append("keyboard.extensions.append(rgb)")
-        extra = self.extra_editor.toPlainText().strip()
-        if extra:
-            lines.append('\n# Extra user snippet:')
-            lines.append(extra)
-        return "\n".join(lines)
+    def _update_color_button(self, button: QPushButton, color: str):
+        rgb = hex_to_rgb_list(color)
+        luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+        text_color = "#000000" if luminance > 150 else "#FFFFFF"
+        button.setText(color)
+        button.setStyleSheet(f"background-color: {color}; color: {text_color};")
+
+    def _pick_key_color(self):
+        color = QColorDialog.getColor(QColor(self.default_key_color), self, "Select default key color")
+        if color.isValid():
+            self.default_key_color = ensure_hex_prefix(color.name(), self.default_key_color)
+            self._update_color_button(self.key_color_btn, self.default_key_color)
+
+    def _pick_underglow_color(self):
+        color = QColorDialog.getColor(
+            QColor(self.default_underglow_color), self, "Select default underglow color"
+        )
+        if color.isValid():
+            self.default_underglow_color = ensure_hex_prefix(color.name(), self.default_underglow_color)
+            self._update_color_button(self.underglow_color_btn, self.default_underglow_color)
+
+    def get_config(self):
+        result = build_default_rgb_matrix_config()
+        base_copy = dict(self._base_config)
+        result.update(base_copy)
+        result["key_colors"] = dict(self._base_config.get("key_colors", {}))
+        result["underglow_colors"] = dict(self._base_config.get("underglow_colors", {}))
+        result["pixel_pin"] = self.pixel_pin_edit.text().strip() or FIXED_RGB_PIN
+        result["brightness_limit"] = float(self.brightness_spin.value())
+        result["num_underglow"] = int(self.underglow_spin.value())
+        order = self.rgb_order_combo.currentText()
+        if order not in RGB_ORDER_TUPLES:
+            order = "GRB"
+        result["rgb_order"] = order
+        result["disable_auto_write"] = self.disable_auto_write_checkbox.isChecked()
+        result["default_key_color"] = self.default_key_color
+        result["default_underglow_color"] = self.default_underglow_color
+        return result
 
 
 class PerKeyColorDialog(QDialog):
-    """Dialog to pick per-key colors for each layer. Returns a mapping {layer: {index: '#RRGGBB'}}."""
-    def __init__(self, parent=None, rows=3, cols=4, layers=1, initial_map=None):
+    """Dialog to assign static per-key and underglow colors for Peg RGB Matrix."""
+
+    def __init__(
+        self,
+        parent=None,
+        rows=5,
+        cols=4,
+        key_colors=None,
+        underglow_count=0,
+        underglow_colors=None,
+        default_key_color="#FFFFFF",
+        default_underglow_color="#000000",
+    ):
         super().__init__(parent)
-        self.setWindowTitle("Per-key RGB Colors")
+        self.setWindowTitle("RGB Matrix Colors")
         self.rows = rows
         self.cols = cols
-        self.layers = layers
-        self.map = initial_map or {}  # {layer: {index: hexcolor}}
+        self.underglow_count = max(0, underglow_count)
+        self.parent_ref = parent
 
-        self.resize(600, 480)
+        key_default = ensure_hex_prefix(default_key_color, "#FFFFFF")
+        under_default = ensure_hex_prefix(default_underglow_color, "#000000")
+        self.key_colors = {
+            str(k): ensure_hex_prefix(v, key_default)
+            for k, v in (key_colors or {}).items()
+        }
+        self.underglow_colors = {
+            str(k): ensure_hex_prefix(v, under_default)
+            for k, v in (underglow_colors or {}).items()
+        }
+
+        self.fill_color = key_default
+        self.underglow_fill_color = under_default
+
+        self.resize(1200, 700)
         layout = QVBoxLayout(self)
 
+        info_label = QLabel(
+            "Peg RGB Matrix applies a single static color map across all layers. "
+            "Use your current layer for category presets; KC.NO keys are treated as off."
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet(
+            "background-color: #D4EDDA; padding: 6px; border-radius: 4px; color: #155724; font-size: 10px;"
+        )
+        layout.addWidget(info_label)
+
         top = QHBoxLayout()
-        top.addWidget(QLabel("Layer:"))
-        self.layer_spin = QSpinBox()
-        self.layer_spin.setMinimum(0)
-        self.layer_spin.setMaximum(max(0, layers-1))
-        top.addWidget(self.layer_spin)
-        self.layer_spin.valueChanged.connect(self.refresh_grid)
-        layout.addLayout(top)
+        clear_btn = QPushButton("Clear Keys")
+        clear_btn.clicked.connect(self.clear_key_colors)
+        top.addWidget(clear_btn)
 
-        self.grid_widget = QWidget()
-        self.grid_layout = QGridLayout(self.grid_widget)
-        layout.addWidget(self.grid_widget)
-
-        btn_layout = QHBoxLayout()
-        clear_btn = QPushButton("Clear Layer Colors")
-        clear_btn.clicked.connect(self.clear_layer)
-        btn_layout.addWidget(clear_btn)
-        fill_btn = QPushButton("Fill Layer with Color")
-        fill_btn.clicked.connect(self.fill_layer_color)
-        btn_layout.addWidget(fill_btn)
-        layout.addLayout(btn_layout)
+        fill_btn = QPushButton("Fill Keys")
+        fill_btn.clicked.connect(self.fill_key_colors)
+        top.addWidget(fill_btn)
 
         self.fill_color_btn = QPushButton("Pick Fill Color")
         self.fill_color_btn.clicked.connect(self.pick_fill_color)
-        btn_layout.addWidget(self.fill_color_btn)
+        top.addWidget(self.fill_color_btn)
+        self._update_button_color(self.fill_color_btn, self.fill_color)
 
-        self.fill_color = '#FF0000'
+        top.addStretch()
+        layout.addLayout(top)
 
-        # Key type preset colors - one for each keycode category
-        preset_group = QGroupBox("Assign Colors by Keycode Category")
-        preset_layout = QVBoxLayout()
-        
-        # Define all 8 categories with default colors
+        content_layout = QHBoxLayout()
+
+        # LEFT SIDE: key grid + underglow list
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.addWidget(QLabel("<b>Click a key to set its color:</b>"))
+
+        self.grid_widget = QWidget()
+        self.grid_layout = QGridLayout(self.grid_widget)
+        left_layout.addWidget(self.grid_widget)
+
+        self._make_key_buttons()
+
+        # Underglow controls
+        under_group = QGroupBox(f"Underglow LEDs ({self.underglow_count})")
+        under_layout = QVBoxLayout(under_group)
+
+        under_controls = QHBoxLayout()
+        under_clear = QPushButton("Clear")
+        under_clear.clicked.connect(self.clear_underglow_colors)
+        under_controls.addWidget(under_clear)
+
+        under_fill = QPushButton("Fill")
+        under_fill.clicked.connect(self.fill_underglow_colors)
+        under_controls.addWidget(under_fill)
+
+        self.underglow_fill_btn = QPushButton("Pick Fill Color")
+        self.underglow_fill_btn.clicked.connect(self.pick_underglow_fill_color)
+        under_controls.addWidget(self.underglow_fill_btn)
+        self._update_button_color(self.underglow_fill_btn, self.underglow_fill_color)
+        under_controls.addStretch()
+        under_layout.addLayout(under_controls)
+
+        self.underglow_buttons = []
+        if self.underglow_count:
+            grid = QGridLayout()
+            for idx in range(self.underglow_count):
+                btn = QPushButton(f"U{idx}")
+                btn.setFixedSize(60, 40)
+                btn.setStyleSheet("font-size: 12px;")
+                btn.clicked.connect(lambda _, i=idx: self.on_underglow_clicked(i))
+                self.underglow_buttons.append(btn)
+                grid.addWidget(btn, idx // 8, idx % 8)
+                try:
+                    self._install_hover_effect(btn)
+                except Exception:
+                    pass
+            under_layout.addLayout(grid)
+        else:
+            under_layout.addWidget(QLabel("No underglow LEDs configured."))
+
+        left_layout.addWidget(under_group)
+        left_layout.addStretch()
+        content_layout.addWidget(left_widget, stretch=1)
+
+        # RIGHT SIDE: presets reused from legacy dialog
+        from PyQt6.QtWidgets import QScrollArea
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        presets_widget = QWidget()
+        presets_layout = QVBoxLayout(presets_widget)
+
         self.category_colors = {
-            'macro': '#FF6B6B',      # Red for macros
-            'basic': '#4ECDC4',      # Teal for basic keys (letters, numbers, etc)
-            'modifiers': '#A8E6CF',  # Mint for modifiers
-            'navigation': '#FFD93D', # Yellow for navigation
-            'function': '#95E1D3',   # Light cyan for function keys
-            'media': '#F38181',      # Coral for media controls
-            'mouse': '#AA96DA',      # Purple for mouse keys
-            'layers': '#FCBAD3',     # Pink for layer switches
-            'misc': '#B4B4B4'        # Gray for misc keys
+            "macro": "#FF6B6B",
+            "basic": "#4ECDC4",
+            "modifiers": "#A8E6CF",
+            "navigation": "#FFD93D",
+            "function": "#95E1D3",
+            "media": "#F38181",
+            "mouse": "#AA96DA",
+            "layers": "#FCBAD3",
+            "misc": "#B4B4B4",
         }
-        
+
         category_labels = {
-            'macro': 'Macros',
-            'basic': 'Basic (Letters/Numbers)',
-            'modifiers': 'Modifiers',
-            'navigation': 'Navigation',
-            'function': 'Function Keys',
-            'media': 'Media Controls',
-            'mouse': 'Mouse Keys',
-            'layers': 'Layer Switches',
-            'misc': 'Misc Keys'
+            "macro": "Macros",
+            "basic": "Basic",
+            "modifiers": "Modifiers",
+            "navigation": "Navigation",
+            "function": "Function",
+            "media": "Media",
+            "mouse": "Mouse",
+            "layers": "Layers",
+            "misc": "Misc",
         }
-        
-        # Create UI for each category
+
+        preset_group = QGroupBox("Keycode Category Presets")
+        preset_grid = QGridLayout(preset_group)
+        row = 0
         for cat_key, cat_label in category_labels.items():
-            cat_layout = QHBoxLayout()
-            cat_layout.addWidget(QLabel(f"{cat_label}:"))
-            
-            # Color button
+            preset_grid.addWidget(QLabel(f"{cat_label}:") , row, 0)
+
             color_btn = QPushButton()
-            color_btn.setFixedSize(30, 30)
-            color_btn.setStyleSheet(f'background-color: {self.category_colors[cat_key]};')
-            color_btn.clicked.connect(lambda checked, k=cat_key: self.pick_category_color(k))
-            setattr(self, f'{cat_key}_color_btn', color_btn)
-            cat_layout.addWidget(color_btn)
-            
-            # Apply button
+            color_btn.setFixedSize(25, 25)
+            color_btn.setStyleSheet(f"background-color: {self.category_colors[cat_key]};")
+            color_btn.clicked.connect(lambda _, k=cat_key: self.pick_category_color(k))
+            setattr(self, f"{cat_key}_color_btn", color_btn)
+            preset_grid.addWidget(color_btn, row, 1)
+
             apply_btn = QPushButton("Apply")
-            apply_btn.clicked.connect(lambda checked, k=cat_key: self.apply_category_color(k))
-            cat_layout.addWidget(apply_btn)
-            
-            cat_layout.addStretch()
-            preset_layout.addLayout(cat_layout)
+            apply_btn.setMaximumWidth(60)
+            apply_btn.clicked.connect(lambda _, k=cat_key: self.apply_category_color(k))
+            preset_grid.addWidget(apply_btn, row, 2)
+            row += 1
 
-        preset_group.setLayout(preset_layout)
-        layout.addWidget(preset_group)
+        presets_layout.addWidget(preset_group)
 
-        # Store parent reference to access keymap
-        self.parent_ref = parent
+        self.granular_colors = {
+            "numbers": "#FFA500",
+            "letters": "#87CEEB",
+            "space": "#90EE90",
+            "enter": "#FFB6C1",
+            "backspace": "#FF6347",
+            "tab": "#DDA0DD",
+            "shift": "#F0E68C",
+            "ctrl": "#98FB98",
+            "alt": "#FFDAB9",
+            "keypad_nums": "#FF8C42",
+            "keypad_nav": "#FFC947",
+            "keypad_ops": "#C7A27C",
+        }
 
-        box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        box.accepted.connect(self.accept)
-        box.rejected.connect(self.reject)
-        layout.addWidget(box)
+        granular_labels = {
+            "numbers": "Numbers (0-9)",
+            "letters": "Letters (A-Z)",
+            "space": "Space",
+            "enter": "Enter",
+            "backspace": "Backspace",
+            "tab": "Tab",
+            "shift": "Shift",
+            "ctrl": "Ctrl",
+            "alt": "Alt",
+            "keypad_nums": "Keypad Numbers",
+            "keypad_nav": "Keypad Navigation",
+            "keypad_ops": "Keypad Operators",
+        }
 
-        self._make_buttons()
-        self.refresh_grid()
+        granular_group = QGroupBox("Fine-Grained Presets")
+        granular_grid = QGridLayout(granular_group)
+        row = 0
+        for gran_key, gran_label in granular_labels.items():
+            granular_grid.addWidget(QLabel(f"{gran_label}:") , row, 0)
 
-    def _make_buttons(self):
-        # create buttons for a grid of rows x cols
+            color_btn = QPushButton()
+            color_btn.setFixedSize(25, 25)
+            color_btn.setStyleSheet(f"background-color: {self.granular_colors[gran_key]};")
+            color_btn.clicked.connect(lambda _, k=gran_key: self.pick_granular_color(k))
+            setattr(self, f"{gran_key}_granular_btn", color_btn)
+            granular_grid.addWidget(color_btn, row, 1)
+
+            apply_btn = QPushButton("Apply")
+            apply_btn.setMaximumWidth(60)
+            apply_btn.clicked.connect(lambda _, k=gran_key: self.apply_granular_color(k))
+            granular_grid.addWidget(apply_btn, row, 2)
+            row += 1
+
+        presets_layout.addWidget(granular_group)
+        presets_layout.addStretch()
+
+        scroll.setWidget(presets_widget)
+        content_layout.addWidget(scroll, stretch=1)
+
+        layout.addLayout(content_layout)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.refresh_key_buttons()
+        self.refresh_underglow_buttons()
+
+    def _make_key_buttons(self):
         self.key_buttons = []
         for r in range(self.rows):
             for c in range(self.cols):
+                idx = r * self.cols + c
                 btn = QPushButton(f"{r},{c}")
-                # Make buttons larger for easier color picking
                 btn.setFixedSize(64, 56)
-                # Slightly larger label for readability
                 btn.setStyleSheet("font-size: 12px; padding: 4px;")
                 btn.clicked.connect(self.on_key_clicked)
                 self.key_buttons.append(btn)
@@ -1686,28 +2048,24 @@ class PerKeyColorDialog(QDialog):
                     pass
 
     def _install_hover_effect(self, button: QPushButton):
-        """Adds a subtle scale animation on hover for the given button."""
-        # Avoid double-installing
-        if hasattr(button, '_hover_filter'):
+        if hasattr(button, "_hover_filter"):
             return
         anim = QPropertyAnimation(button, b"geometry")
         anim.setDuration(140)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        # store on the object to prevent GC
         button._hover_anim = anim
-        # shadow effect for subtle depth
         shadow = QGraphicsDropShadowEffect(button)
         shadow.setBlurRadius(8)
         shadow.setOffset(0, 2)
-        shadow.setColor(QColor('#00000033'))
+        shadow.setColor(QColor("#00000033"))
         button.setGraphicsEffect(shadow)
-        # Note: actual geometry changes are handled by the animation when hovered
-        # We will connect enter/leave events via eventFilter on the button
+
         class _Filter(QObject):
-            def __init__(self, btn, anim):
+            def __init__(self, btn, animation):
                 super().__init__(btn)
                 self.btn = btn
-                self.anim = anim
+                self.anim = animation
+
             def eventFilter(self, obj, event):
                 if event.type() == QEvent.Type.Enter:
                     g = self.btn.geometry()
@@ -1722,144 +2080,234 @@ class PerKeyColorDialog(QDialog):
                     self.anim.setEndValue(g.adjusted(4, 3, -4, -3))
                     self.anim.start()
                 return False
-        flt = _Filter(button, anim)
-        button.installEventFilter(flt)
-        button._hover_filter = flt
 
-    def install_global_hover_effects(self):
-        """Install hover effects on all QPushButton instances in the main window.
+        filt = _Filter(button, anim)
+        button.installEventFilter(filt)
+        button._hover_filter = filt
 
-        This uses findChildren to locate buttons and applies the same subtle
-        animation/shadow used in the per-key controls. It's safe to call multiple
-        times because _install_hover_effect is idempotent.
-        """
-        try:
-            for btn in self.findChildren(QPushButton):
-                try:
-                    self._install_hover_effect(btn)
-                except Exception:
-                    # Don't break if one button can't be instrumented
-                    pass
-        except Exception:
-            pass
-
-    def refresh_grid(self):
-        layer = str(self.layer_spin.value())  # Convert to string for consistency
-        lm = self.map.get(layer, {})
+    def refresh_key_buttons(self):
         for idx, btn in enumerate(self.key_buttons):
-            color = lm.get(str(idx), None)
+            color = self.key_colors.get(str(idx))
             if color:
-                btn.setStyleSheet(f'background-color: {color}; font-size: 12px; padding: 4px;')
-                btn.setToolTip(f"Index: {idx}\nLayer: {self.layer_spin.value()}\nColor: {color}")
+                rgb = hex_to_rgb_list(color)
+                luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+                text_color = "#000000" if luminance > 150 else "#FFFFFF"
+                btn.setStyleSheet(f"background-color: {color}; color: {text_color}; font-size: 12px; padding: 4px;")
+                btn.setToolTip(f"Index: {idx}\nColor: {color}")
             else:
-                # Clear background and reset to default button styling
-                btn.setStyleSheet('font-size: 12px; padding: 4px;')
-                btn.setToolTip(f"Index: {idx}\nLayer: {self.layer_spin.value()}\nColor: (none)")
+                btn.setStyleSheet("font-size: 12px; padding: 4px;")
+                btn.setToolTip(f"Index: {idx}\nColor: (default)")
+
+    def refresh_underglow_buttons(self):
+        for idx, btn in enumerate(self.underglow_buttons):
+            color = self.underglow_colors.get(str(idx))
+            if color:
+                rgb = hex_to_rgb_list(color)
+                luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+                text_color = "#000000" if luminance > 150 else "#FFFFFF"
+                btn.setStyleSheet(f"background-color: {color}; color: {text_color}; font-size: 12px;")
+                btn.setToolTip(f"Underglow {idx}: {color}")
+            else:
+                btn.setStyleSheet("font-size: 12px;")
+                btn.setToolTip(f"Underglow {idx}: (default)")
 
     def on_key_clicked(self):
         btn = self.sender()
+        if btn not in self.key_buttons:
+            return
         idx = self.key_buttons.index(btn)
-        color = QColorDialog.getColor(QColor(self.fill_color), self, "Select Color")
+        color = QColorDialog.getColor(QColor(self.fill_color), self, "Select key color")
         if color.isValid():
-            hexc = color.name()
-            layer = str(self.layer_spin.value())
-            lm = self.map.setdefault(layer, {})
-            lm[str(idx)] = hexc
-            btn.setStyleSheet(f'background-color: {hexc};')
-            btn.setToolTip(f"Index: {idx}\nLayer: {layer}\nColor: {hexc}")
+            hexc = ensure_hex_prefix(color.name(), self.fill_color)
+            self.key_colors[str(idx)] = hexc
+            self.refresh_key_buttons()
 
-    def clear_layer(self):
-        layer = str(self.layer_spin.value())
-        if layer in self.map:
-            del self.map[layer]
-        self.refresh_grid()
+    def on_underglow_clicked(self, index: int):
+        color = QColorDialog.getColor(QColor(self.underglow_fill_color), self, "Select underglow color")
+        if color.isValid():
+            hexc = ensure_hex_prefix(color.name(), self.underglow_fill_color)
+            self.underglow_colors[str(index)] = hexc
+            self.refresh_underglow_buttons()
+
+    def clear_key_colors(self):
+        self.key_colors.clear()
+        self.refresh_key_buttons()
+
+    def fill_key_colors(self):
+        for idx in range(self.rows * self.cols):
+            self.key_colors[str(idx)] = self.fill_color
+        self.refresh_key_buttons()
 
     def pick_fill_color(self):
-        color = QColorDialog.getColor(QColor(self.fill_color), self, "Pick fill color")
+        color = QColorDialog.getColor(QColor(self.fill_color), self, "Pick key fill color")
         if color.isValid():
-            self.fill_color = color.name()
+            self.fill_color = ensure_hex_prefix(color.name(), self.fill_color)
+            self._update_button_color(self.fill_color_btn, self.fill_color)
 
-    def fill_layer_color(self):
-        layer = str(self.layer_spin.value())
-        lm = self.map.setdefault(layer, {})
-        for idx in range(self.rows * self.cols):
-            lm[str(idx)] = self.fill_color
-        self.refresh_grid()
+    def clear_underglow_colors(self):
+        self.underglow_colors.clear()
+        self.refresh_underglow_buttons()
+
+    def fill_underglow_colors(self):
+        for idx in range(self.underglow_count):
+            self.underglow_colors[str(idx)] = self.underglow_fill_color
+        self.refresh_underglow_buttons()
+
+    def pick_underglow_fill_color(self):
+        color = QColorDialog.getColor(
+            QColor(self.underglow_fill_color), self, "Pick underglow fill color"
+        )
+        if color.isValid():
+            self.underglow_fill_color = ensure_hex_prefix(color.name(), self.underglow_fill_color)
+            self._update_button_color(self.underglow_fill_btn, self.underglow_fill_color)
 
     def pick_category_color(self, category):
-        """Pick a color for a keycode category."""
-        current = self.category_colors.get(category, '#FFFFFF')
+        current = self.category_colors.get(category, self.fill_color)
         color = QColorDialog.getColor(QColor(current), self, f"Pick {category} color")
         if color.isValid():
-            hexc = color.name()
+            hexc = ensure_hex_prefix(color.name(), current)
             self.category_colors[category] = hexc
-            btn = getattr(self, f'{category}_color_btn', None)
+            btn = getattr(self, f"{category}_color_btn", None)
             if btn:
-                btn.setStyleSheet(f'background-color: {hexc};')
+                btn.setStyleSheet(f"background-color: {hexc};")
 
     def apply_category_color(self, category):
-        """Apply a color to all keys of a specific category on the current layer."""
-        if not hasattr(self, 'parent_ref') or not self.parent_ref:
+        parent = self.parent_ref
+        if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
             QMessageBox.warning(self, "Error", "Cannot access keymap data")
             return
-        
-        layer_idx = self.layer_spin.value()
-        parent = self.parent_ref
-        
-        # Check if parent has keymap_data
-        if not hasattr(parent, 'keymap_data') or layer_idx >= len(parent.keymap_data):
-            QMessageBox.warning(self, "Error", "Invalid layer index")
-            return
-        
+
+        layer_idx = parent.current_layer if 0 <= parent.current_layer < len(parent.keymap_data) else 0
         layer_data = parent.keymap_data[layer_idx]
-        color = self.category_colors.get(category, '#FFFFFF')
-        layer_str = str(layer_idx)
-        lm = self.map.setdefault(layer_str, {})
-        
+        color = self.category_colors.get(category, self.fill_color)
+
+        idx = 0
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if r < len(layer_data) and c < len(layer_data[r]):
+                    key = layer_data[r][c]
+                    if self._matches_category(category, key):
+                        self.key_colors[str(idx)] = color
+                idx += 1
+        self.refresh_key_buttons()
+
+    def pick_granular_color(self, granular_type):
+        current = self.granular_colors.get(granular_type, self.fill_color)
+        color = QColorDialog.getColor(QColor(current), self, f"Pick {granular_type} color")
+        if color.isValid():
+            hexc = ensure_hex_prefix(color.name(), current)
+            self.granular_colors[granular_type] = hexc
+            btn = getattr(self, f"{granular_type}_granular_btn", None)
+            if btn:
+                btn.setStyleSheet(f"background-color: {hexc};")
+
+    def apply_granular_color(self, granular_type):
+        parent = self.parent_ref
+        if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
+            QMessageBox.warning(self, "Error", "Cannot access keymap data")
+            return
+
+        layer_idx = parent.current_layer if 0 <= parent.current_layer < len(parent.keymap_data) else 0
+        layer_data = parent.keymap_data[layer_idx]
+        color = self.granular_colors.get(granular_type, self.fill_color)
+
+        number_keys = ['KC.N1', 'KC.N2', 'KC.N3', 'KC.N4', 'KC.N5', 'KC.N6', 'KC.N7', 'KC.N8', 'KC.N9', 'KC.N0']
+        letter_keys = [
+            'KC.A', 'KC.B', 'KC.C', 'KC.D', 'KC.E', 'KC.F', 'KC.G', 'KC.H', 'KC.I', 'KC.J',
+            'KC.K', 'KC.L', 'KC.M', 'KC.N', 'KC.O', 'KC.P', 'KC.Q', 'KC.R', 'KC.S', 'KC.T',
+            'KC.U', 'KC.V', 'KC.W', 'KC.X', 'KC.Y', 'KC.Z'
+        ]
+        space_keys = ['KC.SPC', 'KC.SPACE']
+        enter_keys = ['KC.ENT', 'KC.ENTER', 'KC.KP_ENTER']
+        backspace_keys = ['KC.BSPC', 'KC.DEL', 'KC.BACKSPACE', 'KC.DELETE']
+        tab_keys = ['KC.TAB']
+        shift_keys = ['KC.LSFT', 'KC.RSFT', 'KC.LSHIFT', 'KC.RSHIFT']
+        ctrl_keys = ['KC.LCTL', 'KC.RCTL', 'KC.LCTRL', 'KC.RCTRL']
+        alt_keys = ['KC.LALT', 'KC.RALT']
+        keypad_number_keys = ['KC.KP_0', 'KC.KP_1', 'KC.KP_2', 'KC.KP_3', 'KC.KP_4', 'KC.KP_5', 'KC.KP_6', 'KC.KP_7', 'KC.KP_8', 'KC.KP_9']
+        keypad_nav_keys = ['KC.KP_DOT', 'KC.KP_0', 'KC.KP_1', 'KC.KP_2', 'KC.KP_3', 'KC.KP_4', 'KC.KP_5', 'KC.KP_6', 'KC.KP_7', 'KC.KP_8', 'KC.KP_9']
+        keypad_op_keys = ['KC.KP_SLASH', 'KC.KP_ASTERISK', 'KC.KP_MINUS', 'KC.KP_PLUS', 'KC.KP_ENTER', 'KC.KP_DOT', 'KC.KP_EQUAL', 'KC.KP_COMMA', 'KC.NUMLOCK']
+
         idx = 0
         for r in range(self.rows):
             for c in range(self.cols):
                 if r < len(layer_data) and c < len(layer_data[r]):
                     key = layer_data[r][c]
                     should_color = False
-                    
-                    if category == 'macro' and key.startswith('MACRO('):
-                        should_color = True
-                    elif category == 'basic':
-                        # Check against all Basic keycodes
-                        if key in KEYCODES.get('Basic', []):
-                            should_color = True
-                    elif category == 'modifiers':
-                        if key in KEYCODES.get('Modifiers', []):
-                            should_color = True
-                    elif category == 'navigation':
-                        if key in KEYCODES.get('Navigation', []):
-                            should_color = True
-                    elif category == 'function':
-                        if key in KEYCODES.get('Function', []):
-                            should_color = True
-                    elif category == 'media':
-                        if key in KEYCODES.get('Media', []):
-                            should_color = True
-                    elif category == 'mouse':
-                        if key in KEYCODES.get('Mouse', []):
-                            should_color = True
-                    elif category == 'layers':
-                        # Check for layer switching keys (MO, TG, DF)
-                        if key in KEYCODES.get('Layers', []) or key.startswith('KC.MO(') or key.startswith('KC.TG(') or key.startswith('KC.DF('):
-                            should_color = True
-                    elif category == 'misc':
-                        if key in KEYCODES.get('Misc', []):
-                            should_color = True
-                    
-                    if should_color:
-                        lm[str(idx)] = color
-                idx += 1
-        
-        self.refresh_grid()
 
-    def get_map(self):
-        return self.map
+                    if granular_type == 'numbers' and key in number_keys:
+                        should_color = True
+                    elif granular_type == 'letters' and key in letter_keys:
+                        should_color = True
+                    elif granular_type == 'space' and key in space_keys:
+                        should_color = True
+                    elif granular_type == 'enter' and key in enter_keys:
+                        should_color = True
+                    elif granular_type == 'backspace' and key in backspace_keys:
+                        should_color = True
+                    elif granular_type == 'tab' and key in tab_keys:
+                        should_color = True
+                    elif granular_type == 'shift' and key in shift_keys:
+                        should_color = True
+                    elif granular_type == 'ctrl' and key in ctrl_keys:
+                        should_color = True
+                    elif granular_type == 'alt' and key in alt_keys:
+                        should_color = True
+                    elif granular_type == 'keypad_nums' and key in keypad_number_keys:
+                        should_color = True
+                    elif granular_type == 'keypad_nav' and key in keypad_nav_keys:
+                        should_color = True
+                    elif granular_type == 'keypad_ops' and key in keypad_op_keys:
+                        should_color = True
+
+                    if should_color:
+                        self.key_colors[str(idx)] = color
+                idx += 1
+
+        self.refresh_key_buttons()
+
+    def _matches_category(self, category: str, keycode: str) -> bool:
+        if category == 'macro' and keycode.startswith('MACRO('):
+            return True
+        if category == 'basic':
+            return keycode in KEYCODES.get('Basic', [])
+        if category == 'modifiers':
+            return keycode in KEYCODES.get('Modifiers', [])
+        if category == 'navigation':
+            return keycode in KEYCODES.get('Navigation', [])
+        if category == 'function':
+            return keycode in KEYCODES.get('Function', [])
+        if category == 'media':
+            return keycode in KEYCODES.get('Media', [])
+        if category == 'mouse':
+            return keycode in KEYCODES.get('Mouse', [])
+        if category == 'layers':
+            return (
+                keycode in KEYCODES.get('Layers', [])
+                or keycode.startswith('KC.MO(')
+                or keycode.startswith('KC.TG(')
+                or keycode.startswith('KC.DF(')
+            )
+        if category == 'misc':
+            return keycode in KEYCODES.get('Misc', [])
+        return False
+
+    def get_maps(self):
+        return self.key_colors.copy(), self.underglow_colors.copy()
+
+    def accept(self):
+        if self.parent_ref and hasattr(self.parent_ref, 'rgb_matrix_config'):
+            config = self.parent_ref.rgb_matrix_config
+            config['key_colors'] = self.key_colors.copy()
+            config['underglow_colors'] = self.underglow_colors.copy()
+            self.parent_ref.update_macropad_display()
+        super().accept()
+
+    def _update_button_color(self, button: QPushButton, color: str):
+        rgb = hex_to_rgb_list(color)
+        luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+        text_color = '#000000' if luminance > 150 else '#FFFFFF'
+        button.setStyleSheet(f"background-color: {color}; color: {text_color};")
 
 
 # --- Main Application Window ---
@@ -1899,7 +2347,7 @@ class KMKConfigurator(QMainWindow):
         self.enable_analogin = True
         self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG  # Pre-populate with default
         self.enable_rgb = True
-        self.rgb_config_str = ""
+        self.rgb_matrix_config = build_default_rgb_matrix_config()
         self.enable_display = True
         self.display_config_str = ""
 
@@ -1944,6 +2392,9 @@ class KMKConfigurator(QMainWindow):
         self.load_macros()
         self.update_layer_tabs()
         self.update_macropad_display()
+
+        # Show startup dialog asking to load previous state
+        self.show_startup_dialog()
         # Install hover/animation effects across all buttons in the UI
         try:
             self.install_global_hover_effects()
@@ -1952,7 +2403,9 @@ class KMKConfigurator(QMainWindow):
 
     def check_dependencies(self):
         """Check if KMK firmware and CircuitPython libraries are available, download if not"""
-        libraries_dir = os.path.join(os.getcwd(), "libraries")
+        if os.environ.get("KMK_SKIP_DEP_CHECK"):
+            return
+        libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
         bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
         
@@ -2021,6 +2474,66 @@ class KMKConfigurator(QMainWindow):
                 "• KMK: https://github.com/KMKfw/kmk_firmware\n"
                 "• CircuitPython Bundle: https://circuitpython.org/libraries"
             )
+
+    def show_startup_dialog(self):
+        """Show dialog asking user if they want to load previous state or start fresh."""
+        if os.environ.get("KMK_SKIP_STARTUP_DIALOG"):
+            return
+
+        config_file = os.path.join(CONFIG_SAVE_DIR, "kmk_config.json")
+
+        # If no previous config exists, skip dialog
+        if not os.path.exists(config_file):
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Load Previous State?",
+            "Would you like to load your previous configuration?\n\n"
+            "• Yes: Load last saved keymap, macros, and RGB settings\n"
+            "• No: Start fresh with all keys unassigned (gray)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            success = self.load_configuration(file_path=config_file, show_message=False)
+            if success:
+                return
+
+        self.reset_to_defaults()
+    
+    def reset_to_defaults(self):
+        """Reset all settings to defaults - all keys KC.NO, no RGB colors"""
+        # Reset keymap to all KC.NO
+        self.keymap_data = [[[DEFAULT_KEY for _ in range(self.cols)] for _ in range(self.rows)]]
+        self.current_layer = 0
+        
+        # Clear macros
+        self.macros = {}
+        
+        # Reset RGB matrix configuration
+        self.rgb_matrix_config = build_default_rgb_matrix_config()
+        
+        # Reset extensions to defaults
+        self.enable_encoder = True
+        self.enable_analogin = True
+        self.enable_rgb = True
+        self.enable_display = True
+        self.encoder_config_str = DEFAULT_ENCODER_CONFIG
+        self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG
+        self.display_config_str = ""
+        
+        # Update display
+        self.update_layer_tabs()
+        self.update_macropad_display()
+        self.update_macro_list()
+        self.sync_extension_checkboxes()
+        self.update_extension_button_states()
+        try:
+            self.save_extension_configs()
+        except Exception:
+            pass
 
     def _set_stylesheet(self):
         """Sets the application's stylesheet based on current_theme."""
@@ -2139,32 +2652,37 @@ class KMKConfigurator(QMainWindow):
     def save_extension_configs(self):
         try:
             os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
-            # All extensions are always enabled
             meta = {
-                "enable_encoder": True,
-                "enable_analogin": True,
-                "enable_rgb": True,
-                "enable_display": True,
+                "enable_encoder": self.enable_encoder,
+                "enable_analogin": self.enable_analogin,
+                "enable_rgb": self.enable_rgb,
+                "enable_display": self.enable_display,
             }
             with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
 
-            # Save snippets to separate files for easier editing
             with open(os.path.join(CONFIG_SAVE_DIR, 'encoder.py'), 'w') as f:
                 f.write(self.encoder_config_str or '')
             with open(os.path.join(CONFIG_SAVE_DIR, 'analogin.py'), 'w') as f:
                 f.write(self.analogin_config_str or '')
-            with open(os.path.join(CONFIG_SAVE_DIR, 'peg_rgb.py'), 'w') as f:
-                f.write(self.rgb_config_str or '')
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
                 f.write(self.display_config_str or '')
-            # Save per-key color map if present
-            try:
-                if hasattr(self, 'peg_rgb_colors') and self.peg_rgb_colors:
-                    with open(os.path.join(CONFIG_SAVE_DIR, 'peg_rgb_colors.json'), 'w') as f:
-                        json.dump(self.peg_rgb_colors, f, indent=2)
-            except Exception:
-                pass
+
+            rgb_config = build_default_rgb_matrix_config()
+            current = getattr(self, 'rgb_matrix_config', None) or {}
+            rgb_config.update(current)
+            rgb_config['key_colors'] = dict(current.get('key_colors', {}))
+            rgb_config['underglow_colors'] = dict(current.get('underglow_colors', {}))
+            with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
+                json.dump(rgb_config, f, indent=2)
+
+            for legacy_name in ('peg_rgb.py', 'peg_rgb_colors.json', 'peg_rgb_layer.py'):
+                legacy_path = os.path.join(CONFIG_SAVE_DIR, legacy_name)
+                if os.path.exists(legacy_path):
+                    try:
+                        os.remove(legacy_path)
+                    except OSError:
+                        pass
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save extension configs:\n{e}")
 
@@ -2173,11 +2691,11 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(os.path.join(CONFIG_SAVE_DIR, 'extensions.json')):
                 with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'r') as f:
                     meta = json.load(f)
-                # Extensions are always enabled - hardcoded
-                self.enable_encoder = True
-                self.enable_analogin = True
-                self.enable_rgb = True
-                self.enable_display = True
+                # Load enable/disable states from saved config
+                self.enable_encoder = meta.get('enable_encoder', True)
+                self.enable_analogin = meta.get('enable_analogin', True)
+                self.enable_rgb = meta.get('enable_rgb', True)
+                self.enable_display = meta.get('enable_display', True)
             # Load snippet files if present
             enc_path = os.path.join(CONFIG_SAVE_DIR, 'encoder.py')
             if os.path.exists(enc_path):
@@ -2187,24 +2705,46 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(an_path):
                 with open(an_path, 'r') as f:
                     self.analogin_config_str = f.read()
-            rgb_path = os.path.join(CONFIG_SAVE_DIR, 'peg_rgb.py')
-            if os.path.exists(rgb_path):
-                with open(rgb_path, 'r') as f:
-                    self.rgb_config_str = f.read()
             disp_path = os.path.join(CONFIG_SAVE_DIR, 'display.py')
             if os.path.exists(disp_path):
                 with open(disp_path, 'r') as f:
                     self.display_config_str = f.read()
-            # load per-key color mapping
-            colors_path = os.path.join(CONFIG_SAVE_DIR, 'peg_rgb_colors.json')
-            if os.path.exists(colors_path):
-                try:
-                    with open(colors_path, 'r') as f:
-                        self.peg_rgb_colors = json.load(f)
-                except Exception:
-                    self.peg_rgb_colors = {}
+            rgb_path = os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json')
+            if os.path.exists(rgb_path):
+                with open(rgb_path, 'r') as f:
+                    data = json.load(f)
+                merged = build_default_rgb_matrix_config()
+                merged.update(data)
+                merged['key_colors'] = dict(data.get('key_colors', {}))
+                merged['underglow_colors'] = dict(data.get('underglow_colors', {}))
+                merged['default_key_color'] = ensure_hex_prefix(
+                    merged.get('default_key_color', '#FFFFFF'), '#FFFFFF'
+                )
+                merged['default_underglow_color'] = ensure_hex_prefix(
+                    merged.get('default_underglow_color', '#000000'), '#000000'
+                )
+                self.rgb_matrix_config = merged
             else:
-                self.peg_rgb_colors = {}
+                # Legacy migration: attempt to load layer 0 colors if present
+                colors_path = os.path.join(CONFIG_SAVE_DIR, 'peg_rgb_colors.json')
+                legacy_colors = {}
+                if os.path.exists(colors_path):
+                    try:
+                        with open(colors_path, 'r') as f:
+                            legacy_colors = json.load(f)
+                    except Exception:
+                        legacy_colors = {}
+                config = build_default_rgb_matrix_config()
+                layer_zero = legacy_colors.get('0', {}) if isinstance(legacy_colors, dict) else {}
+                config['key_colors'] = {
+                    str(k): ensure_hex_prefix(v, config['default_key_color'])
+                    for k, v in layer_zero.items()
+                }
+                self.rgb_matrix_config = config
+                try:
+                    self.save_extension_configs()
+                except Exception:
+                    pass
         except Exception:
             # don't block startup on extension load errors
             pass
@@ -2283,53 +2823,82 @@ class KMKConfigurator(QMainWindow):
         self.populate_config_file_list()
 
     def setup_extensions_ui(self, parent_layout):
-        group = QGroupBox("Extensions (Always Enabled)")
+        group = QGroupBox("Extensions")
         layout = QVBoxLayout()
 
         # Encoder (fixed pins: GP10, GP11, GP14)
         enc_layout = QHBoxLayout()
-        enc_layout.addWidget(QLabel("Encoder (GP10, GP11, GP14):"))
+        self.enable_encoder_checkbox = QCheckBox("Encoder (GP10, GP11, GP14)")
+        self.enable_encoder_checkbox.setChecked(self.enable_encoder)
+        self.enable_encoder_checkbox.toggled.connect(self.on_encoder_toggled)
+        enc_layout.addWidget(self.enable_encoder_checkbox)
         enc_cfg_btn = QPushButton("Configure")
         enc_cfg_btn.clicked.connect(self.configure_encoder)
         enc_layout.addWidget(enc_cfg_btn)
+        self.encoder_cfg_btn = enc_cfg_btn
         layout.addLayout(enc_layout)
 
         # AnalogIn (fixed pin: GP28)
         an_layout = QHBoxLayout()
-        an_layout.addWidget(QLabel("Analog Input (GP28 - Slider):"))
+        self.enable_analogin_checkbox = QCheckBox("Analog Input (GP28 - Slider)")
+        self.enable_analogin_checkbox.setChecked(self.enable_analogin)
+        self.enable_analogin_checkbox.toggled.connect(self.on_analogin_toggled)
+        an_layout.addWidget(self.enable_analogin_checkbox)
         an_cfg_btn = QPushButton("Configure")
         an_cfg_btn.clicked.connect(self.configure_analogin)
         an_layout.addWidget(an_cfg_btn)
+        self.analogin_cfg_btn = an_cfg_btn
         layout.addLayout(an_layout)
 
         # Display (fixed pins: SDA=GP20, SCL=GP21)
         disp_layout = QHBoxLayout()
-        disp_layout.addWidget(QLabel("Display (I2C: GP20/GP21):"))
+        self.enable_display_checkbox = QCheckBox("Display (I2C: GP20/GP21)")
+        self.enable_display_checkbox.setChecked(self.enable_display)
+        self.enable_display_checkbox.toggled.connect(self.on_display_toggled)
+        disp_layout.addWidget(self.enable_display_checkbox)
         disp_cfg_btn = QPushButton("Configure")
         disp_cfg_btn.clicked.connect(self.configure_display)
         disp_layout.addWidget(disp_cfg_btn)
+        self.display_cfg_btn = disp_cfg_btn
         layout.addLayout(disp_layout)
 
         # Peg RGB Matrix
         rgb_layout = QHBoxLayout()
-        rgb_layout.addWidget(QLabel("RGB Matrix (GP9):"))
+        self.enable_rgb_checkbox = QCheckBox("RGB Matrix (GP9)")
+        self.enable_rgb_checkbox.setChecked(self.enable_rgb)
+        self.enable_rgb_checkbox.toggled.connect(self.on_rgb_toggled)
+        rgb_layout.addWidget(self.enable_rgb_checkbox)
         rgb_cfg_btn = QPushButton("Configure")
         rgb_cfg_btn.clicked.connect(self.configure_rgb)
         rgb_layout.addWidget(rgb_cfg_btn)
+        self.rgb_cfg_btn = rgb_cfg_btn
         # Quick access button for per-key color mapping
         rgb_colors_btn = QPushButton("Per-key Colors")
         def open_per_key_colors():
-            rows = self.rows
-            cols = self.cols
-            layers = max(1, len(self.keymap_data) if hasattr(self, 'keymap_data') else 1)
-            initial = getattr(self, 'peg_rgb_colors', {})
-            pc = PerKeyColorDialog(self, rows=rows, cols=cols, layers=layers, initial_map=initial)
+            cfg = self.rgb_matrix_config
+            pc = PerKeyColorDialog(
+                self,
+                rows=self.rows,
+                cols=self.cols,
+                key_colors=cfg.get('key_colors', {}),
+                underglow_count=cfg.get('num_underglow', 0),
+                underglow_colors=cfg.get('underglow_colors', {}),
+                default_key_color=cfg.get('default_key_color', '#FFFFFF'),
+                default_underglow_color=cfg.get('default_underglow_color', '#000000'),
+            )
             if pc.exec():
-                self.peg_rgb_colors = pc.get_map()
+                key_map, underglow_map = pc.get_maps()
+                cfg['key_colors'] = key_map
+                cfg['underglow_colors'] = underglow_map
                 self.save_extension_configs()
+                self.update_macropad_display()
         rgb_colors_btn.clicked.connect(open_per_key_colors)
         rgb_layout.addWidget(rgb_colors_btn)
+        self.rgb_colors_btn = rgb_colors_btn
         layout.addLayout(rgb_layout)
+
+        # Update button states based on checkbox states
+        self.update_extension_button_states()
 
         group.setLayout(layout)
         parent_layout.addWidget(group)
@@ -2349,34 +2918,74 @@ class KMKConfigurator(QMainWindow):
         elif name == 'dark':
             self._apply_dark_stylesheet()
 
+    # --- Extension toggle handlers ---
+    def on_encoder_toggled(self, checked):
+        """Handle encoder checkbox toggle."""
+        self.enable_encoder = checked
+        self.update_extension_button_states()
+        self.save_extension_configs()
+
+    def on_analogin_toggled(self, checked):
+        """Handle analog input checkbox toggle."""
+        self.enable_analogin = checked
+        self.update_extension_button_states()
+        self.save_extension_configs()
+
+    def on_display_toggled(self, checked):
+        """Handle display checkbox toggle."""
+        self.enable_display = checked
+        self.update_extension_button_states()
+        self.save_extension_configs()
+
+    def on_rgb_toggled(self, checked):
+        """Handle RGB checkbox toggle."""
+        self.enable_rgb = checked
+        self.update_extension_button_states()
+        self.save_extension_configs()
+
+    def update_extension_button_states(self):
+        """Enable or disable configuration buttons based on checkbox states."""
+        if hasattr(self, 'encoder_cfg_btn'):
+            self.encoder_cfg_btn.setEnabled(self.enable_encoder)
+        if hasattr(self, 'analogin_cfg_btn'):
+            self.analogin_cfg_btn.setEnabled(self.enable_analogin)
+        if hasattr(self, 'display_cfg_btn'):
+            self.display_cfg_btn.setEnabled(self.enable_display)
+        if hasattr(self, 'rgb_cfg_btn'):
+            self.rgb_cfg_btn.setEnabled(self.enable_rgb)
+        if hasattr(self, 'rgb_colors_btn'):
+            self.rgb_colors_btn.setEnabled(self.enable_rgb)
+
+    def sync_extension_checkboxes(self):
+        """Ensure extension checkboxes reflect current enabled states without triggering signals."""
+        def _set_state(checkbox, value):
+            if checkbox:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(value)
+                checkbox.blockSignals(False)
+
+        _set_state(getattr(self, 'enable_encoder_checkbox', None), self.enable_encoder)
+        _set_state(getattr(self, 'enable_analogin_checkbox', None), self.enable_analogin)
+        _set_state(getattr(self, 'enable_display_checkbox', None), self.enable_display)
+        _set_state(getattr(self, 'enable_rgb_checkbox', None), self.enable_rgb)
+
+    def on_diode_orientation_changed(self, orientation):
+        """Handle diode orientation change."""
+        self.diode_orientation = orientation
+
 
 
     # --- Extension configuration handlers ---
     def configure_encoder(self):
-        """Configure encoder with a simple text editor dialog."""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QTextEdit, QDialogButtonBox
-        
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Encoder Configuration")
-        dlg.resize(600, 400)
-        layout = QVBoxLayout(dlg)
-        
-        layout.addWidget(QLabel("Encoder Configuration (A=GP10, B=GP11, Button=GP14):"))
-        layout.addWidget(QLabel("Edit the encoder map below (CCW, CW, Button press):"))
-        
-        editor = QTextEdit()
-        editor.setPlainText(self.encoder_config_str or DEFAULT_ENCODER_CONFIG)
-        editor.setFont(QFont("Courier New", 10))
-        layout.addWidget(editor)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        layout.addWidget(buttons)
-        
-        if dlg.exec():
-            self.encoder_config_str = editor.toPlainText()
+        """Configure encoder with enhanced dialog for automatic layer cycling."""
+        num_layers = len(self.keymap_data)
+        dialog = EncoderConfigDialog(parent=self, initial_text=self.encoder_config_str or "", num_layers=num_layers)
+        if dialog.exec():
+            self.encoder_config_str = dialog.get_config()
             self.save_extension_configs()
+            QMessageBox.information(self, "Encoder Configured", 
+                                  "Encoder configuration has been updated.\n\n"
+                                  "The encoder will cycle through layers and update the display automatically.")
 
     def configure_analogin(self):
         dlg = AnalogInConfigDialog(self, self.analogin_config_str)
@@ -2422,29 +3031,39 @@ class KMKConfigurator(QMainWindow):
         dlg.exec()
 
     def configure_rgb(self):
-        dlg = PegRgbConfigDialog(self, self.rgb_config_str)
-        # Provide access to per-key colors via dialog button
+        dlg = PegRgbConfigDialog(self, self.rgb_matrix_config)
+
         dlg_colors_btn = QPushButton("Configure per-key colors")
+
         def open_colors():
-            rows = self.rows
-            cols = self.cols
-            layers = max(1, len(self.keymap_data) if hasattr(self, 'keymap_data') else 1)
-            initial = getattr(self, 'peg_rgb_colors', {})
-            pc = PerKeyColorDialog(self, rows=rows, cols=cols, layers=layers, initial_map=initial)
+            cfg = self.rgb_matrix_config
+            pc = PerKeyColorDialog(
+                self,
+                rows=self.rows,
+                cols=self.cols,
+                key_colors=cfg.get('key_colors', {}),
+                underglow_count=cfg.get('num_underglow', 0),
+                underglow_colors=cfg.get('underglow_colors', {}),
+                default_key_color=cfg.get('default_key_color', '#FFFFFF'),
+                default_underglow_color=cfg.get('default_underglow_color', '#000000'),
+            )
             if pc.exec():
-                self.peg_rgb_colors = pc.get_map()
+                key_map, underglow_map = pc.get_maps()
+                cfg['key_colors'] = key_map
+                cfg['underglow_colors'] = underglow_map
                 self.save_extension_configs()
 
-        # place the button into the PegRgbConfigDialog layout (top)
         try:
             dlg.layout().insertWidget(0, dlg_colors_btn)
             dlg_colors_btn.clicked.connect(open_colors)
         except Exception:
-            # fallback: attach to main window post-show
             dlg_colors_btn.clicked.connect(open_colors)
+
         if dlg.exec():
-            self.rgb_config_str = dlg.get_config()
+            self.rgb_matrix_config = dlg.get_config()
             self.save_extension_configs()
+
+        self.update_macropad_display()
 
     def populate_config_file_list(self):
         """Scans kmk_Config_Save and repo root for JSON files starting with 'KMK_Config' and populates the combo box."""
@@ -2456,15 +3075,15 @@ class KMKConfigurator(QMainWindow):
                     full = os.path.join(save_dir, f)
                     paths.append(full)
 
-        for f in os.listdir(os.getcwd()):
+        for f in os.listdir(BASE_DIR):
             if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                full = os.path.join(os.getcwd(), f)
+                full = os.path.join(BASE_DIR, f)
                 if full not in paths:
                     paths.append(full)
 
         self.config_file_combo.blockSignals(True)
         self.config_file_combo.clear()
-        display_names = [os.path.relpath(p, os.getcwd()) for p in paths]
+        display_names = [os.path.relpath(p, BASE_DIR) for p in paths]
         self.config_file_combo.addItems(display_names)
         self.config_file_combo.blockSignals(False)
     
@@ -2477,8 +3096,18 @@ class KMKConfigurator(QMainWindow):
         info_layout.addWidget(QLabel("Board:"), 0, 0)
         info_layout.addWidget(QLabel("Raspberry Pi Pico"), 0, 1)
         info_layout.addWidget(QLabel("Matrix:"), 1, 0)
-        info_layout.addWidget(QLabel(f"{FIXED_ROWS}x{FIXED_COLS} (COL2ROW)"), 1, 1)
+        info_layout.addWidget(QLabel(f"{FIXED_ROWS}x{FIXED_COLS}"), 1, 1)
         layout.addLayout(info_layout)
+        
+        # Diode orientation selector
+        diode_layout = QHBoxLayout()
+        diode_layout.addWidget(QLabel("Diode Orientation:"))
+        self.diode_combo = QComboBox()
+        self.diode_combo.addItems(["COL2ROW", "ROW2COL"])
+        self.diode_combo.setCurrentText(self.diode_orientation)
+        self.diode_combo.currentTextChanged.connect(self.on_diode_orientation_changed)
+        diode_layout.addWidget(self.diode_combo)
+        layout.addLayout(diode_layout)
         
         # Profile dropdown and delete button
         profile_selection_layout = QHBoxLayout()
@@ -2857,6 +3486,12 @@ class KMKConfigurator(QMainWindow):
         """Generates display code to show keymap layout on OLED."""
         # Get current layer (layer 0) keymap
         layer = self.keymap_data[0] if self.keymap_data else []
+        rows = self.rows
+        cols = self.cols
+        col_spacing = max(1, 128 // max(cols, 1))
+        row_spacing = max(1, 64 // max(rows, 1))
+        x_offset = 1
+        y_offset = 8
         
         # Helper function to abbreviate key names for display
         def abbreviate_key(key_str):
@@ -2897,6 +3532,8 @@ class KMKConfigurator(QMainWindow):
                 "VOLU": "Vol+", "VOLD": "Vol-",
                 "MUTE": "Mute", "MPLY": "Play",
                 "MNXT": "Next", "MPRV": "Prev",
+                "MSTP": "Stop", "EJCT": "Ejct",
+                "BRIU": "Bri+", "BRID": "Bri-",
             }
             
             key = abbreviations.get(key, key)
@@ -2931,11 +3568,11 @@ display.root_group = splash
 '''
         
         # Generate the key labels for 5x4 grid
-        code += "# 5x4 Grid Layout (Row x Col)\n"
+        code += f"# {rows}x{cols} Grid Layout (Row x Col)\n"
         code += "key_labels = [\n"
-        for r in range(5):
+        for r in range(rows - 1, -1, -1):
             row_labels = []
-            for c in range(4):
+            for c in range(cols):
                 if r < len(layer) and c < len(layer[r]):
                     key_abbr = abbreviate_key(layer[r][c])
                     row_labels.append(f'"{key_abbr}"')
@@ -2944,27 +3581,330 @@ display.root_group = splash
             code += f"    [{', '.join(row_labels)}],\n"
         code += "]\n\n"
         
-        # Add display rendering code
-        code += '''# Display key layout on OLED (128x64)
-# 5 rows x 4 cols: 64 height / 5 rows = 12.8px per row, 128 width / 4 cols = 32px per col
-# terminalio.FONT is 8px tall, so add offset to center vertically
-for row_idx in range(5):
-    for col_idx in range(4):
-        key_text = key_labels[row_idx][col_idx]
-        x_pos = col_idx * 32 + 1  # 1px left margin
-        y_pos = row_idx * 12 + 8  # Start at y=8 to avoid top cutoff, 12px spacing
-        
-        text_area = label.Label(
-            terminalio.FONT,
-            text=key_text,
-            color=0xFFFFFF,
-            x=x_pos,
-            y=y_pos
-        )
-        splash.append(text_area)
-'''
+        # Add display rendering code (rows reversed to match physical orientation)
+        code += "# Display key layout on OLED (128x64)\n"
+        code += f"# {rows} rows x {cols} cols\n"
+        code += f"for row_idx in range({rows}):\n"
+        code += f"    for col_idx in range({cols}):\n"
+        code += "        key_text = key_labels[row_idx][col_idx]\n"
+        code += f"        x_pos = ({cols} - 1 - col_idx) * {col_spacing} + {x_offset}\n"
+        code += f"        y_pos = row_idx * {row_spacing} + {y_offset}\n"
+        code += "\n"
+        code += "        text_area = label.Label(\n"
+        code += "            terminalio.FONT,\n"
+        code += "            text=key_text,\n"
+        code += "            color=0xFFFFFF,\n"
+        code += "            x=x_pos,\n"
+        code += "            y=y_pos\n"
+        code += "        )\n"
+        code += "        splash.append(text_area)\n"
         
         return code
+    
+    def generate_display_layout_code_with_layer_support(self):
+        """Generates display code with support for showing different layer keymaps."""
+        rows = self.rows
+        cols = self.cols
+        col_spacing = max(1, 128 // max(cols, 1))
+        header_offset = 14
+        row_spacing = max(1, (64 - header_offset) // max(rows, 1))
+        x_offset = 1
+        y_offset = header_offset
+
+        # Helper function to abbreviate key names for display
+        def abbreviate_key(key_str):
+            if not key_str or key_str == "KC.NO" or key_str == "KC.TRNS":
+                return "---"
+            
+            # Handle macros
+            if key_str.startswith("MACRO("):
+                macro_name = key_str[6:-1]  # Extract name from MACRO(name)
+                return macro_name[:6] if len(macro_name) > 6 else macro_name
+            
+            # Handle layer switches
+            if "MO(" in key_str or "TG(" in key_str or "TO(" in key_str:
+                return key_str.replace("KC.", "")[:6]
+            
+            # Handle key combinations (e.g., KC.LCTL(KC.C))
+            if "(" in key_str:
+                # Simplify combinations like LCTL(C) -> C^C
+                parts = key_str.replace("KC.", "").replace("(", "+").replace(")", "")
+                return parts[:6]
+            
+            # Standard keys - remove KC. prefix
+            key = key_str.replace("KC.", "")
+            
+            # Common abbreviations for display
+            abbreviations = {
+                "LCTL": "LCtl", "RCTL": "RCtl",
+                "LSFT": "LSft", "RSFT": "RSft", 
+                "LALT": "LAlt", "RALT": "RAlt",
+                "LGUI": "LGui", "RGUI": "RGui",
+                "BSPC": "BkSp", "ENT": "Entr",
+                "SPC": "Spce", "TAB": "Tab",
+                "ESC": "Esc", "DEL": "Del",
+                "PGUP": "PgUp", "PGDN": "PgDn",
+                "HOME": "Home", "END": "End",
+                "UP": "Up", "DOWN": "Down",
+                "LEFT": "Left", "RGHT": "Rght",
+                "VOLU": "Vol+", "VOLD": "Vol-",
+                "MUTE": "Mute", "MPLY": "Play",
+                "MNXT": "Next", "MPRV": "Prev",
+                "MSTP": "Stop", "EJCT": "Ejct",
+                "BRIU": "Bri+", "BRID": "Bri-",
+            }
+            
+            key = abbreviations.get(key, key)
+            return key[:6] if len(key) > 6 else key
+        
+        # Build display code with all layers
+        code = '''import board
+import busio
+import displayio
+import terminalio
+import adafruit_displayio_sh1106
+from adafruit_display_text import label
+from i2cdisplaybus import I2CDisplayBus
+
+# I2C Display setup (SDA=GP20, SCL=GP21)
+displayio.release_displays()
+i2c = busio.I2C(scl=board.GP21, sda=board.GP20)
+display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+display = adafruit_displayio_sh1106.SH1106(
+    display_bus,
+    width=128,
+    height=64,
+    rotation=180,  # Rotated 180 degrees
+    colstart=2  # Column offset for proper alignment
+)
+
+# Create display group
+splash = displayio.Group()
+display.root_group = splash
+
+# All layer keymaps - Generated from your configuration
+'''
+        
+        # Generate key labels for ALL layers
+        code += "all_layer_labels = [\n"
+        for layer_idx, layer_data in enumerate(self.keymap_data):
+            code += f"    # Layer {layer_idx}\n"
+            code += "    [\n"
+            for r in range(rows - 1, -1, -1):
+                row_labels = []
+                for c in range(cols):
+                    if r < len(layer_data) and c < len(layer_data[r]):
+                        key_abbr = abbreviate_key(layer_data[r][c])
+                        row_labels.append(f'"{key_abbr}"')
+                    else:
+                        row_labels.append('"---"')
+                code += f"        [{', '.join(row_labels)}],\n"
+            code += "    ],\n"
+        code += "]\n\n"
+        
+        # Add display update function
+        code += '''# Helper function to update display with current layer
+def update_display_for_layer(layer_index):
+    """Update OLED display to show keymap for the specified layer."""
+    global splash
+    
+    # Clear existing labels
+    while len(splash) > 0:
+        splash.pop()
+    
+    # Show layer indicator at top
+    layer_label = label.Label(
+        terminalio.FONT,
+        text=f"Layer {{layer_index}}",
+        color=0xFFFFFF,
+        x=2,
+        y=4
+    )
+    splash.append(layer_label)
+    
+    # Get labels for this layer
+    if layer_index < len(all_layer_labels):
+        key_labels = all_layer_labels[layer_index]
+    else:
+        key_labels = all_layer_labels[0]  # Fallback to layer 0
+    
+    # Display key layout (top row is physical top)
+    for row_idx, row in enumerate(key_labels):
+        for col_idx, key_text in enumerate(row):
+            x_pos = ({cols} - 1 - col_idx) * {col_spacing} + {x_offset}
+            y_pos = row_idx * {row_spacing} + {y_offset}
+            text_area = label.Label(
+                terminalio.FONT,
+                text=key_text,
+                color=0xFFFFFF,
+                x=x_pos,
+                y=y_pos
+            )
+            splash.append(text_area)
+
+# Initial display - Show Layer 0
+update_display_for_layer(0)
+class LayerDisplaySync:
+    """Keep the OLED layer view in sync with KMK state."""
+
+    def __init__(self):
+        self._last_layer = None
+
+    def _active_layer(self, keyboard):
+        try:
+            layers = getattr(keyboard, "active_layers", None)
+            if layers and len(layers) > 0:
+                # Return the highest priority layer (last in the list)
+                return layers[-1]
+        except Exception:
+            pass
+        return 0
+
+    def _check_and_update(self, keyboard):
+        """Check if layer changed and update display if needed."""
+        current = self._active_layer(keyboard)
+        if current != self._last_layer:
+            self._last_layer = current
+            try:
+                update_display_for_layer(current)
+            except Exception:
+                pass
+
+    def before_matrix_scan(self, keyboard):
+        return
+
+    def during_bootup(self, keyboard):
+        self._last_layer = self._active_layer(keyboard)
+        try:
+            update_display_for_layer(self._last_layer)
+        except Exception:
+            pass
+
+    def after_matrix_scan(self, keyboard):
+        """Check for layer changes after keys are scanned."""
+        self._check_and_update(keyboard)
+
+    def before_hid_send(self, keyboard):
+        return
+
+    def after_hid_send(self, keyboard):
+        """Check for layer changes after HID report is sent."""
+        self._check_and_update(keyboard)
+
+    def on_powersave_enable(self, keyboard):
+        return
+
+    def on_powersave_disable(self, keyboard):
+        return
+
+layer_display_sync = LayerDisplaySync()
+keyboard.modules.append(layer_display_sync)
+'''.format(col_spacing=col_spacing, x_offset=x_offset, row_spacing=row_spacing, y_offset=y_offset, cols=cols)
+        
+        return code
+
+    
+    def _generate_rgb_matrix_code(self):
+        """Build the Peg RGB Matrix configuration snippet for code.py."""
+        if not self.enable_rgb:
+            return ""
+
+        cfg = build_default_rgb_matrix_config()
+        cfg.update(self.rgb_matrix_config)
+        cfg['default_key_color'] = ensure_hex_prefix(cfg.get('default_key_color', '#FFFFFF'), '#FFFFFF')
+        cfg['default_underglow_color'] = ensure_hex_prefix(
+            cfg.get('default_underglow_color', '#000000'), '#000000'
+        )
+
+        num_keys = self.rows * self.cols
+        underglow_count = int(cfg.get('num_underglow', 0) or 0)
+        total_pixels = num_keys + max(0, underglow_count)
+
+        key_map = cfg.get('key_colors', {}) or {}
+        default_key_rgb = hex_to_rgb_list(cfg['default_key_color'])
+
+        key_entries = []
+        for idx in range(num_keys):
+            custom = key_map.get(str(idx))
+            if custom:
+                rgb = hex_to_rgb_list(custom)
+            else:
+                row = idx // self.cols
+                col = idx % self.cols
+                keycode = DEFAULT_KEY
+                if self.keymap_data and self.keymap_data[0]:
+                    try:
+                        keycode = self.keymap_data[0][row][col]
+                    except (IndexError, TypeError):
+                        keycode = DEFAULT_KEY
+                rgb = [0, 0, 0] if keycode == "KC.NO" else default_key_rgb
+            key_entries.append(f"[{rgb[0]}, {rgb[1]}, {rgb[2]}]")
+
+        under_map = cfg.get('underglow_colors', {}) or {}
+        default_under_rgb = hex_to_rgb_list(cfg['default_underglow_color'])
+        under_entries = []
+        for idx in range(max(0, underglow_count)):
+            custom = under_map.get(str(idx))
+            rgb = hex_to_rgb_list(custom) if custom else default_under_rgb
+            under_entries.append(f"[{rgb[0]}, {rgb[1]}, {rgb[2]}]")
+
+        def format_entries(entries):
+            if not entries:
+                return "[]"
+            chunks = []
+            for start in range(0, len(entries), 8):
+                chunk = ", ".join(entries[start:start+8])
+                chunks.append(f"                {chunk}")
+            return "[\n" + ",\n".join(chunks) + "\n            ]"
+
+        keys_array = format_entries(key_entries)
+        under_array = format_entries(under_entries)
+
+        rgb_order = cfg.get('rgb_order', 'GRB')
+        order_tuple = RGB_ORDER_TUPLES.get(rgb_order, RGB_ORDER_TUPLES['GRB'])
+        disable_auto_write_value = cfg.get('disable_auto_write', True)
+        if isinstance(disable_auto_write_value, str):
+            disable_auto_write = disable_auto_write_value.strip().lower() not in {"false", "0", "no", "off"}
+        else:
+            disable_auto_write = bool(disable_auto_write_value)
+        brightness = float(cfg.get('brightness_limit', 0.5) or 0.5)
+        pixel_pin = cfg.get('pixel_pin', FIXED_RGB_PIN)
+        if isinstance(pixel_pin, str):
+            pixel_pin = pixel_pin.strip()
+            if (pixel_pin.startswith("'") and pixel_pin.endswith("'")) or (
+                pixel_pin.startswith('"') and pixel_pin.endswith('"')
+            ):
+                pixel_pin = pixel_pin[1:-1]
+        if not pixel_pin:
+            pixel_pin = FIXED_RGB_PIN
+
+        code_lines = [
+            "# Peg RGB Matrix configuration",
+            f"keyboard.rgb_pixel_pin = {pixel_pin}",
+            f"keyboard.num_pixels = {total_pixels}",
+            f"keyboard.brightness_limit = {brightness}",
+            f"keyboard.led_key_pos = list(range({total_pixels}))  # Keys + underglow indices",
+            "rgb = Rgb_matrix(",
+        ]
+
+        if underglow_count > 0:
+            code_lines.extend([
+                "    ledDisplay=Rgb_matrix_data(",
+                "        keys=" + keys_array + ",",
+                "        underglow=" + under_array,
+                "    ),",
+            ])
+        else:
+            code_lines.append("    ledDisplay=" + keys_array + ",")
+
+        code_lines.extend([
+            f"    rgb_order={order_tuple},",
+            f"    disable_auto_write={disable_auto_write},",
+            ")",
+            "keyboard.extensions.append(rgb)\n",
+        ])
+
+        return "\n".join(code_lines)
     
     def get_generated_python_code(self):
         """Constructs the final `code.py` file content as a string."""
@@ -2991,20 +3931,24 @@ for row_idx in range(5):
         keymap_str = "keyboard.keymap = [\n"
         for i, layer in enumerate(self.keymap_data):
             keymap_str += f"    # Layer {i}\n    [\n"
+            # Flatten the keymap - KMK expects a flat list, not nested rows
+            flat_keys = []
             for row in layer:
-                row_str = []
                 for key in row:
                     macro_match = re.match(r"MACRO\((\w+)\)", key)
                     if macro_match:
-                        row_str.append(macro_match.group(1)) # Use the macro variable name
+                        flat_keys.append(macro_match.group(1)) # Use the macro variable name
                     else:
-                        row_str.append(key) # This is a regular keycode or combo
-                keymap_str += "        [" + ", ".join(row_str) + "],\n"
+                        flat_keys.append(key) # This is a regular keycode or combo
+            # Write flat keymap with 4 keys per line for readability (matches 4 columns)
+            for idx in range(0, len(flat_keys), 4):
+                line_keys = flat_keys[idx:idx+4]
+                keymap_str += "        " + ", ".join(line_keys) + ",\n"
             keymap_str += "    ],\n"
         keymap_str += "]\n"
 
         # --- Python File Template ---
-        diode_orientation = FIXED_DIODE_ORIENTATION
+        diode_orientation = self.diode_orientation
         
         imports = [
             "import board",
@@ -3012,6 +3956,7 @@ for row_idx in range(5):
             "from kmk.keys import KC",
             "from kmk.scanners import DiodeOrientation",
             "from kmk.modules.layers import Layers",
+            "from kmk.extensions.media_keys import MediaKeys",
         ]
         if macros_exist:
             imports.append("from kmk.modules.macros import Macros, Tap, Press, Release, Delay")
@@ -3024,30 +3969,30 @@ for row_idx in range(5):
 
         # Build extension snippets provided by the user
         ext_snippets = ""
+        encoder_needs_layer_cycler = False
         if self.enable_encoder and self.encoder_config_str:
-            ext_snippets += "# Encoder configuration provided by user:\n"
+            ext_snippets += "# Encoder configuration:\n"
             ext_snippets += self.encoder_config_str + "\n\n"
+            # Check if layer cycler class is defined in the encoder config
+            if "class LayerCycler:" in self.encoder_config_str:
+                encoder_needs_layer_cycler = True
         if self.enable_analogin and self.analogin_config_str:
             ext_snippets += "# AnalogIn configuration provided by user:\n"
             ext_snippets += self.analogin_config_str + "\n\n"
-        if self.enable_rgb and self.rgb_config_str:
-            # Only add user RGB config if it's not just a comment
-            rgb_code = self.rgb_config_str.strip()
-            if rgb_code and not rgb_code.startswith('#'):
-                ext_snippets += "# Peg RGB Matrix configuration provided by user (requires neopixel):\n"
-                ext_snippets += "try:\n"
-                # Indent user's RGB config
-                indented_rgb = "\n".join("    " + line for line in self.rgb_config_str.split("\n"))
-                ext_snippets += indented_rgb + "\n"
-                ext_snippets += "except ImportError:\n"
-                ext_snippets += "    print('RGB disabled: neopixel library not found')\n\n"
         if self.enable_display:
             # Auto-generate display layout showing keymap
-            ext_snippets += "# Display configuration - Auto-generated keymap layout:\n"
-            ext_snippets += self.generate_display_layout_code() + "\n\n"
+            # Use layer-aware version if encoder with layer cycling is enabled
+            if self.enable_encoder and "LayerCycler" in self.encoder_config_str:
+                ext_snippets += "# Display configuration - Layer-aware keymap layout:\n"
+                ext_snippets += self.generate_display_layout_code_with_layer_support() + "\n\n"
+            else:
+                ext_snippets += "# Display configuration - Auto-generated keymap layout:\n"
+                ext_snippets += self.generate_display_layout_code() + "\n\n"
+        
         # Provide sensible default templates for enabled modules (placed before user snippets)
+        # Only add defaults if user hasn't provided their own config
         default_snippets = ""
-        if self.enable_encoder:
+        if self.enable_encoder and not self.encoder_config_str:
             default_snippets += "# --- Encoder Handler (auto-generated) ---\n"
             default_snippets += (
                 "encoder_handler = EncoderHandler()\n"
@@ -3056,7 +4001,7 @@ for row_idx in range(5):
                 "# encoder_handler.map = [ ((KC.VOLD, KC.VOLU, KC.MUTE),), ]\n"
                 "keyboard.modules.append(encoder_handler)\n\n"
             )
-        if self.enable_analogin:
+        if self.enable_analogin and not self.analogin_config_str:
             default_snippets += "# --- Analog Inputs (auto-generated) ---\n"
             default_snippets += (
                 "# Example usage (requires 'analogio' on target device):\n"
@@ -3068,63 +4013,8 @@ for row_idx in range(5):
         # RGB will be initialized AFTER keymap definition
         rgb_init_code = ""
         if self.enable_rgb:
-            default_snippets += "# --- Peg RGB Matrix Setup (auto-generated) ---\n"
-            default_snippets += "# RGB requires 'neopixel' library in lib folder\n"
-            default_snippets += "try:\n"
-            default_snippets += "    from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data, Color\n"
-            num_keys = self.rows * self.cols
-            default_snippets += (
-                "    \n"
-                + "    # Configure RGB settings on keyboard object\n"
-                + "    keyboard.rgb_pixel_pin = board.GP9\n"
-                + ("    keyboard.num_pixels = %d\n" % num_keys)
-                + "    keyboard.brightness_limit = 0.3  # Reduced for lower current consumption\n"
-                + ("    keyboard.led_key_pos = list(range(%d))  # Sequential mapping 0-%d\n" % (num_keys, num_keys-1))
-                + "except ImportError:\n"
-                + "    print('RGB disabled: neopixel library not found')\n\n"
-            )
-            
-            # RGB initialization happens AFTER keymap is defined
-            rgb_init_code = (
-                "# --- RGB Matrix Initialization (must come after keymap) ---\n"
-                + "try:\n"
-                + "    # Create RGB matrix - keys with KC.NO are OFF, others default to WHITE\n"
-                + "    rgb_keys = []\n"
-                + "    for row in keyboard.keymap[0]:\n"
-                + "        for key in row:\n"
-                + "            if key == KC.NO:\n"
-                + "                rgb_keys.append(Color.OFF)  # No key assigned = no light\n"
-                + "            else:\n"
-                + "                rgb_keys.append(Color.WHITE)  # Default color for assigned keys\n"
-                + "    \n"
-                + "    # Note: Rgb_matrix_data requires non-empty underglow, so we pass the keys list directly\n"
-                + "    rgb = Rgb_matrix(ledDisplay=rgb_keys)\n"
-                + "    keyboard.extensions.append(rgb)\n"
-                + "except (ImportError, NameError):\n"
-                + "    pass  # RGB not available\n\n"
-            )
-            # If per-key layer colors exist, emit them as RGB_LAYER_COLORS
-            if getattr(self, 'peg_rgb_colors', None):
-                try:
-                    # peg_rgb_colors is {layer: {index: '#RRGGBB'}}
-                    rgb_map = self.peg_rgb_colors
-                    # Build python literal for mapping
-                    def hex_to_color_tuple(hexs):
-                        h = hexs.lstrip('#')
-                        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
-
-                    rgb_lines = ["# Per-layer per-key color mapping (auto-generated)", "def _hex_to_color(h):", "    h=h.lstrip('#')", "    return Color(int(h[0:2],16), int(h[2:4],16), int(h[4:6],16))", ""]
-                    rgb_lines.append("RGB_LAYER_COLORS = {")
-                    for layer, lm in rgb_map.items():
-                        entries = []
-                        for idx, hexc in lm.items():
-                            entries.append(f"{idx}: _hex_to_color('{hexc}')")
-                        rgb_lines.append(f"    {layer}: {{{', '.join(entries)}}},")
-                    rgb_lines.append("}\n")
-                    default_snippets += "\n".join(rgb_lines) + "\n"
-                except Exception:
-                    # if anything goes wrong, skip emitting layer colors
-                    pass
+            imports.append("from kmk.extensions.peg_rgb_matrix import Rgb_matrix, Rgb_matrix_data")
+            rgb_init_code = self._generate_rgb_matrix_code()
 
         # Final extension snippets: defaults first, then user-provided overrides/additions
         ext_snippets_final = default_snippets + ext_snippets
@@ -3132,6 +4022,9 @@ for row_idx in range(5):
 {chr(10).join(imports)}
 
 keyboard = KMKKeyboard()
+
+# --- Extensions ---
+keyboard.extensions.append(MediaKeys())
 
 # --- Modules ---
 keyboard.modules.append(Layers())
@@ -3148,9 +4041,9 @@ keyboard.row_pins = ({', '.join(self.row_pins)},)
 {ext_snippets_final}{macros_def_str}# --- Keymap ---
 {keymap_str}
 {rgb_init_code}"""
-        # Add layer cycler initialization if encoder is enabled
-        if self.enable_encoder and "layer_cycler" in ext_snippets_final:
-            code_template += """# Initialize layer cycler for encoder
+        # Add layer cycler initialization if encoder needs it
+        if encoder_needs_layer_cycler:
+            code_template += """# Initialize layer cycler for encoder (after keymap is defined)
 layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
 
 """
@@ -3179,7 +4072,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 path = os.path.join(base_path, "CIRCUITPY")
                 if os.path.exists(path):
                     return path
-        return os.getcwd() # Fallback to current directory
+        return BASE_DIR  # Fallback to application directory
 
     def generate_code_py_dialog(self):
         default_path = self.find_circuitpy_drive()
@@ -3202,7 +4095,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Check if kmk folder exists, if not copy it
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
-                    kmk_source = os.path.join(os.path.dirname(__file__), "libraries", "kmk_firmware-main", "kmk")
+                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk_firmware-main", "kmk")
                     if os.path.exists(kmk_source):
                         import shutil
                         shutil.copytree(kmk_source, kmk_dest)
@@ -3216,7 +4109,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     kmk_copied = False
                 
                 # Copy required libraries
-                lib_source = os.path.join(os.path.dirname(__file__), "libraries", 
+                lib_source = os.path.join(BASE_DIR, "libraries", 
                                          "adafruit-circuitpython-bundle-9.x-mpy", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
                 
@@ -3302,8 +4195,12 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             "macros": self.macros,
             "rgb": {
                 "enabled": self.enable_rgb,
-                "config_str": self.rgb_config_str,
-                "colors": getattr(self, 'peg_rgb_colors', {}),
+                "matrix": {
+                    **build_default_rgb_matrix_config(),
+                    **self.rgb_matrix_config,
+                    "key_colors": dict(self.rgb_matrix_config.get("key_colors", {})),
+                    "underglow_colors": dict(self.rgb_matrix_config.get("underglow_colors", {})),
+                },
             },
             "extensions": {
                 "encoder": {
@@ -3328,23 +4225,26 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             QMessageBox.critical(self, "Error", f"Could not save configuration file:\n{e}")
             raise e
 
-    def load_configuration(self):
-        # If a file is selected in the config combo, use that; otherwise open a file dialog
-        file_path = None
-        if hasattr(self, 'config_file_combo') and self.config_file_combo.count() > 0:
-            sel = self.config_file_combo.currentText()
-            if sel:
-                candidate = os.path.join(os.getcwd(), sel)
-                if os.path.exists(candidate):
-                    file_path = candidate
+    def load_configuration(self, file_path=None, show_message=True):
+        """Load a saved configuration from disk."""
+        selected_path = file_path
 
-        if not file_path:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON Files (*.json)")
-            if not file_path:
-                return
+        if not selected_path:
+            # If a file is selected in the config combo, use that; otherwise open a file dialog
+            if hasattr(self, 'config_file_combo') and self.config_file_combo.count() > 0:
+                sel = self.config_file_combo.currentText()
+                if sel:
+                    candidate = os.path.join(BASE_DIR, sel)
+                    if os.path.exists(candidate):
+                        selected_path = candidate
+
+        if not selected_path:
+            selected_path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON Files (*.json)")
+            if not selected_path:
+                return False
 
         try:
-            with open(file_path, 'r') as f:
+            with open(selected_path, 'r') as f:
                 config_data = json.load(f)
 
             # Check version format
@@ -3364,8 +4264,18 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Load RGB settings
                 rgb_section = config_data.get("rgb", {})
                 self.enable_rgb = rgb_section.get("enabled", True)
-                self.rgb_config_str = rgb_section.get("config_str", "")
-                self.peg_rgb_colors = rgb_section.get("colors", {})
+                matrix_cfg = rgb_section.get("matrix", {}) if isinstance(rgb_section, dict) else {}
+                merged = build_default_rgb_matrix_config()
+                merged.update(matrix_cfg)
+                merged['key_colors'] = dict(matrix_cfg.get('key_colors', {}))
+                merged['underglow_colors'] = dict(matrix_cfg.get('underglow_colors', {}))
+                merged['default_key_color'] = ensure_hex_prefix(
+                    merged.get('default_key_color', '#FFFFFF'), '#FFFFFF'
+                )
+                merged['default_underglow_color'] = ensure_hex_prefix(
+                    merged.get('default_underglow_color', '#000000'), '#000000'
+                )
+                self.rgb_matrix_config = merged
                 
                 # Load extension settings
                 extensions = config_data.get("extensions", {})
@@ -3423,16 +4333,31 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             self.recreate_macropad_grid()
             self.update_macro_list()
             self.update_macropad_display()
-            
-            QMessageBox.information(self, "Success", 
-                f"Configuration loaded successfully.\n"
-                f"Format: v{version}\n"
-                f"Layers: {len(self.keymap_data)}\n"
-                f"Macros: {len(self.macros)}\n"
-                f"RGB Colors: {len(self.peg_rgb_colors)} layers configured")
+            self.sync_extension_checkboxes()
+            self.update_extension_button_states()
+            try:
+                self.save_extension_configs()
+            except Exception:
+                pass
+
+            if show_message:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Configuration loaded successfully.\n"
+                    f"Path: {selected_path}\n"
+                    f"Format: v{version}\n"
+                    f"Layers: {len(self.keymap_data)}\n"
+                    f"Macros: {len(self.macros)}\n"
+                    f"Configured key LEDs: {len(self.rgb_matrix_config.get('key_colors', {}))}\n"
+                    f"Underglow LEDs: {self.rgb_matrix_config.get('num_underglow', 0)}",
+                )
+
+            return True
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load configuration:\n{e}\n\nTraceback: {traceback.format_exc()}")
+            return False
     
     # --- Grid and Layer UI Management ---
     
@@ -3459,8 +4384,9 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
     def recreate_macropad_grid(self):
         """Clears and rebuilds the macropad grid buttons based on current dimensions."""
         self.clear_macropad_grid()
-        for r in range(self.rows):
-            for c in range(self.cols):
+        # Iterate in reverse (180° rotation) to match physical board orientation
+        for r in range(self.rows - 1, -1, -1):
+            for c in range(self.cols - 1, -1, -1):
                 button = QPushButton()
                 button.setObjectName("keymapButton")
                 button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -3472,7 +4398,10 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     self._install_hover_effect(button)
                 except Exception:
                     pass
-                self.macropad_layout.addWidget(button, r, c)
+                # Display at inverted position while keeping actual keymap coordinates
+                display_r = self.rows - 1 - r
+                display_c = self.cols - 1 - c
+                self.macropad_layout.addWidget(button, display_r, display_c)
                 self.macropad_buttons[(r, c)] = button
         # If we have a previously-selected key and it still exists in the
         # newly-created grid, restore its checked state and label so the
@@ -3568,9 +4497,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         if self.current_layer >= len(self.keymap_data): return
         
         layer_data = self.keymap_data[self.current_layer]
-        # Get RGB color map if available
-        rgb_colors = getattr(self, 'peg_rgb_colors', {})
-        layer_colors = rgb_colors.get(str(self.current_layer), {})
+        rgb_cfg = getattr(self, 'rgb_matrix_config', build_default_rgb_matrix_config())
+        key_colors = rgb_cfg.get('key_colors', {})
         
         idx = 0
         for r in range(self.rows):
@@ -3588,8 +4516,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     button.setText(display_text)
                     
                     # Apply RGB color if assigned to this key
-                    if str(idx) in layer_colors:
-                        color = layer_colors[str(idx)]
+                    if str(idx) in key_colors:
+                        color = key_colors[str(idx)]
                         # Use white text for dark colors, black text for light colors
                         # Simple luminance check
                         try:
