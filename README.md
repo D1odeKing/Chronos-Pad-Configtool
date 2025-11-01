@@ -10,195 +10,91 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 
 > **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
 
+---
+
+## 📚 Documentation
+
+Complete documentation is organized in the [`docs/`](docs/) folder for easy navigation:
+
+| Document | Purpose |
+|----------|---------|
+| **[Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
+| **[CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 9.x on Pico |
+| **[Usage Guide](docs/USAGE.md)** | How to use the configurator |
+| **[Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
+| **[Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
+| **[Build Exe Guide](docs/BUILD_EXE.md)** | Creating your own executable |
+
+---
+
 ## 🎯 Features
 
 ### Keymap Editor
-- **Visual Grid Interface**: Intuitive button-based key assignment
-- **Multi-Layer Support**: Create and manage multiple keyboard layers
-- **Drag-and-Drop**: Easy keycode selection from categorized lists
-- **Profile Management**: Save and load different keymap configurations
+- ✅ **Visual 5×4 Grid Interface**: Intuitive button-based key assignment
+- ✅ **Multi-Layer Support**: Create unlimited layers with full layer switching
+- ✅ **Profile Management**: Save and load different configurations
+- ✅ **Full Keycode Library**: Letters, numbers, modifiers, media keys, and more
 
 ### Hardware Extensions
-- **Modular Design**: Enable or disable extensions as needed
-- **Encoder Support**: ✅ Rotary encoder with button for layer cycling (GP10, GP11, GP14)
-- **Analog Input**: ⚠️ 10k slider potentiometer (GP28) - *Under development*
-- **OLED Display**: ✅ I2C display with live layer-aware keymap visualization (GP20, GP21)
-- **RGB Lighting**: ✅ SK6812MINI per-key RGB with color mapping (GP9, GRB pixel order)
-- **Configuration Persistence**: Extension states saved between sessions
+- ✅ **Encoder**: Rotary encoder with layer cycling (GP10, GP11, GP14)
+- ⚠️ **Analog Input**: Slider potentiometer support (GP28, under development)
+- ✅ **OLED Display**: Live layer-aware keymap visualization (GP20, GP21)
+- ✅ **RGB Lighting**: Per-key and underglow RGB support (GP9)
 
 ### Macro System
-- **Visual Macro Builder**: Create complex macros with GUI
-- **Action Types**:
-  - Text insertion
-  - Key taps
-  - Key press/release
-  - Delays
-- **Macro Assignment**: Directly assign macros to any key
+- ✅ **Visual Macro Builder**: Create complex sequences with GUI
+- ✅ **Multiple Action Types**: Text, key presses, delays, modifiers
+- ✅ **Easy Assignment**: Assign macros directly to any key
 
-### Code Generation
-- **One-Click Export**: Generate complete KMK firmware code
-- **Auto-Deploy**:
-  - Detects CIRCUITPY drive
-  - Copies KMK firmware (if missing)
-  - Installs required libraries automatically
-  - Saves code.py to device
-- **Library Management**: Includes display drivers, NeoPixel support
+### Code Generation & Deployment
+- ✅ **One-Click Export**: Generate complete KMK firmware code
+- ✅ **Auto-Detection**: Finds CIRCUITPY drive automatically
+- ✅ **Dependency Management**: Auto-downloads KMK firmware & libraries
+- ✅ **Direct Device Deployment**: Saves code.py and libraries to Pico
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### Prerequisites
+### 1️⃣ Install Configurator
 
-**For the Configurator:**
-- Python 3.8 or higher
-- PyQt6 (`pip install PyQt6`)
+**Option A: Windows Executable (Easiest)**
+```bash
+# Download from Releases page
+# Double-click ChronosPadConfigurator.exe
+# That's it! No Python required.
+```
 
-**For the Macropad (Auto-downloaded by the tool):**
-- ✅ [KMK Firmware](https://github.com/KMKfw/kmk_firmware) (GPL-3.0 License) - Downloaded automatically on first run
-- ✅ [Adafruit CircuitPython Bundle](https://github.com/adafruit/Adafruit_CircuitPython_Bundle) (MIT License) - Downloaded automatically on first run
+**Option B: Run from Source**
+```bash
+git clone https://github.com/D1odeKing/Chronos-Pad-Configtool.git
+cd Chronos-Pad-Configtool
+pip install PyQt6
+python main.py
+```
 
-**Hardware:**
+👉 **Full details**: See [Installation Guide](docs/INSTALLATION.md)
 
-This tool is designed specifically for the **[Chronos Pad](https://github.com/D1odeKing/Chronos-Pad)** macropad. For hardware specifications, PCB files, build instructions, and case designs, visit the [Chronos Pad hardware repository](https://github.com/D1odeKing/Chronos-Pad).
+### 2️⃣ Setup CircuitPython on Pico
 
-> **Note:** KMK firmware and CircuitPython libraries are automatically downloaded on first run and will be deployed to your device when you save your configuration!
+1. Download [CircuitPython 9.2.9 UF2](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2)
+2. Hold BOOTSEL on Pico, plug into USB
+3. Drag UF2 file onto RPI-RP2 drive
+4. Pico reboots with CIRCUITPY drive
 
+👉 **Full details**: See [CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)
 
-### Installing CircuitPython 9.x on Raspberry Pi Pico
+### 3️⃣ Configure Your Keyboard
 
-**⚠️ IMPORTANT: CircuitPython Version Requirement**
+1. Launch the configurator
+2. Design your keymap (5×4 grid)
+3. Add layers, macros, RGB colors
+4. Click "Save code.py" and select CIRCUITPY drive
+5. Tool auto-deploys firmware and libraries
 
-This tool requires **CircuitPython 9.x** to be installed on your Raspberry Pi Pico. 
-- ✅ **CircuitPython 9.x is supported**
-- ❌ **CircuitPython 10.x is NOT currently supported** and may cause errors or break functionality
+👉 **Full details**: See [Usage Guide](docs/USAGE.md)
 
-**Download CircuitPython 9.2.9 (Recommended):**
+### 4️⃣ Enjoy!
 
-**Direct Download:** [CircuitPython 9.2.9 UF2 for Raspberry Pi Pico](https://adafruit-circuit-python.s3.amazonaws.com/bin/raspberry_pi_pico/en_US/adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2)
-
-Or browse all versions at: [CircuitPython Downloads for Raspberry Pi Pico](https://circuitpython.org/board/raspberry_pi_pico/)
-- **Select version 9.x** (e.g., 9.2.9 or any 9.x release)
-- Do NOT download version 10.x or higher
-
-**Installation Steps:**
-
-1. **Download the UF2 file**: 
-   - Click the direct download link above, or
-   - Visit https://circuitpython.org/board/raspberry_pi_pico/
-   - Find and download **CircuitPython 9.2.9** or the latest **9.x version** (NOT 10.x)
-
-2. **Enter bootloader mode**:
-   - Hold down the **BOOTSEL** button on your Raspberry Pi Pico
-   - While holding BOOTSEL, plug the Pico into your computer via USB
-   - Release the BOOTSEL button
-   - The Pico will appear as a USB drive named `RPI-RP2`
-
-3. **Install CircuitPython**:
-   - Drag and drop the downloaded `adafruit-circuitpython-raspberry_pi_pico-en_US-9.2.9.uf2` file onto the `RPI-RP2` drive
-   - The Pico will automatically reboot
-   - After rebooting, it will appear as a new USB drive named `CIRCUITPY`
-
-4. **Verify installation**:
-   - You should see a `CIRCUITPY` drive with a `boot_out.txt` file
-   - Open `boot_out.txt` to confirm the version is **9.2.9** (or your installed 9.x version)
-
-Your Pico is now ready for use with this configuration tool!
-
-### Installation
-
-You have two options for running the Chronos Pad Configurator:
-
----
-
-#### Option 1: Use Pre-built Executable (Windows - Recommended for Most Users)
-
-**Perfect for users who just want to configure their keyboard without installing Python.**
-
-1. **Download the latest release**:
-   - Go to the [Releases](https://github.com/D1odeKing/Chronos-Pad-Configtool/releases) page
-   - Download `ChronosPadConfigurator.exe` (approximately 38 MB)
-
-2. **Run the application**:
-   - Double-click `ChronosPadConfigurator.exe` to launch
-   - No installation or Python required!
-   - The exe is fully portable and can be run from any folder
-
-3. **First run setup**:
-   - On first launch, the tool will automatically:
-     - Download KMK firmware (GPL-3.0)
-     - Download Adafruit CircuitPython libraries (MIT)
-     - Create a `libraries/` folder next to the exe
-     - This process takes about 30 seconds
-
-4. **Start configuring**:
-   - Your settings and configurations are saved in the same folder as the exe
-   - All profiles and macros persist between sessions
-
-**Note**: Windows may show a security warning on first run since the exe is not signed. Click "More info" → "Run anyway" to proceed.
-
----
-
-#### Option 2: Run from Source (All Platforms - For Developers)
-
-**Perfect for developers, contributors, or users on Linux/macOS who want to run from Python.**
-
-**System Requirements:**
-- Python 3.8 or higher
-- pip (Python package manager)
-- Internet connection (for first-time dependency downloads)
-
-**Installation Steps:**
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/D1odeKing/Chronos-Pad-Configtool.git
-   cd Chronos-Pad-Configtool
-   ```
-
-2. **Install Python dependencies**:
-   ```bash
-   pip install PyQt6
-   ```
-   
-   Or if you prefer using a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install PyQt6
-   ```
-
-3. **Run the configurator**:
-   ```bash
-   python main.py
-   ```
-
-4. **First run**:
-   - The tool will automatically download KMK firmware and CircuitPython libraries
-   - Files are stored in `libraries/` folder in the project directory
-   - Subsequent runs will use the cached libraries
-
-**Building Your Own Executable (Windows):**
-
-If you want to create your own standalone executable:
-
-1. **Install PyInstaller**:
-   ```bash
-   pip install pyinstaller
-   ```
-
-2. **Build the executable**:
-   ```bash
-   python build_exe.py
-   ```
-   
-   Or manually:
-   ```bash
-   pyinstaller --onefile --windowed --name ChronosPadConfigurator main.py --add-data "profiles.json;."
-   ```
-
-3. **Find your exe**:
-   - Built executable will be in `dist/ChronosPadConfigurator.exe`
-   - Size will be approximately 38 MB
-   - Fully portable and ready to distribute
+Your keyboard is ready to use! Keys work, layers switch, display shows your keymap, etc.
 
 ---
 
@@ -206,167 +102,55 @@ If you want to create your own standalone executable:
 
 ## 📖 Usage Guide
 
-### Creating a Keymap
+Learn how to use the configurator to create your custom keyboard:
 
-1. **Launch the application**
-2. **Configure hardware**: Select diode orientation (COL2ROW or ROW2COL) in Hardware Configuration panel
-3. **Select keys**: Click on grid buttons to select keys
-4. **Assign keycodes**: Choose from categorized keycode lists
-5. **Add layers**: Use layer management to create multiple layouts
-6. **Create macros**: Build custom macro sequences
-7. **Configure extensions**: Set up encoder, analog input, RGB, and display
+- **[Complete Usage Guide](docs/USAGE.md)** - Creating keymaps, layers, macros, and more
+- **[Extensions Guide](docs/EXTENSIONS.md)** - Encoder, display, RGB, analog input configuration
+- **[Display Guide](docs/DISPLAY.md)** - OLED display setup and troubleshooting
 
-### Saving and Loading
-
-#### Save Configuration
-- **File → Save Configuration**: Saves keymap and settings to JSON
-- Stored in `kmk_Config_Save/` directory
-- Includes all layers and macro definitions
-
-#### Load Configuration
-- **File → Load Configuration**: Restore saved configurations
-- Automatically adapts to 5×4 grid if needed
-- Preserves macro assignments
-
-### Generating Code
-
-1. Click **"Save code.py"**
-2. Select target folder (CIRCUITPY drive auto-detected)
-3. Tool automatically:
-   - Generates complete KMK code
-   - Copies KMK firmware (if missing)
-   - Installs required libraries
-   - Saves code.py to device
-
-## 🎨 Display Features
-
-The OLED display shows a **live, layer-aware** visual representation of your keymap:
-
-- **5×4 Grid Layout**: Matches physical key positions with correct orientation
-- **Layer Indicator**: Shows current active layer at the top
-- **Real-time Updates**: Display changes automatically when you switch layers
-- **Multiple Switching Methods**: Works with encoder rotation, layer keys (KC.TO, KC.MO, KC.TG), and custom layer cycling
-- **Abbreviated Keys**: Short, readable key names
-- **Proper Mirroring**: Display matches physical layout (corrected left/right orientation)
-
-### Key Abbreviations
-- Standard keys: `A`, `B`, `1`, `2`, etc.
-- Modifiers: `LCtl`, `LSft`, `LAlt`, `LGui`
-- Special: `BkSp`, `Entr`, `Spce`, `Tab`
-- Media: `Vol+`, `Vol-`, `Mute`, `Play`
-- Macros: Shows macro name (up to 6 chars)
-- Layer switches: `MO(1)`, `TO(2)`, `TG(3)`
-
-## 🔧 Extension Configuration
-
-All hardware extensions can be **enabled or disabled** via checkboxes in the Extensions panel. When disabled, the corresponding code will not be included in the generated `code.py` file.
-
-### Encoder Setup
-- **Hardware**: GP10 (A), GP11 (B), GP14 (Button)
-- **Enable/Disable**: Use checkbox in Extensions panel
-- **Configuration**: Click "Configure" button to edit encoder map
-- **Layer Cycling**: Default configuration cycles through layers and updates display in real-time
-
-```python
-# Example encoder configuration with layer cycling
-class LayerCycler:
-    def __init__(self, keyboard, num_layers=6):
-        self.keyboard = keyboard
-        self.num_layers = num_layers
-        self.current_layer = 0
-    
-    def next_layer(self):
-        self.current_layer = (self.current_layer + 1) % self.num_layers
-        self.keyboard.active_layers[0] = self.current_layer
-        try:
-            update_display_for_layer(self.current_layer)  # Updates OLED
-        except:
-            pass
-        return False
-
-encoder_handler = EncoderHandler()
-encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)
-encoder_handler.map = [((KC.LAYER_PREV, KC.LAYER_NEXT, KC.LAYER_RESET),)]
-```
-
-### Analog Input Setup
-- **Hardware**: GP28 (10k slider potentiometer)
-- **Enable/Disable**: Use checkbox in Extensions panel
-- **Configuration**: Click "Configure" button to edit analog settings
-- **Status**: ⚠️ **Under active development** - Currently being debugged and improved
-
-```python
-# Example slider configuration (under development)
-from analogio import AnalogIn
-slider = AnalogInput(AnalogIn(board.GP28))
-analog = AnalogInputs([slider], [[AnalogKey(KC.VOLU)]])
-```
-
-### Display Configuration
-- **Hardware**: I2C OLED (SDA=GP20, SCL=GP21)
-- **Enable/Disable**: Use checkbox in Extensions panel
-- **Auto-generates**: Layer-aware keymap visualization code
-- **Configuration**: Click "Configure" button to preview generated display code
-- **Features**: 
-  - Live layer tracking via `LayerDisplaySync` module
-  - Updates on layer change (encoder, keys, or any switching method)
-  - Proper orientation with 180° rotation and column mirroring
-  - Layer indicator at top of display
-
-### RGB Configuration
-- **Hardware**: SK6812MINI LEDs on GP9
-- **Enable/Disable**: Use checkbox in Extensions panel
-- **LEDs**: 20 LEDs for 5×4 grid
-- **Pixel Order**: GRB (Green, Red, Blue)
-- **Features**: Per-key color mapping, brightness control
-- **Default**: White per-key lighting
-- **Persistence**: Stored in `kmk_Config_Save/rgb_matrix.json` (legacy `peg_rgb*` files migrate automatically)
+---
 
 ## 📁 Project Structure
 
 ```
 Chronos-Pad-Configtool/
-├── main.py                    # Main application
-├── profiles.json              # Profile definitions
-├── kmk_Config_Save/          # Saved configurations
-│   ├── kmk_config.json       # Current configuration
-│   ├── encoder.py            # Encoder config
-│   ├── analogin.py           # Analog input config
-│   ├── rgb_matrix.json       # Peg RGB matrix settings (per-key + underglow)
-│   └── macros.json           # Macro definitions
-├── libraries/                # Auto-downloaded dependencies (not in repo)
-│   ├── kmk_firmware-main/    # KMK firmware (auto-downloaded)
-│   └── adafruit-circuitpython-bundle-9.x-mpy/ # CP libraries (auto-downloaded)
-└── scripts/                  # Utility scripts
+├── docs/                          # 📚 Complete documentation
+│   ├── INSTALLATION.md           # Installation & setup
+│   ├── CIRCUITPYTHON_SETUP.md    # CircuitPython 9.x installation
+│   ├── USAGE.md                  # Usage guide
+│   ├── EXTENSIONS.md             # Hardware configuration
+│   ├── DISPLAY.md                # OLED display guide
+│   └── BUILD_EXE.md              # Building from source
+├── main.py                        # Main application
+├── build_exe.py                  # Build script for executable
+├── profiles.json                 # Default profiles
+├── kmk_Config_Save/              # Auto-created: saved configs
+├── libraries/                    # Auto-created: downloaded deps
+└── dist/                         # Auto-created: built executable
 ```
 
-> **Note:** The `libraries/` folder is automatically created and populated when you first run the tool. These files are not included in the repository to comply with licensing requirements.
+---
 
 ## 🛠️ Development
 
 ### Building the Executable
 
-To create a standalone Windows executable:
-
 ```bash
+pip install pyinstaller
 python build_exe.py
 ```
 
-The `.exe` will be created in the `dist/` folder. See [BUILD_EXE.md](BUILD_EXE.md) for detailed instructions.
+See [BUILD_EXE.md](docs/BUILD_EXE.md) for detailed instructions.
 
 ### Requirements
 - Python 3.8+
 - PyQt6 6.0+
-- PyInstaller (for building exe): `pip install pyinstaller`
-- KMK firmware (auto-downloaded on first run)
-- CircuitPython libraries (auto-downloaded on first run)
-
-**Headless/CI usage**
-- Set `KMK_SKIP_DEP_CHECK=1` to bypass dependency download prompts.
-- Set `KMK_SKIP_STARTUP_DIALOG=1` to bypass the startup restore dialog.
+- PyInstaller (for exe builds)
 
 ### Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Please submit Pull Requests.
+
+---
 
 ## 📝 License
 
