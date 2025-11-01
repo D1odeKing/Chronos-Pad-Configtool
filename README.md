@@ -18,6 +18,14 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 - **Drag-and-Drop**: Easy keycode selection from categorized lists
 - **Profile Management**: Save and load different keymap configurations
 
+### Hardware Extensions
+- **Modular Design**: Enable or disable extensions as needed
+- **Encoder Support**: ✅ Rotary encoder with button for layer cycling (GP10, GP11, GP14)
+- **Analog Input**: ⚠️ 10k slider potentiometer (GP28) - *Under development*
+- **OLED Display**: ✅ I2C display with live layer-aware keymap visualization (GP20, GP21)
+- **RGB Lighting**: ✅ SK6812MINI per-key RGB with color mapping (GP9, GRB pixel order)
+- **Configuration Persistence**: Extension states saved between sessions
+
 ### Macro System
 - **Visual Macro Builder**: Create complex macros with GUI
 - **Action Types**:
@@ -120,11 +128,12 @@ Your Pico is now ready for use with this configuration tool!
 ### Creating a Keymap
 
 1. **Launch the application**
-2. **Select keys**: Click on grid buttons to select keys
-3. **Assign keycodes**: Choose from categorized keycode lists
-4. **Add layers**: Use layer management to create multiple layouts
-5. **Create macros**: Build custom macro sequences
-6. **Configure extensions**: Set up encoder, analog input, RGB, and display
+2. **Configure hardware**: Select diode orientation (COL2ROW or ROW2COL) in Hardware Configuration panel
+3. **Select keys**: Click on grid buttons to select keys
+4. **Assign keycodes**: Choose from categorized keycode lists
+5. **Add layers**: Use layer management to create multiple layouts
+6. **Create macros**: Build custom macro sequences
+7. **Configure extensions**: Set up encoder, analog input, RGB, and display
 
 ### Saving and Loading
 
@@ -150,12 +159,14 @@ Your Pico is now ready for use with this configuration tool!
 
 ## 🎨 Display Features
 
-The OLED display shows a real-time visual representation of your keymap:
+The OLED display shows a **live, layer-aware** visual representation of your keymap:
 
-- **5×4 Grid Layout**: Matches physical key positions
+- **5×4 Grid Layout**: Matches physical key positions with correct orientation
+- **Layer Indicator**: Shows current active layer at the top
+- **Real-time Updates**: Display changes automatically when you switch layers
+- **Multiple Switching Methods**: Works with encoder rotation, layer keys (KC.TO, KC.MO, KC.TG), and custom layer cycling
 - **Abbreviated Keys**: Short, readable key names
-- **Layer 0 Display**: Shows primary layer assignments
-- **Auto-Updates**: Changes when code.py is generated
+- **Proper Mirroring**: Display matches physical layout (corrected left/right orientation)
 
 ### Key Abbreviations
 - Standard keys: `A`, `B`, `1`, `2`, etc.
@@ -163,30 +174,72 @@ The OLED display shows a real-time visual representation of your keymap:
 - Special: `BkSp`, `Entr`, `Spce`, `Tab`
 - Media: `Vol+`, `Vol-`, `Mute`, `Play`
 - Macros: Shows macro name (up to 6 chars)
+- Layer switches: `MO(1)`, `TO(2)`, `TG(3)`
 
 ## 🔧 Extension Configuration
 
+All hardware extensions can be **enabled or disabled** via checkboxes in the Extensions panel. When disabled, the corresponding code will not be included in the generated `code.py` file.
+
 ### Encoder Setup
+- **Hardware**: GP10 (A), GP11 (B), GP14 (Button)
+- **Enable/Disable**: Use checkbox in Extensions panel
+- **Configuration**: Click "Configure" button to edit encoder map
+- **Layer Cycling**: Default configuration cycles through layers and updates display in real-time
+
 ```python
-# Example encoder configuration
+# Example encoder configuration with layer cycling
+class LayerCycler:
+    def __init__(self, keyboard, num_layers=6):
+        self.keyboard = keyboard
+        self.num_layers = num_layers
+        self.current_layer = 0
+    
+    def next_layer(self):
+        self.current_layer = (self.current_layer + 1) % self.num_layers
+        self.keyboard.active_layers[0] = self.current_layer
+        try:
+            update_display_for_layer(self.current_layer)  # Updates OLED
+        except:
+            pass
+        return False
+
 encoder_handler = EncoderHandler()
 encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)
-encoder_handler.map = [((KC.VOLD, KC.VOLU, KC.MUTE),)]
+encoder_handler.map = [((KC.LAYER_PREV, KC.LAYER_NEXT, KC.LAYER_RESET),)]
 ```
 
 ### Analog Input Setup
+- **Hardware**: GP28 (10k slider potentiometer)
+- **Enable/Disable**: Use checkbox in Extensions panel
+- **Configuration**: Click "Configure" button to edit analog settings
+- **Status**: ⚠️ **Under active development** - Currently being debugged and improved
+
 ```python
-# Example slider configuration
+# Example slider configuration (under development)
 from analogio import AnalogIn
 slider = AnalogInput(AnalogIn(board.GP28))
 analog = AnalogInputs([slider], [[AnalogKey(KC.VOLU)]])
 ```
 
+### Display Configuration
+- **Hardware**: I2C OLED (SDA=GP20, SCL=GP21)
+- **Enable/Disable**: Use checkbox in Extensions panel
+- **Auto-generates**: Layer-aware keymap visualization code
+- **Configuration**: Click "Configure" button to preview generated display code
+- **Features**: 
+  - Live layer tracking via `LayerDisplaySync` module
+  - Updates on layer change (encoder, keys, or any switching method)
+  - Proper orientation with 180° rotation and column mirroring
+  - Layer indicator at top of display
+
 ### RGB Configuration
-- 20 LEDs for 5×4 grid
-- WS2812 RGB order (GRB)
-- Brightness control via keycodes
-- Default: White per-key lighting
+- **Hardware**: SK6812MINI LEDs on GP9
+- **Enable/Disable**: Use checkbox in Extensions panel
+- **LEDs**: 20 LEDs for 5×4 grid
+- **Pixel Order**: GRB (Green, Red, Blue)
+- **Features**: Per-key color mapping, brightness control
+- **Default**: White per-key lighting
+- **Persistence**: Stored in `kmk_Config_Save/rgb_matrix.json` (legacy `peg_rgb*` files migrate automatically)
 
 ## 📁 Project Structure
 
@@ -198,7 +251,7 @@ Chronos-Pad-Configtool/
 │   ├── kmk_config.json       # Current configuration
 │   ├── encoder.py            # Encoder config
 │   ├── analogin.py           # Analog input config
-│   ├── peg_rgb.py            # RGB config
+│   ├── rgb_matrix.json       # Peg RGB matrix settings (per-key + underglow)
 │   └── macros.json           # Macro definitions
 ├── libraries/                # Auto-downloaded dependencies (not in repo)
 │   ├── kmk_firmware-main/    # KMK firmware (auto-downloaded)
@@ -215,6 +268,10 @@ Chronos-Pad-Configtool/
 - PyQt6 6.0+
 - KMK firmware (auto-downloaded on first run)
 - CircuitPython libraries (auto-downloaded on first run)
+
+**Headless/CI usage**
+- Set `KMK_SKIP_DEP_CHECK=1` to bypass dependency download prompts.
+- Set `KMK_SKIP_STARTUP_DIALOG=1` to bypass the startup restore dialog.
 
 ### Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -283,6 +340,23 @@ For all hardware details, PCB files, build instructions, and case designs, pleas
 This configuration tool is designed specifically for the Chronos Pad. All hardware-specific documentation and setup are maintained in the hardware repo.
 
 ## 🔄 Version History
+
+### v1.1.0 (2025-11-01) - Current
+- ✅ **OLED Display Enhancements**:
+  - Layer-aware display updates in real-time
+  - Correct left/right orientation (column mirroring)
+  - Fixed top-to-bottom row ordering
+  - `LayerDisplaySync` module for automatic layer tracking
+  - Updates on encoder rotation, layer keys, or any switching method
+- ✅ **Encoder Improvements**:
+  - Layer cycling with display integration
+  - Custom keycodes for layer navigation
+- ✅ **RGB Matrix Refactor**:
+  - Migrated to `rgb_matrix.json` storage format
+  - Per-key and underglow color mapping
+  - Automatic legacy file migration
+- ⚠️ **Known Issues**:
+  - Analog input functionality under active development
 
 ### v1.0.0 (2025-10-25)
 - Initial release
