@@ -1,35 +1,203 @@
 {
-    "rows": 2,
-    "cols": 2,
-    "col_pins": [
-        "board.GP0",
-        "board.GP1"
-    ],
-    "row_pins": [
-        "board.GP2",
-        "board.GP3"
-    ],
-    "diode_orientation": "COL2ROW",
-    "keymap_data": [
-        [
+    "version": "2.0",
+    "hardware": {
+        "rows": 5,
+        "cols": 4,
+        "col_pins": [
+            "board.GP0",
+            "board.GP1",
+            "board.GP2",
+            "board.GP3"
+        ],
+        "row_pins": [
+            "board.GP8",
+            "board.GP7",
+            "board.GP6",
+            "board.GP5",
+            "board.GP4"
+        ],
+        "diode_orientation": "COL2ROW"
+    },
+    "keymap": {
+        "layers": [
             [
-                "MACRO(CMD)",
-                "MACRO(COPY)"
+                [
+                    "KC.TG(1)",
+                    "KC.B",
+                    "KC.C",
+                    "KC.D"
+                ],
+                [
+                    "KC.E",
+                    "KC.F",
+                    "KC.G",
+                    "KC.H"
+                ],
+                [
+                    "KC.LCTL",
+                    "KC.LSFT",
+                    "KC.LALT",
+                    "KC.LGUI"
+                ],
+                [
+                    "KC.UP",
+                    "KC.DOWN",
+                    "KC.LEFT",
+                    "KC.RGHT"
+                ],
+                [
+                    "KC.MUTE",
+                    "KC.VOLU",
+                    "KC.VOLD",
+                    "KC.BRIU"
+                ]
             ],
             [
-                "KC.TG(1)",
-                "MACRO(PASTE)"
+                [
+                    "KC.TG(1)",
+                    "KC.KP_DOT",
+                    "KC.KP_0",
+                    "KC.KP_0"
+                ],
+                [
+                    "KC.KP_ENTER",
+                    "KC.KP_3",
+                    "KC.KP_2",
+                    "KC.KP_1"
+                ],
+                [
+                    "KC.KP_PLUS",
+                    "KC.KP_6",
+                    "KC.KP_5",
+                    "KC.KP_4"
+                ],
+                [
+                    "KC.KP_PLUS",
+                    "KC.KP_9",
+                    "KC.KP_8",
+                    "KC.KP_7"
+                ],
+                [
+                    "KC.KP_MINUS",
+                    "KC.KP_ASTERISK",
+                    "KC.KP_SLASH",
+                    "KC.NUMLOCK"
+                ]
             ]
         ],
-        [
+        "current_layer": 0
+    },
+    "macros": {
+        "PASTE": [
             [
-                "KC.C",
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "tap",
+                "KC.V"
+            ],
+            [
+                "release",
+                "KC.LCTL"
+            ]
+        ],
+        "COPY": [
+            [
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "tap",
+                "KC.C"
+            ],
+            [
+                "release",
+                "KC.LCTL"
+            ]
+        ],
+        "STYLE1": [
+            [
+                "press",
+                "KC.LCTL"
+            ],
+            [
+                "press",
+                "KC.LSFT"
+            ],
+            [
+                "press",
                 "KC.D"
             ],
             [
-                "KC.TG(1)",
-                "KC.VOLU"
+                "press",
+                "KC.A"
+            ],
+            [
+                "release",
+                "KC.A"
+            ],
+            [
+                "release",
+                "KC.D"
+            ],
+            [
+                "release",
+                "KC.LSFT"
+            ],
+            [
+                "release",
+                "KC.LCTL"
             ]
         ]
-    ]
+    },
+    "rgb": {
+        "enabled": true,
+        "matrix": {
+            "pixel_pin": "board.GP9",
+            "brightness_limit": 0.5,
+            "rgb_order": "GRB",
+            "disable_auto_write": true,
+            "num_underglow": 0,
+            "default_key_color": "#FFFFFF",
+            "default_underglow_color": "#000000",
+            "key_colors": {
+                "1": "#87CEEB",
+                "2": "#87CEEB",
+                "3": "#87CEEB",
+                "4": "#87CEEB",
+                "5": "#87CEEB",
+                "6": "#87CEEB",
+                "7": "#87CEEB",
+                "8": "#98FB98",
+                "9": "#F0E68C",
+                "10": "#FFDAB9",
+                "11": "#A8E6CF",
+                "12": "#FFD93D",
+                "13": "#FFD93D",
+                "14": "#FFD93D",
+                "15": "#FFD93D",
+                "16": "#F38181",
+                "17": "#F38181",
+                "18": "#F38181",
+                "19": "#F38181",
+                "0": "#FCBAD3"
+            },
+            "underglow_colors": {}
+        }
+    },
+    "extensions": {
+        "encoder": {
+            "enabled": true,
+            "config_str": "# --- Rotary Encoder Configuration ---\nfrom kmk.modules.encoder import EncoderHandler\n\n# Encoder configuration with layer cycling using KC.TO()\nencoder_handler = EncoderHandler()\nencoder_handler.pins = ((board.GP10, board.GP11, board.GP14, False),)\n\n# Build encoder map for each layer\n# Each layer's encoder: (CCW action, CW action, Button press action)\nencoder_map = []\nfor i in range(2):\n    next_layer = (i + 1) % 2\n    prev_layer = (i - 1) % 2\n    # CCW=prev layer, CW=next layer, Press=layer 0\n    encoder_map.append(((KC.TO(prev_layer), KC.TO(next_layer), KC.TO(0)),))\n\nencoder_handler.map = encoder_map\nkeyboard.modules.append(encoder_handler)\n\n# Initialize layer cycler after keymap is defined\n# NOTE: Add this line AFTER keyboard.keymap = [...] in your code.py:\n# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))"
+        },
+        "analogin": {
+            "enabled": true,
+            "config_str": "from analogio import AnalogIn as AnalogInPin\nimport time\n\n# LED brightness control via 10k sliding potentiometer on GP28\nclass BrightnessSlider:\n    def __init__(self, keyboard, pin, poll_interval=0.05):\n        self.keyboard = keyboard\n        self.analog_pin = AnalogInPin(pin)\n        self.poll_interval = poll_interval\n        self.last_poll = time.monotonic()\n        self.threshold = 2000  # Minimum change to trigger brightness adjustment (out of 65535)\n        \n    def read_value(self):\n        \"\"\"Read analog value (0-65535)\"\"\"\n        return self.analog_pin.value\n    \n    def during_bootup(self, keyboard):\n        \"\"\"Initialize at boot\"\"\"\n        return\n    \n    def before_matrix_scan(self, keyboard):\n        \"\"\"Check slider position before each matrix scan\"\"\"\n        return\n    \n    def after_matrix_scan(self, keyboard):\n        \"\"\"Check slider position after each matrix scan\"\"\"\n        current_time = time.monotonic()\n        \n        # Only poll at specified interval to avoid excessive checking\n        if current_time - self.last_poll < self.poll_interval:\n            return\n        \n        self.last_poll = current_time\n        current_value = self.read_value()\n        \n        # Convert 16-bit ADC value (0-65535) to brightness (0.0-1.0)\n        # Using 0.3 as max to reduce current consumption\n        target_brightness = (current_value / 65535.0) * 0.3\n        \n        # Check if keyboard has RGB extension\n        if hasattr(keyboard, 'extensions'):\n            for ext in keyboard.extensions:\n                if hasattr(ext, 'set_brightness'):\n                    ext.set_brightness(target_brightness)\n                elif hasattr(ext, 'brightness'):\n                    ext.brightness = target_brightness\n                    if hasattr(ext, 'neopixel') and ext.neopixel:\n                        ext.neopixel.brightness = target_brightness\n        \n        return\n    \n    def before_hid_send(self, keyboard):\n        \"\"\"Called before HID report is sent\"\"\"\n        return\n    \n    def after_hid_send(self, keyboard):\n        \"\"\"Called after HID report is sent\"\"\"\n        return\n    \n    def on_powersave_enable(self, keyboard):\n        \"\"\"Called when powersave is enabled\"\"\"\n        return\n    \n    def on_powersave_disable(self, keyboard):\n        \"\"\"Called when powersave is disabled\"\"\"\n        return\n\n# Create and register brightness slider extension\nbrightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval=0.05)\nkeyboard.extensions.append(brightness_slider)\n"
+        },
+        "display": {
+            "enabled": true,
+            "config_str": ""
+        }
+    }
 }

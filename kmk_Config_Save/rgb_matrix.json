@@ -1,0 +1,32 @@
+{
+  "pixel_pin": "board.GP9",
+  "brightness_limit": 0.5,
+  "rgb_order": "GRB",
+  "disable_auto_write": true,
+  "num_underglow": 0,
+  "default_key_color": "#FFFFFF",
+  "default_underglow_color": "#000000",
+  "key_colors": {
+    "1": "#87CEEB",
+    "2": "#87CEEB",
+    "3": "#87CEEB",
+    "4": "#87CEEB",
+    "5": "#87CEEB",
+    "6": "#87CEEB",
+    "7": "#87CEEB",
+    "8": "#98FB98",
+    "9": "#F0E68C",
+    "10": "#FFDAB9",
+    "11": "#A8E6CF",
+    "12": "#FFD93D",
+    "13": "#FFD93D",
+    "14": "#FFD93D",
+    "15": "#FFD93D",
+    "16": "#F38181",
+    "17": "#F38181",
+    "18": "#F38181",
+    "19": "#F38181",
+    "0": "#FCBAD3"
+  },
+  "underglow_colors": {}
+}

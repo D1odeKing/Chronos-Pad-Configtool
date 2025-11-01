@@ -105,6 +105,14 @@ Your Pico is now ready for use with this configuration tool!
 
 ### Installation
 
+**Option 1: Run the Executable (Windows - Easy!)**
+
+1. Download `ChronosPadConfigurator.exe` from the [Releases](https://github.com/D1odeKing/Chronos-Pad-Configtool/releases) page
+2. Double-click to run (no installation needed!)
+3. On first run, it will automatically download KMK firmware and libraries
+
+**Option 2: Run from Source (All Platforms)**
+
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/D1odeKing/Chronos-Pad-Configtool.git
@@ -263,9 +271,20 @@ Chronos-Pad-Configtool/
 
 ## 🛠️ Development
 
+### Building the Executable
+
+To create a standalone Windows executable:
+
+```bash
+python build_exe.py
+```
+
+The `.exe` will be created in the `dist/` folder. See [BUILD_EXE.md](BUILD_EXE.md) for detailed instructions.
+
 ### Requirements
 - Python 3.8+
 - PyQt6 6.0+
+- PyInstaller (for building exe): `pip install pyinstaller`
 - KMK firmware (auto-downloaded on first run)
 - CircuitPython libraries (auto-downloaded on first run)
 
