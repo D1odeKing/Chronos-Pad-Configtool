@@ -169,6 +169,22 @@ FIXED_RGB_PIN = "board.GP9"
 FIXED_DISPLAY_PINS = {"scl": "board.GP21", "sda": "board.GP20"}
 
 
+# Chronos Pad physical LED order (per-key indices -> NeoPixel index)
+# Layout mirrored across both axes (top to bottom):
+#  0  1  2  3
+#  7  6  5  4
+#  8  9 10 11
+# 15 14 13 12
+# 16 17 18 19
+KEY_PIXEL_ORDER = [
+    0, 1, 2, 3,
+    7, 6, 5, 4,
+    8, 9, 10, 11,
+    15, 14, 13, 12,
+    16, 17, 18, 19,
+]
+
+
 def build_default_rgb_matrix_config():
     """Create a fresh RGB matrix configuration with sane defaults."""
     return {
@@ -180,6 +196,7 @@ def build_default_rgb_matrix_config():
         "default_key_color": "#FFFFFF",
         "default_underglow_color": "#000000",
         "key_colors": {},
+        "layer_key_colors": {},
         "underglow_colors": {},
     }
 
@@ -1802,6 +1819,7 @@ class PerKeyColorDialog(QDialog):
         underglow_colors=None,
         default_key_color="#FFFFFF",
         default_underglow_color="#000000",
+        layer_index=0,
     ):
         super().__init__(parent)
         self.setWindowTitle("RGB Matrix Colors")
@@ -1809,6 +1827,7 @@ class PerKeyColorDialog(QDialog):
         self.cols = cols
         self.underglow_count = max(0, underglow_count)
         self.parent_ref = parent
+        self.layer_index = int(layer_index) if layer_index is not None else 0
 
         key_default = ensure_hex_prefix(default_key_color, "#FFFFFF")
         under_default = ensure_hex_prefix(default_underglow_color, "#000000")
@@ -1828,8 +1847,8 @@ class PerKeyColorDialog(QDialog):
         layout = QVBoxLayout(self)
 
         info_label = QLabel(
-            "Peg RGB Matrix applies a single static color map across all layers. "
-            "Use your current layer for category presets; KC.NO keys are treated as off."
+            f"Editing colors for layer {self.layer_index}. Unset keys fall back to the global palette; "
+            "KC.NO entries remain off."
         )
         info_label.setWordWrap(True)
         info_label.setStyleSheet(
@@ -2172,13 +2191,11 @@ class PerKeyColorDialog(QDialog):
                 btn.setStyleSheet(f"background-color: {hexc};")
 
     def apply_category_color(self, category):
-        parent = self.parent_ref
-        if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
+        _, layer_data = self._get_layer_data()
+        if layer_data is None:
             QMessageBox.warning(self, "Error", "Cannot access keymap data")
             return
 
-        layer_idx = parent.current_layer if 0 <= parent.current_layer < len(parent.keymap_data) else 0
-        layer_data = parent.keymap_data[layer_idx]
         color = self.category_colors.get(category, self.fill_color)
 
         idx = 0
@@ -2202,13 +2219,10 @@ class PerKeyColorDialog(QDialog):
                 btn.setStyleSheet(f"background-color: {hexc};")
 
     def apply_granular_color(self, granular_type):
-        parent = self.parent_ref
-        if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
+        _, layer_data = self._get_layer_data()
+        if layer_data is None:
             QMessageBox.warning(self, "Error", "Cannot access keymap data")
             return
-
-        layer_idx = parent.current_layer if 0 <= parent.current_layer < len(parent.keymap_data) else 0
-        layer_data = parent.keymap_data[layer_idx]
         color = self.granular_colors.get(granular_type, self.fill_color)
 
         number_keys = ['KC.N1', 'KC.N2', 'KC.N3', 'KC.N4', 'KC.N5', 'KC.N6', 'KC.N7', 'KC.N8', 'KC.N9', 'KC.N0']
@@ -2266,6 +2280,14 @@ class PerKeyColorDialog(QDialog):
 
         self.refresh_key_buttons()
 
+    def _get_layer_data(self):
+        parent = self.parent_ref
+        if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
+            return None, None
+        layers = parent.keymap_data
+        idx = self.layer_index if 0 <= self.layer_index < len(layers) else 0
+        return idx, layers[idx]
+
     def _matches_category(self, category: str, keycode: str) -> bool:
         if category == 'macro' and keycode.startswith('MACRO('):
             return True
@@ -2298,7 +2320,16 @@ class PerKeyColorDialog(QDialog):
     def accept(self):
         if self.parent_ref and hasattr(self.parent_ref, 'rgb_matrix_config'):
             config = self.parent_ref.rgb_matrix_config
-            config['key_colors'] = self.key_colors.copy()
+            layer_colors = config.setdefault('layer_key_colors', {})
+            layer_key = str(self.layer_index)
+            if self.key_colors:
+                layer_colors[layer_key] = self.key_colors.copy()
+            elif layer_key in layer_colors:
+                layer_colors.pop(layer_key)
+
+            if self.layer_index == 0:
+                config['key_colors'] = self.key_colors.copy()
+
             config['underglow_colors'] = self.underglow_colors.copy()
             self.parent_ref.update_macropad_display()
         super().accept()
@@ -2672,6 +2703,15 @@ class KMKConfigurator(QMainWindow):
             current = getattr(self, 'rgb_matrix_config', None) or {}
             rgb_config.update(current)
             rgb_config['key_colors'] = dict(current.get('key_colors', {}))
+            layer_colors = {}
+            for layer, mapping in (current.get('layer_key_colors', {}) or {}).items():
+                sanitized = {
+                    str(k): ensure_hex_prefix(v, rgb_config.get('default_key_color', '#FFFFFF'))
+                    for k, v in (mapping or {}).items()
+                }
+                if sanitized:
+                    layer_colors[str(layer)] = sanitized
+            rgb_config['layer_key_colors'] = layer_colors
             rgb_config['underglow_colors'] = dict(current.get('underglow_colors', {}))
             with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
                 json.dump(rgb_config, f, indent=2)
@@ -2716,6 +2756,18 @@ class KMKConfigurator(QMainWindow):
                 merged = build_default_rgb_matrix_config()
                 merged.update(data)
                 merged['key_colors'] = dict(data.get('key_colors', {}))
+                layer_colors_raw = data.get('layer_key_colors', {}) or {}
+                layer_colors = {}
+                for layer, mapping in layer_colors_raw.items():
+                    sanitized = {
+                        str(k): ensure_hex_prefix(v, merged.get('default_key_color', '#FFFFFF'))
+                        for k, v in (mapping or {}).items()
+                    }
+                    if sanitized:
+                        layer_colors[str(layer)] = sanitized
+                if not layer_colors and merged['key_colors']:
+                    layer_colors['0'] = dict(merged['key_colors'])
+                merged['layer_key_colors'] = layer_colors
                 merged['underglow_colors'] = dict(data.get('underglow_colors', {}))
                 merged['default_key_color'] = ensure_hex_prefix(
                     merged.get('default_key_color', '#FFFFFF'), '#FFFFFF'
@@ -2740,6 +2792,7 @@ class KMKConfigurator(QMainWindow):
                     str(k): ensure_hex_prefix(v, config['default_key_color'])
                     for k, v in layer_zero.items()
                 }
+                config['layer_key_colors'] = {'0': dict(config['key_colors'])} if config['key_colors'] else {}
                 self.rgb_matrix_config = config
                 try:
                     self.save_extension_configs()
@@ -2876,22 +2929,22 @@ class KMKConfigurator(QMainWindow):
         rgb_colors_btn = QPushButton("Per-key Colors")
         def open_per_key_colors():
             cfg = self.rgb_matrix_config
+            layer_idx = self.current_layer if 0 <= self.current_layer < len(self.keymap_data) else 0
+            layer_overrides = cfg.get('layer_key_colors', {}) or {}
+            key_map = layer_overrides.get(str(layer_idx), cfg.get('key_colors', {}))
             pc = PerKeyColorDialog(
                 self,
                 rows=self.rows,
                 cols=self.cols,
-                key_colors=cfg.get('key_colors', {}),
+                key_colors=key_map,
                 underglow_count=cfg.get('num_underglow', 0),
                 underglow_colors=cfg.get('underglow_colors', {}),
                 default_key_color=cfg.get('default_key_color', '#FFFFFF'),
                 default_underglow_color=cfg.get('default_underglow_color', '#000000'),
+                layer_index=layer_idx,
             )
             if pc.exec():
-                key_map, underglow_map = pc.get_maps()
-                cfg['key_colors'] = key_map
-                cfg['underglow_colors'] = underglow_map
                 self.save_extension_configs()
-                self.update_macropad_display()
         rgb_colors_btn.clicked.connect(open_per_key_colors)
         rgb_layout.addWidget(rgb_colors_btn)
         self.rgb_colors_btn = rgb_colors_btn
@@ -3037,20 +3090,21 @@ class KMKConfigurator(QMainWindow):
 
         def open_colors():
             cfg = self.rgb_matrix_config
+            layer_idx = self.current_layer if 0 <= self.current_layer < len(self.keymap_data) else 0
+            layer_overrides = cfg.get('layer_key_colors', {}) or {}
+            key_map = layer_overrides.get(str(layer_idx), cfg.get('key_colors', {}))
             pc = PerKeyColorDialog(
                 self,
                 rows=self.rows,
                 cols=self.cols,
-                key_colors=cfg.get('key_colors', {}),
+                key_colors=key_map,
                 underglow_count=cfg.get('num_underglow', 0),
                 underglow_colors=cfg.get('underglow_colors', {}),
                 default_key_color=cfg.get('default_key_color', '#FFFFFF'),
                 default_underglow_color=cfg.get('default_underglow_color', '#000000'),
+                layer_index=layer_idx,
             )
             if pc.exec():
-                key_map, underglow_map = pc.get_maps()
-                cfg['key_colors'] = key_map
-                cfg['underglow_colors'] = underglow_map
                 self.save_extension_configs()
 
         try:
@@ -3820,45 +3874,68 @@ keyboard.modules.append(layer_display_sync)
         underglow_count = int(cfg.get('num_underglow', 0) or 0)
         total_pixels = num_keys + max(0, underglow_count)
 
-        key_map = cfg.get('key_colors', {}) or {}
+        keymap_layers = self.keymap_data or []
+        num_layers = max(1, len(keymap_layers))
+        layer_key_overrides = cfg.get('layer_key_colors', {}) or {}
+        global_key_map = cfg.get('key_colors', {}) or {}
         default_key_rgb = hex_to_rgb_list(cfg['default_key_color'])
+        default_under_rgb = hex_to_rgb_list(cfg['default_underglow_color'])
 
-        key_entries = []
-        for idx in range(num_keys):
-            custom = key_map.get(str(idx))
-            if custom:
-                rgb = hex_to_rgb_list(custom)
-            else:
-                row = idx // self.cols
-                col = idx % self.cols
-                keycode = DEFAULT_KEY
-                if self.keymap_data and self.keymap_data[0]:
-                    try:
-                        keycode = self.keymap_data[0][row][col]
-                    except (IndexError, TypeError):
-                        keycode = DEFAULT_KEY
-                rgb = [0, 0, 0] if keycode == "KC.NO" else default_key_rgb
-            key_entries.append(f"[{rgb[0]}, {rgb[1]}, {rgb[2]}]")
+        key_entries_by_layer = []
+        for layer_idx in range(num_layers):
+            layer_data = keymap_layers[layer_idx] if 0 <= layer_idx < len(keymap_layers) else None
+            entries = []
+            overrides = layer_key_overrides.get(str(layer_idx), {}) or {}
+            for idx in range(num_keys):
+                override_color = overrides.get(str(idx)) or global_key_map.get(str(idx))
+                if override_color:
+                    rgb = hex_to_rgb_list(override_color)
+                else:
+                    row = idx // self.cols
+                    col = idx % self.cols
+                    keycode = DEFAULT_KEY
+                    if layer_data and row < len(layer_data) and col < len(layer_data[row]):
+                        keycode = layer_data[row][col]
+                    elif keymap_layers:
+                        base_layer = keymap_layers[0]
+                        if row < len(base_layer) and col < len(base_layer[row]):
+                            keycode = base_layer[row][col]
+                    if keycode == "KC.TRNS" and layer_idx > 0 and key_entries_by_layer:
+                        rgb = key_entries_by_layer[layer_idx - 1][idx][:]
+                    elif keycode == "KC.NO":
+                        rgb = [0, 0, 0]
+                    else:
+                        rgb = default_key_rgb.copy()
+                entries.append(rgb)
+            key_entries_by_layer.append(entries)
 
         under_map = cfg.get('underglow_colors', {}) or {}
-        default_under_rgb = hex_to_rgb_list(cfg['default_underglow_color'])
-        under_entries = []
+        under_entries_rgb = []
         for idx in range(max(0, underglow_count)):
             custom = under_map.get(str(idx))
-            rgb = hex_to_rgb_list(custom) if custom else default_under_rgb
-            under_entries.append(f"[{rgb[0]}, {rgb[1]}, {rgb[2]}]")
+            if custom:
+                under_entries_rgb.append(hex_to_rgb_list(custom))
+            else:
+                under_entries_rgb.append(default_under_rgb.copy())
 
         def format_entries(entries):
             if not entries:
                 return "[]"
             chunks = []
             for start in range(0, len(entries), 8):
-                chunk = ", ".join(entries[start:start+8])
+                chunk = ", ".join(f"[{rgb[0]}, {rgb[1]}, {rgb[2]}]" for rgb in entries[start:start+8])
                 chunks.append(f"                {chunk}")
             return "[\n" + ",\n".join(chunks) + "\n            ]"
 
-        keys_array = format_entries(key_entries)
-        under_array = format_entries(under_entries)
+        keys_array = format_entries(key_entries_by_layer[0] if key_entries_by_layer else [])
+        under_array = format_entries(under_entries_rgb)
+
+        layer_rgb_maps = []
+        for entries in key_entries_by_layer:
+            combined = [list(rgb) for rgb in entries]
+            if under_entries_rgb:
+                combined.extend([list(rgb) for rgb in under_entries_rgb])
+            layer_rgb_maps.append(combined)
 
         rgb_order = cfg.get('rgb_order', 'GRB')
         order_tuple = RGB_ORDER_TUPLES.get(rgb_order, RGB_ORDER_TUPLES['GRB'])
@@ -3878,12 +3955,22 @@ keyboard.modules.append(layer_display_sync)
         if not pixel_pin:
             pixel_pin = FIXED_RGB_PIN
 
+        key_pixel_pos = KEY_PIXEL_ORDER[:num_keys]
+        if len(key_pixel_pos) != num_keys:
+            key_pixel_pos = list(range(num_keys))
+
+        led_key_pos_entries = key_pixel_pos.copy()
+        for idx in range(underglow_count):
+            led_key_pos_entries.append(num_keys + idx)
+
+        led_key_repr = ", ".join(str(p) for p in led_key_pos_entries)
+
         code_lines = [
             "# Peg RGB Matrix configuration",
             f"keyboard.rgb_pixel_pin = {pixel_pin}",
             f"keyboard.num_pixels = {total_pixels}",
             f"keyboard.brightness_limit = {brightness}",
-            f"keyboard.led_key_pos = list(range({total_pixels}))  # Keys + underglow indices",
+            f"keyboard.led_key_pos = [{led_key_repr}]  # Key pixel mapping + underglow",
             "rgb = Rgb_matrix(",
         ]
 
@@ -3903,6 +3990,81 @@ keyboard.modules.append(layer_display_sync)
             ")",
             "keyboard.extensions.append(rgb)\n",
         ])
+
+        layer_rgb_maps_str = json.dumps(layer_rgb_maps, indent=4)
+        code_lines.append("layer_rgb_maps = " + layer_rgb_maps_str)
+        code_lines.append("")
+        code_lines.extend([
+            "class LayerRgbSync:",
+            '    """Update Peg RGB colors to match the active layer."""',
+            "    def __init__(self, rgb_ext, layer_maps):",
+            "        self.rgb_ext = rgb_ext",
+            "        self.layer_maps = layer_maps or []",
+            "        self._last_layer = None",
+            "        self._applied_once = False",
+            "",
+            "    def _active_layer(self, keyboard):",
+            "        try:",
+            '            layers = getattr(keyboard, "active_layers", None)',
+            "            if layers:",
+            "                return layers[-1]",
+            "        except Exception:",
+            "            pass",
+            "        return 0",
+            "",
+            "    def _apply(self, keyboard, layer):",
+            "        if not self.rgb_ext or not self.layer_maps:",
+            "            return",
+            "        idx = layer if 0 <= layer < len(self.layer_maps) else 0",
+            "        target_map = self.layer_maps[idx]",
+            "        if not target_map:",
+            "            return",
+            "        self.rgb_ext.ledDisplay = [list(rgb) for rgb in target_map]",
+            "        neopixel_obj = getattr(self.rgb_ext, 'neopixel', None)",
+            "        if not neopixel_obj:",
+            "            return",
+            "        try:",
+            "            self.rgb_ext.setBasedOffDisplay()",
+            "            if getattr(self.rgb_ext, 'disable_auto_write', False):",
+            "                neopixel_obj.show()",
+            "            self._last_layer = layer",
+            "            self._applied_once = True",
+            "        except Exception:",
+            "            pass",
+            "",
+            "    def _check(self, keyboard):",
+            "        if not self.layer_maps:",
+            "            return",
+            "        layer = self._active_layer(keyboard)",
+            "        if layer != self._last_layer or not self._applied_once:",
+            "            self._apply(keyboard, layer)",
+            "",
+            "    def during_bootup(self, keyboard):",
+            "        self._last_layer = None",
+            "        self._applied_once = False",
+            "        self._apply(keyboard, self._active_layer(keyboard))",
+            "",
+            "    def after_matrix_scan(self, keyboard):",
+            "        self._check(keyboard)",
+            "",
+            "    def after_hid_send(self, keyboard):",
+            "        self._check(keyboard)",
+            "",
+            "    def before_hid_send(self, keyboard):",
+            "        self._check(keyboard)",
+            "",
+            "    def before_matrix_scan(self, keyboard):",
+            "        return",
+            "",
+            "    def on_powersave_enable(self, keyboard):",
+            "        return",
+            "",
+            "    def on_powersave_disable(self, keyboard):",
+            "        return",
+        ])
+        code_lines.append("")
+        code_lines.append("layer_rgb_sync = LayerRgbSync(rgb, layer_rgb_maps)")
+        code_lines.append("keyboard.modules.append(layer_rgb_sync)\n")
 
         return "\n".join(code_lines)
     
@@ -4498,6 +4660,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         
         layer_data = self.keymap_data[self.current_layer]
         rgb_cfg = getattr(self, 'rgb_matrix_config', build_default_rgb_matrix_config())
+        layer_colors = (rgb_cfg.get('layer_key_colors', {}) or {}).get(str(self.current_layer), {})
         key_colors = rgb_cfg.get('key_colors', {})
         
         idx = 0
@@ -4516,8 +4679,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     button.setText(display_text)
                     
                     # Apply RGB color if assigned to this key
-                    if str(idx) in key_colors:
-                        color = key_colors[str(idx)]
+                    color = layer_colors.get(str(idx)) or key_colors.get(str(idx))
+                    if color:
                         # Use white text for dark colors, black text for light colors
                         # Simple luminance check
                         try:
