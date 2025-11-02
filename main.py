@@ -246,7 +246,8 @@ def ensure_hex_prefix(color: str, fallback: str) -> str:
     return f"#{clean.upper()}"
 
 # --- Default Extension Configuration Templates ---
-DEFAULT_ENCODER_CONFIG = '''from kmk.modules.encoder import EncoderHandler
+DEFAULT_ENCODER_CONFIG = '''import board
+from kmk.modules.encoder import EncoderHandler
 
 # Custom layer cycling for encoder
 class LayerCycler:
@@ -291,6 +292,7 @@ KC.LAYER_PREV = KC.make_key(on_press=lambda k, *args: layer_cycler.prev_layer() 
 KC.LAYER_RESET = KC.make_key(on_press=lambda k, *args: layer_cycler.reset_layer() if layer_cycler else None)
 
 encoder_handler = EncoderHandler()
+encoder_handler.divisor = 4
 encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)  # (a, b, button)
 encoder_handler.map = [((KC.LAYER_PREV, KC.LAYER_NEXT, KC.LAYER_RESET),)]  # CCW=prev, CW=next, Press=reset to layer 0
 keyboard.modules.append(encoder_handler)
@@ -299,7 +301,9 @@ keyboard.modules.append(encoder_handler)
 # Add this line after keyboard.keymap = [...] in your main code:
 # layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))'''
 
-DEFAULT_ANALOGIN_CONFIG = '''from analogio import AnalogIn as AnalogInPin
+DEFAULT_ANALOGIN_CONFIG = '''import board
+from analogio import AnalogIn as AnalogInPin
+from kmk.keys import KC
 import time
 
 # Volume control via 10k sliding potentiometer
@@ -315,90 +319,64 @@ class VolumeSlider:
         self.step_size = 1  # Number of volume steps per change
         self.idle_timeout = 2.0  # Seconds of no movement before requiring re-sync
         self.synced = False  # Track if we've established direction after idle
-        
+
     def read_value(self):
         """Read analog value (0-65535)"""
         return self.analog_pin.value
-    
+
     def during_bootup(self, keyboard):
         """Initialize at boot"""
         self.last_value = self.read_value()
         self.synced = False  # Require initial movement to establish baseline
         return
-    
+
     def before_matrix_scan(self, keyboard):
-        """Check slider position before each matrix scan"""
         return
-    
+
     def after_matrix_scan(self, keyboard):
         """Check slider position after each matrix scan"""
         current_time = time.monotonic()
-        
-        # Only poll at specified interval to avoid excessive checking
+
         if current_time - self.last_poll < self.poll_interval:
             return
-        
+
         self.last_poll = current_time
         current_value = self.read_value()
         delta = current_value - self.last_value
-        
-        # Check if we've been idle too long (user may have adjusted volume elsewhere)
+
         time_since_movement = current_time - self.last_movement
         if time_since_movement > self.idle_timeout:
-            self.synced = False  # Need to re-sync on next movement
-        
-        # If slider moved significantly
+            self.synced = False
+
         if abs(delta) > self.threshold:
-            # If we're not synced (first movement after idle), just update position without sending
             if not self.synced:
                 self.last_value = current_value
                 self.last_movement = current_time
                 self.synced = True
                 return
-            
-            # Normal operation: send volume commands based on direction
-            if delta > 0:
-                # Slider moved up (higher value) - increase volume
-                for _ in range(self.step_size):
-                    keyboard.hid_pending = True
-                    keyboard._send_hid()
-                    keyboard.add_key(KC.VOLU)
-                    keyboard._send_hid()
-                    keyboard.remove_key(KC.VOLU)
-                    keyboard._send_hid()
-            else:
-                # Slider moved down (lower value) - decrease volume
-                for _ in range(self.step_size):
-                    keyboard.hid_pending = True
-                    keyboard._send_hid()
-                    keyboard.add_key(KC.VOLD)
-                    keyboard._send_hid()
-                    keyboard.remove_key(KC.VOLD)
-                    keyboard._send_hid()
-            
+
+            tap_keycode = KC.VOLU if delta > 0 else KC.VOLD
+            for _ in range(self.step_size):
+                self.keyboard.tap_key(tap_keycode)
+
             self.last_value = current_value
             self.last_movement = current_time
-        
+
         return
-    
+
     def before_hid_send(self, keyboard):
-        """Called before HID report is sent"""
+        return
 
-                return
-    
     def after_hid_send(self, keyboard):
-        """Called after HID report is sent"""
-        return
-    
-    def on_powersave_enable(self, keyboard):
-        """Called when powersave is enabled"""
-        return
-    
-    def on_powersave_disable(self, keyboard):
-        """Called when powersave is disabled"""
         return
 
-# Create and register volume slider extension
+    def on_powersave_enable(self, keyboard):
+        return
+
+    def on_powersave_disable(self, keyboard):
+        return
+
+
 volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval=0.05)
 keyboard.modules.append(volume_slider)'''
 
@@ -1033,6 +1011,18 @@ class MacroEditorDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         self.layout.addWidget(self.button_box)
 
+    def _capture_keycode(self, title: str, prompt: str) -> str | None:
+        """Try to capture a key press first, fall back to manual entry when requested."""
+        capture_dialog = KeyCaptureDialog(self)
+        capture_dialog.setWindowTitle(title)
+        if capture_dialog.exec():
+            return capture_dialog.captured
+
+        key, ok = QInputDialog.getText(self, title, prompt)
+        if ok and key:
+            return key.strip()
+        return None
+
     def record_macro(self):
         dialog = MacroRecorderDialog(self)
         if dialog.exec():
@@ -1048,19 +1038,28 @@ class MacroEditorDialog(QDialog):
             self.sequence_list.addItem(f"Text: {text}")
 
     def add_tap_action(self):
-        key, ok = QInputDialog.getText(self, "Add Tap Action", "Enter Keycode (e.g., KC.A).\nFor combos, use separate Press/Tap/Release actions.")
-        if ok and key:
-            self.sequence_list.addItem(f"Tap: {key}")
+        keycode = self._capture_keycode(
+            "Add Tap Action",
+            "Enter keycode manually (e.g., KC.A) if you did not press it."
+        )
+        if keycode:
+            self.sequence_list.addItem(f"Tap: {keycode}")
 
     def add_press_action(self):
-        key, ok = QInputDialog.getText(self, "Add Press Action", "Enter Keycode to press and hold (e.g., KC.LCTL):")
-        if ok and key:
-            self.sequence_list.addItem(f"Press: {key}")
+        keycode = self._capture_keycode(
+            "Add Press Action",
+            "Enter keycode manually (e.g., KC.LCTL) if you did not press it."
+        )
+        if keycode:
+            self.sequence_list.addItem(f"Press: {keycode}")
 
     def add_release_action(self):
-        key, ok = QInputDialog.getText(self, "Add Release Action", "Enter Keycode to release (e.g., KC.LCTL):")
-        if ok and key:
-            self.sequence_list.addItem(f"Release: {key}")
+        keycode = self._capture_keycode(
+            "Add Release Action",
+            "Enter keycode manually (e.g., KC.LCTL) if you did not press it."
+        )
+        if keycode:
+            self.sequence_list.addItem(f"Release: {keycode}")
             
     def add_delay_action(self):
         delay, ok = QInputDialog.getInt(self, "Add Delay Action", "Milliseconds:", 100, 0, 10000)
@@ -1170,11 +1169,12 @@ class PinEditorDialog(QDialog):
 
 class EncoderConfigDialog(QDialog):
     """Enhanced encoder configuration dialog with automatic layer cycling and display updates."""
-    def __init__(self, parent=None, initial_text="", num_layers=1):
+    def __init__(self, parent=None, initial_text="", num_layers=1, initial_divisor=4):
         super().__init__(parent)
         self.setWindowTitle("Rotary Encoder Configuration")
         self.resize(600, 550)
         self.num_layers = num_layers
+        self.initial_divisor = max(1, int(initial_divisor) if initial_divisor else 4)
 
         main_layout = QVBoxLayout(self)
         
@@ -1220,6 +1220,17 @@ class EncoderConfigDialog(QDialog):
         self.invert_direction = QCheckBox("Invert rotation direction")
         self.invert_direction.setToolTip("Swap clockwise and counter-clockwise actions")
         rotation_layout.addWidget(self.invert_direction)
+
+        divisor_row = QHBoxLayout()
+        divisor_label = QLabel("Pulses per action:")
+        self.divisor_spin = QSpinBox()
+        self.divisor_spin.setRange(1, 16)
+        self.divisor_spin.setValue(self.initial_divisor)
+        self.divisor_spin.setToolTip("Number of encoder transitions required before firing the mapped action.")
+        divisor_row.addWidget(divisor_label)
+        divisor_row.addWidget(self.divisor_spin)
+        divisor_row.addStretch()
+        rotation_layout.addLayout(divisor_row)
         
         rotation_group.setLayout(rotation_layout)
         main_layout.addWidget(rotation_group)
@@ -1350,6 +1361,7 @@ class EncoderConfigDialog(QDialog):
         if rotation == "Cycle Layers (Recommended)":
             lines.append("# Encoder configuration with layer cycling using KC.TO()")
             lines.append("encoder_handler = EncoderHandler()")
+            lines.append(f"encoder_handler.divisor = {self.divisor_spin.value()}")
             lines.append(f"encoder_handler.pins = ((board.GP10, board.GP11, board.GP14, {invert}),)")
             lines.append("")
             lines.append("# Build encoder map for each layer")
@@ -1368,6 +1380,7 @@ class EncoderConfigDialog(QDialog):
             # Non-layer cycling modes
             lines.append("# Configure encoder")
             lines.append("encoder_handler = EncoderHandler()")
+            lines.append(f"encoder_handler.divisor = {self.divisor_spin.value()}")
             lines.append(f"encoder_handler.pins = ((board.GP10, board.GP11, board.GP14, {invert}),)")
             lines.append(f"encoder_handler.map = [(({ccw_action}, {cw_action}, {press_action}),)]")
             lines.append("keyboard.modules.append(encoder_handler)")
@@ -1379,6 +1392,9 @@ class EncoderConfigDialog(QDialog):
             lines.append(f"# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))")
         
         return "\n".join(lines)
+
+    def get_divisor(self) -> int:
+        return self.divisor_spin.value()
 
 
 class AnalogInConfigDialog(QDialog):
@@ -1507,7 +1523,8 @@ class AnalogInConfigDialog(QDialog):
         
         if is_volume_mode:
             # Generate volume control code
-            config = f'''from analogio import AnalogIn as AnalogInPin
+            config = f'''import board
+from analogio import AnalogIn as AnalogInPin
 from kmk.keys import KC
 import time
 
@@ -1569,15 +1586,11 @@ class VolumeSlider:
             if delta > 0:
                 # Slider moved up (higher value) - increase volume
                 for _ in range(self.step_size):
-                    # Tap volume up key
-                    self.keyboard.add_key(KC.VOLU)
-                    self.keyboard.remove_key(KC.VOLU)
+                    self.keyboard.tap_key(KC.VOLU)
             else:
                 # Slider moved down (lower value) - decrease volume
                 for _ in range(self.step_size):
-                    # Tap volume down key
-                    self.keyboard.add_key(KC.VOLD)
-                    self.keyboard.remove_key(KC.VOLD)
+                    self.keyboard.tap_key(KC.VOLD)
             
             self.last_value = current_value
             self.last_movement = current_time
@@ -1602,13 +1615,14 @@ class VolumeSlider:
         """Clean up when keyboard is shutting down"""
         return
 
-# Create and register volume slider extension
+# Create and register volume slider module
 volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval={poll_interval})
-keyboard.extensions.append(volume_slider)
+keyboard.modules.append(volume_slider)
 '''
         else:
             # Generate brightness control code
-            config = f'''from analogio import AnalogIn as AnalogInPin
+            config = f'''import board
+from analogio import AnalogIn as AnalogInPin
 import time
 
 # LED brightness control via 10k sliding potentiometer on GP28
@@ -1675,9 +1689,9 @@ class BrightnessSlider:
         """Called when powersave is disabled"""
         return
 
-# Create and register brightness slider extension
+# Create and register brightness slider module
 brightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval={poll_interval})
-keyboard.extensions.append(brightness_slider)
+keyboard.modules.append(brightness_slider)
 '''
         
         return config
@@ -2375,6 +2389,7 @@ class KMKConfigurator(QMainWindow):
         self.profiles = {}
         # Extensions are always enabled - user can configure them
         self.enable_encoder = True
+        self.encoder_divisor = 4
         self.encoder_config_str = DEFAULT_ENCODER_CONFIG  # Pre-populate with default
         self.enable_analogin = True
         self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG  # Pre-populate with default
@@ -2689,12 +2704,26 @@ class KMKConfigurator(QMainWindow):
                 "enable_analogin": self.enable_analogin,
                 "enable_rgb": self.enable_rgb,
                 "enable_display": self.enable_display,
+                "encoder_divisor": self.encoder_divisor,
             }
             with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
 
             with open(os.path.join(CONFIG_SAVE_DIR, 'encoder.py'), 'w') as f:
-                f.write(self.encoder_config_str or '')
+                encoder_content = self.encoder_config_str or ''
+                if (
+                    self.encoder_divisor
+                    and 'encoder_handler = EncoderHandler()' in encoder_content
+                    and 'encoder_handler.divisor' not in encoder_content
+                ):
+                    replacement = (
+                        "encoder_handler = EncoderHandler()\n"
+                        f"encoder_handler.divisor = {int(self.encoder_divisor)}"
+                    )
+                    encoder_content = encoder_content.replace(
+                        'encoder_handler = EncoderHandler()', replacement, 1
+                    )
+                f.write(encoder_content)
             with open(os.path.join(CONFIG_SAVE_DIR, 'analogin.py'), 'w') as f:
                 f.write(self.analogin_config_str or '')
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
@@ -2724,6 +2753,7 @@ class KMKConfigurator(QMainWindow):
                 self.enable_analogin = meta.get('enable_analogin', True)
                 self.enable_rgb = meta.get('enable_rgb', True)
                 self.enable_display = meta.get('enable_display', True)
+                self.encoder_divisor = int(meta.get('encoder_divisor', self.encoder_divisor or 4))
             # Load snippet files if present
             enc_path = os.path.join(CONFIG_SAVE_DIR, 'encoder.py')
             if os.path.exists(enc_path):
@@ -3020,9 +3050,15 @@ class KMKConfigurator(QMainWindow):
     def configure_encoder(self):
         """Configure encoder with enhanced dialog for automatic layer cycling."""
         num_layers = len(self.keymap_data)
-        dialog = EncoderConfigDialog(parent=self, initial_text=self.encoder_config_str or "", num_layers=num_layers)
+        dialog = EncoderConfigDialog(
+            parent=self,
+            initial_text=self.encoder_config_str or "",
+            num_layers=num_layers,
+            initial_divisor=self.encoder_divisor or 4,
+        )
         if dialog.exec():
             self.encoder_config_str = dialog.get_config()
+            self.encoder_divisor = dialog.get_divisor()
             self.save_extension_configs()
             QMessageBox.information(self, "Encoder Configured", 
                                   "Encoder configuration has been updated.\n\n"
@@ -3177,6 +3213,8 @@ class KMKConfigurator(QMainWindow):
     def setup_layer_management_ui(self, parent_layout):
         layout = QHBoxLayout()
         self.layer_tabs = QTabWidget()
+        self.layer_tabs.setUsesScrollButtons(True)
+        self.layer_tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self.layer_tabs.currentChanged.connect(self.on_layer_changed)
         layout.addWidget(self.layer_tabs)
 
@@ -3359,6 +3397,7 @@ class KMKConfigurator(QMainWindow):
                     "encoder": {
                         "enabled": self.enable_encoder,
                         "config_str": self.encoder_config_str,
+                        "divisor": self.encoder_divisor,
                     },
                     "analogin": {
                         "enabled": self.enable_analogin,
@@ -3420,6 +3459,7 @@ class KMKConfigurator(QMainWindow):
                     encoder_section = extensions.get("encoder", {})
                     self.enable_encoder = encoder_section.get("enabled", self.enable_encoder)
                     self.encoder_config_str = encoder_section.get("config_str", self.encoder_config_str)
+                    self.encoder_divisor = int(encoder_section.get("divisor", self.encoder_divisor or 4))
 
                     analogin_section = extensions.get("analogin", {})
                     self.enable_analogin = analogin_section.get("enabled", self.enable_analogin)
@@ -4476,6 +4516,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "encoder": {
                     "enabled": self.enable_encoder,
                     "config_str": self.encoder_config_str,
+                    "divisor": self.encoder_divisor,
                 },
                 "analogin": {
                     "enabled": self.enable_analogin,
@@ -4561,6 +4602,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 encoder_section = extensions.get("encoder", {})
                 self.enable_encoder = encoder_section.get("enabled", True)
                 self.encoder_config_str = encoder_section.get("config_str", DEFAULT_ENCODER_CONFIG)
+                self.encoder_divisor = int(encoder_section.get("divisor", self.encoder_divisor or 4))
                 
                 analogin_section = extensions.get("analogin", {})
                 self.enable_analogin = analogin_section.get("enabled", True)
@@ -4708,6 +4750,9 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         self.keymap_data.append(self._create_new_layer())
         self.update_layer_tabs()
         self.layer_tabs.setCurrentIndex(len(self.keymap_data) - 1)
+        if hasattr(self, 'profile_combo'):
+            self.profile_combo.setCurrentText("Custom")
+        self.update_macropad_display()
 
     def remove_layer(self):
         """Removes the currently selected layer, if it's not the last one."""
@@ -4738,15 +4783,18 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         current_index = self.layer_tabs.currentIndex()
         self.layer_tabs.clear()
         for i in range(len(self.keymap_data)):
-            self.layer_tabs.addTab(QWidget(), f"Layer {i}")
-        
-        if current_index < self.layer_tabs.count():
-             self.layer_tabs.setCurrentIndex(current_index)
-        
+            tab = QWidget()
+            placeholder_layout = QVBoxLayout(tab)
+            placeholder_layout.setContentsMargins(0, 0, 0, 0)
+            placeholder_layout.addStretch()
+            self.layer_tabs.addTab(tab, f"Layer {i}")
+            self.layer_tabs.setTabToolTip(i, f"Layer {i}")
+
+        if self.layer_tabs.count():
+            target_index = current_index if 0 <= current_index < self.layer_tabs.count() else 0
+            self.layer_tabs.setCurrentIndex(target_index)
+
         self.layer_tabs.blockSignals(False)
-        # Add an empty widget to the last tab to ensure it's rendered correctly
-        if self.layer_tabs.count() > 0:
-            self.layer_tabs.widget(self.layer_tabs.count() - 1).setLayout(QVBoxLayout())
 
     def on_key_selected(self, row, col):
         """Handles the logic for selecting and deselecting a key on the grid."""

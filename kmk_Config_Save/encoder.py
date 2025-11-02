@@ -1,8 +1,10 @@
 # --- Rotary Encoder Configuration ---
+import board
 from kmk.modules.encoder import EncoderHandler
 
 # Encoder configuration with layer cycling using KC.TO()
 encoder_handler = EncoderHandler()
+encoder_handler.divisor = 2
 encoder_handler.pins = ((board.GP10, board.GP11, board.GP14, False),)
 
 # Build encoder map for each layer
