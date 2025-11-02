@@ -620,6 +620,7 @@ class MacroRecorderDialog(QDialog):
         self.last_event_time = 0
         # Threshold (seconds) under which a press+release is considered a tap
         self.TAP_THRESHOLD = 0.20
+        self._filter_installed = False
 
         layout = QVBoxLayout(self)
         
@@ -664,6 +665,21 @@ class MacroRecorderDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
 
+    def _install_event_filter(self):
+        app = QApplication.instance()
+        if app and not self._filter_installed:
+            app.installEventFilter(self)
+            self._filter_installed = True
+
+    def _remove_event_filter(self):
+        app = QApplication.instance()
+        if app and self._filter_installed:
+            try:
+                app.removeEventFilter(self)
+            except Exception:
+                pass
+            self._filter_installed = False
+
     def toggle_recording(self):
         self.recording = not self.recording
         if self.recording:
@@ -679,20 +695,13 @@ class MacroRecorderDialog(QDialog):
             self.setFocus()
             # Install an application-wide event filter so key events are
             # swallowed while recording and do not reach other widgets.
-            app = QApplication.instance()
-            if app:
-                app.installEventFilter(self)
+            self._install_event_filter()
         else:
             self.record_button.setText("Start Recording")
             self.instructions.setText("Click 'Start Recording' to begin.")
             self.add_text_btn.setEnabled(False)
             self.add_delay_btn.setEnabled(False)
-            app = QApplication.instance()
-            if app:
-                try:
-                    app.removeEventFilter(self)
-                except Exception:
-                    pass
+            self._remove_event_filter()
 
     def keyPressEvent(self, event):
         if not self.recording or event.isAutoRepeat():
@@ -833,22 +842,12 @@ class MacroRecorderDialog(QDialog):
 
     def accept(self):
         # Ensure we stop filtering if the dialog is closed via OK
-        app = QApplication.instance()
-        if app:
-            try:
-                app.removeEventFilter(self)
-            except Exception:
-                pass
+        self._remove_event_filter()
         super().accept()
 
     def reject(self):
         # Ensure we stop filtering if the dialog is closed via Cancel
-        app = QApplication.instance()
-        if app:
-            try:
-                app.removeEventFilter(self)
-            except Exception:
-                pass
+        self._remove_event_filter()
         super().reject()
 
     def insert_text_string(self):
@@ -859,12 +858,7 @@ class MacroRecorderDialog(QDialog):
         # Temporarily pause event filtering so the input dialog can receive keyboard events
         was_recording = self.recording
         self.recording = False
-        app = QApplication.instance()
-        if app:
-            try:
-                app.removeEventFilter(self)
-            except Exception:
-                pass
+        self._remove_event_filter()
         
         from PyQt6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(self, "Insert Text String", "Enter text to type:")
@@ -872,8 +866,7 @@ class MacroRecorderDialog(QDialog):
         # Resume recording and event filtering
         if was_recording:
             self.recording = True
-            if app:
-                app.installEventFilter(self)
+            self._install_event_filter()
         
         if ok and text:
             self.sequence.append(('text', text))
@@ -888,12 +881,7 @@ class MacroRecorderDialog(QDialog):
         # Temporarily pause event filtering so the input dialog can receive keyboard events
         was_recording = self.recording
         self.recording = False
-        app = QApplication.instance()
-        if app:
-            try:
-                app.removeEventFilter(self)
-            except Exception:
-                pass
+        self._remove_event_filter()
         
         from PyQt6.QtWidgets import QInputDialog
         delay_ms, ok = QInputDialog.getInt(
@@ -904,8 +892,7 @@ class MacroRecorderDialog(QDialog):
         # Resume recording and event filtering
         if was_recording:
             self.recording = True
-            if app:
-                app.installEventFilter(self)
+            self._install_event_filter()
         
         if ok:
             self.sequence.append(('delay', delay_ms))
@@ -918,6 +905,10 @@ class MacroRecorderDialog(QDialog):
         is one of 'tap', 'press', 'release', or 'delay'.
         """
         return self.sequence
+
+    def closeEvent(self, event):
+        self._remove_event_filter()
+        super().closeEvent(event)
 
 
 class KeyCaptureDialog(QDialog):
@@ -1828,6 +1819,7 @@ class PerKeyColorDialog(QDialog):
         self.underglow_count = max(0, underglow_count)
         self.parent_ref = parent
         self.layer_index = int(layer_index) if layer_index is not None else 0
+        self.key_button_indices = []
 
         key_default = ensure_hex_prefix(default_key_color, "#FFFFFF")
         under_default = ensure_hex_prefix(default_underglow_color, "#000000")
@@ -2052,19 +2044,26 @@ class PerKeyColorDialog(QDialog):
 
     def _make_key_buttons(self):
         self.key_buttons = []
+        self.key_button_indices = []
         for r in range(self.rows):
             for c in range(self.cols):
-                idx = r * self.cols + c
-                btn = QPushButton(f"{r},{c}")
+                key_idx = self._key_index_for_position(r, c)
+                btn = QPushButton(f"{key_idx}")
                 btn.setFixedSize(64, 56)
                 btn.setStyleSheet("font-size: 12px; padding: 4px;")
                 btn.clicked.connect(self.on_key_clicked)
                 self.key_buttons.append(btn)
+                self.key_button_indices.append(key_idx)
                 self.grid_layout.addWidget(btn, r, c)
                 try:
                     self._install_hover_effect(btn)
                 except Exception:
                     pass
+
+    def _key_index_for_position(self, display_row: int, display_col: int) -> int:
+        logical_row = self.rows - 1 - display_row
+        logical_col = self.cols - 1 - display_col
+        return logical_row * self.cols + logical_col
 
     def _install_hover_effect(self, button: QPushButton):
         if hasattr(button, "_hover_filter"):
@@ -2106,16 +2105,17 @@ class PerKeyColorDialog(QDialog):
 
     def refresh_key_buttons(self):
         for idx, btn in enumerate(self.key_buttons):
-            color = self.key_colors.get(str(idx))
+            key_idx = self.key_button_indices[idx]
+            color = self.key_colors.get(str(key_idx))
             if color:
                 rgb = hex_to_rgb_list(color)
                 luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
                 text_color = "#000000" if luminance > 150 else "#FFFFFF"
                 btn.setStyleSheet(f"background-color: {color}; color: {text_color}; font-size: 12px; padding: 4px;")
-                btn.setToolTip(f"Index: {idx}\nColor: {color}")
+                btn.setToolTip(f"Index: {key_idx}\nColor: {color}")
             else:
                 btn.setStyleSheet("font-size: 12px; padding: 4px;")
-                btn.setToolTip(f"Index: {idx}\nColor: (default)")
+                btn.setToolTip(f"Index: {key_idx}\nColor: (default)")
 
     def refresh_underglow_buttons(self):
         for idx, btn in enumerate(self.underglow_buttons):
@@ -2135,10 +2135,11 @@ class PerKeyColorDialog(QDialog):
         if btn not in self.key_buttons:
             return
         idx = self.key_buttons.index(btn)
+        key_idx = self.key_button_indices[idx]
         color = QColorDialog.getColor(QColor(self.fill_color), self, "Select key color")
         if color.isValid():
             hexc = ensure_hex_prefix(color.name(), self.fill_color)
-            self.key_colors[str(idx)] = hexc
+            self.key_colors[str(key_idx)] = hexc
             self.refresh_key_buttons()
 
     def on_underglow_clicked(self, index: int):
@@ -2699,20 +2700,7 @@ class KMKConfigurator(QMainWindow):
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
                 f.write(self.display_config_str or '')
 
-            rgb_config = build_default_rgb_matrix_config()
-            current = getattr(self, 'rgb_matrix_config', None) or {}
-            rgb_config.update(current)
-            rgb_config['key_colors'] = dict(current.get('key_colors', {}))
-            layer_colors = {}
-            for layer, mapping in (current.get('layer_key_colors', {}) or {}).items():
-                sanitized = {
-                    str(k): ensure_hex_prefix(v, rgb_config.get('default_key_color', '#FFFFFF'))
-                    for k, v in (mapping or {}).items()
-                }
-                if sanitized:
-                    layer_colors[str(layer)] = sanitized
-            rgb_config['layer_key_colors'] = layer_colors
-            rgb_config['underglow_colors'] = dict(current.get('underglow_colors', {}))
+            rgb_config = self._export_rgb_config()
             with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
                 json.dump(rgb_config, f, indent=2)
 
@@ -3288,6 +3276,59 @@ class KMKConfigurator(QMainWindow):
             self.macros = {}
         self.update_macro_list()
 
+    def _sanitize_macros(self, raw_macros):
+        sanitized = {}
+        if not isinstance(raw_macros, dict):
+            return sanitized
+        for name, entries in raw_macros.items():
+            if not isinstance(name, str):
+                continue
+            cleaned = []
+            if isinstance(entries, list):
+                for entry in entries:
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        action, value = entry
+                        cleaned.append([str(action).strip().lower(), value])
+            sanitized[name] = cleaned
+        return sanitized
+
+    def _export_rgb_config(self):
+        merged = build_default_rgb_matrix_config()
+        current = getattr(self, 'rgb_matrix_config', {}) or {}
+        merged.update(current)
+        merged['default_key_color'] = ensure_hex_prefix(
+            merged.get('default_key_color', '#FFFFFF'), '#FFFFFF'
+        )
+        merged['default_underglow_color'] = ensure_hex_prefix(
+            merged.get('default_underglow_color', '#000000'), '#000000'
+        )
+
+        key_colors_raw = current.get('key_colors', {}) or {}
+        merged['key_colors'] = {
+            str(k): ensure_hex_prefix(v, merged['default_key_color'])
+            for k, v in key_colors_raw.items()
+        }
+
+        underglow_raw = current.get('underglow_colors', {}) or {}
+        merged['underglow_colors'] = {
+            str(k): ensure_hex_prefix(v, merged['default_underglow_color'])
+            for k, v in underglow_raw.items()
+        }
+
+        layer_colors_raw = current.get('layer_key_colors', {}) or {}
+        layer_colors = {}
+        for layer, mapping in layer_colors_raw.items():
+            if not isinstance(mapping, dict):
+                continue
+            sanitized = {
+                str(k): ensure_hex_prefix(v, merged['default_key_color'])
+                for k, v in mapping.items()
+            }
+            if sanitized:
+                layer_colors[str(layer)] = sanitized
+        merged['layer_key_colors'] = layer_colors
+        return merged
+
     def save_profiles(self):
         try:
             with open(PROFILE_FILE, 'w') as f:
@@ -3311,10 +3352,29 @@ class KMKConfigurator(QMainWindow):
     def save_current_profile(self):
         name, ok = QInputDialog.getText(self, "Save Profile", "Enter profile name:")
         if ok and name:
-            # Save only the keymap data - hardware is fixed
-            self.profiles[name] = {
-                "keymap_data": self.keymap_data
+            keymap_snapshot = json.loads(json.dumps(self.keymap_data))
+            profile_payload = {
+                "keymap_data": keymap_snapshot,
+                "extensions": {
+                    "encoder": {
+                        "enabled": self.enable_encoder,
+                        "config_str": self.encoder_config_str,
+                    },
+                    "analogin": {
+                        "enabled": self.enable_analogin,
+                        "config_str": self.analogin_config_str,
+                    },
+                    "display": {
+                        "enabled": self.enable_display,
+                        "config_str": self.display_config_str,
+                    },
+                },
+                "rgb": {
+                    "enabled": self.enable_rgb,
+                    "matrix": self._export_rgb_config(),
+                },
             }
+            self.profiles[name] = profile_payload
             self.save_profiles()
             self.load_profiles()
             self.profile_combo.setCurrentText(name)
@@ -3324,11 +3384,64 @@ class KMKConfigurator(QMainWindow):
         if profile_name and profile_name != "Custom":
             profile = self.profiles.get(profile_name)
             if profile:
-                # Load only keymap data - hardware is fixed
                 self.keymap_data = profile.get("keymap_data", [])
                 self.current_layer = 0
+
+                rgb_section = profile.get("rgb", {}) if isinstance(profile, dict) else {}
+                if rgb_section:
+                    self.enable_rgb = rgb_section.get("enabled", True)
+                    matrix_cfg = rgb_section.get("matrix", {})
+                    merged = build_default_rgb_matrix_config()
+                    merged.update(matrix_cfg)
+                    merged['key_colors'] = dict(matrix_cfg.get('key_colors', {}))
+                    merged['underglow_colors'] = dict(matrix_cfg.get('underglow_colors', {}))
+                    merged['default_key_color'] = ensure_hex_prefix(
+                        merged.get('default_key_color', '#FFFFFF'), '#FFFFFF'
+                    )
+                    merged['default_underglow_color'] = ensure_hex_prefix(
+                        merged.get('default_underglow_color', '#000000'), '#000000'
+                    )
+                    layer_colors_raw = matrix_cfg.get('layer_key_colors', {}) or {}
+                    layer_colors = {}
+                    for layer, mapping in layer_colors_raw.items():
+                        if not isinstance(mapping, dict):
+                            continue
+                        sanitized = {
+                            str(k): ensure_hex_prefix(v, merged['default_key_color'])
+                            for k, v in mapping.items()
+                        }
+                        if sanitized:
+                            layer_colors[str(layer)] = sanitized
+                    merged['layer_key_colors'] = layer_colors
+                    self.rgb_matrix_config = merged
+
+                extensions = profile.get("extensions", {}) if isinstance(profile, dict) else {}
+                if extensions:
+                    encoder_section = extensions.get("encoder", {})
+                    self.enable_encoder = encoder_section.get("enabled", self.enable_encoder)
+                    self.encoder_config_str = encoder_section.get("config_str", self.encoder_config_str)
+
+                    analogin_section = extensions.get("analogin", {})
+                    self.enable_analogin = analogin_section.get("enabled", self.enable_analogin)
+                    self.analogin_config_str = analogin_section.get("config_str", self.analogin_config_str)
+
+                    display_section = extensions.get("display", {})
+                    self.enable_display = display_section.get("enabled", self.enable_display)
+                    self.display_config_str = display_section.get("config_str", self.display_config_str)
+
                 self.update_layer_tabs()
+                try:
+                    self.layer_tabs.setCurrentIndex(self.current_layer)
+                except Exception:
+                    pass
+                self.recreate_macropad_grid()
                 self.update_macropad_display()
+                self.sync_extension_checkboxes()
+                self.update_extension_button_states()
+                try:
+                    self.save_extension_configs()
+                except Exception:
+                    pass
 
     def delete_selected_profile(self):
         profile_name = self.profile_combo.currentText()
@@ -4357,12 +4470,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             "macros": self.macros,
             "rgb": {
                 "enabled": self.enable_rgb,
-                "matrix": {
-                    **build_default_rgb_matrix_config(),
-                    **self.rgb_matrix_config,
-                    "key_colors": dict(self.rgb_matrix_config.get("key_colors", {})),
-                    "underglow_colors": dict(self.rgb_matrix_config.get("underglow_colors", {})),
-                },
+                "matrix": self._export_rgb_config(),
             },
             "extensions": {
                 "encoder": {
@@ -4420,8 +4528,16 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 self.keymap_data = keymap_section.get("layers", [])
                 current_layer = keymap_section.get("current_layer", 0)
                 
-                # Load macros
-                self.macros = config_data.get("macros", {})
+                # Load macros (merge into global store)
+                config_macros = self._sanitize_macros(config_data.get("macros", {}))
+                if config_macros:
+                    merged_macros = dict(self.macros)
+                    merged_macros.update(config_macros)
+                    self.macros = merged_macros
+                    try:
+                        self.save_macros()
+                    except Exception:
+                        pass
                 
                 # Load RGB settings
                 rgb_section = config_data.get("rgb", {})

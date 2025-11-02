@@ -29,7 +29,8 @@ This document explains the architecture, configuration, and runtime behavior of 
     16, 17, 18, 19,
   ]
   ```
-  This means key index 0 (top-left in the logical matrix) is NeoPixel 0, and key index 19 (bottom-right) is NeoPixel 19. Rows two and four are mirrored to follow the pad's wiring harness.
+    This means key index 0 (top-left in the logical matrix) is NeoPixel 0, and key index 19 (bottom-right) is NeoPixel 19. Rows two and four are mirrored to follow the pad's wiring harness.
+  - The per-key color editor mirrors the matrix across both axes so the preview matches this physical layout.
 - **led_key_pos:**
   - The generated `code.py` sets `keyboard.led_key_pos` to this mapping, so the firmware knows which pixel to update for each key.
 
