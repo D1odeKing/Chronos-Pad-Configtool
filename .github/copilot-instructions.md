@@ -1,0 +1,21 @@
+# Chronos Pad Copilot Guide
+- **Architecture** `main.py` drives everything through the `KMKConfigurator` PyQt6 window; the class sets up panels for file IO, extensions, a 5×4 key grid, macro tools, and keeps UI/state in sync.
+- **Hardware Model** All configs assume the fixed Chronos Pad wiring declared near the top of `main.py` (`FIXED_ROW_PINS`, encoder pins, RGB pin, OLED I2C pins); do not rewrite these unless the hardware spec changes.
+- **State Shape** `self.keymap_data` stores layers as row-major 5×4 lists using KC.* strings; macros live in `self.macros` as `{name: [(action, value)]}` tuples; RGB data sits in `self.rgb_matrix_config` with stringified indices for per-key color overrides.
+- **Persistence** `kmk_Config_Save/` holds user state: `config.json` (full snapshot), `encoder.py` / `analogin.py` / `display.py` snippets, and `rgb_matrix.json`; always update these helpers when changing serialization logic.
+- **Profiles** `profiles.json` is bundled via `ChronosPadConfigurator.spec` and loaded in `setup_hardware_profile_ui`; keep backward compatibility when expanding its schema.
+- **Dependency Flow** `DependencyDownloader` pulls KMK firmware and the Adafruit bundle into `libraries/`; reuse `KMK_SKIP_DEP_CHECK=1` when running headless scripts or tests.
+- **Startup UX** A previous session prompt is controlled by `KMK_SKIP_STARTUP_DIALOG`; headless helpers in `scripts/` set both skip variables before instantiating `KMKConfigurator`.
+- **Code Generation** `get_generated_python_code()` is the single source for exported firmware; it merges hardware pins, macros, encoder/analog/display snippets, and RGB output from `_generate_rgb_matrix_code()`—keep changes consistent across these helpers.
+- **Display Sync** Layer-aware OLED rendering comes from `generate_display_layout_code_with_layer_support()` plus `LayerDisplaySync`; update both if you touch layer tracking or key label formatting.
+- **RGB Rules** `_generate_rgb_matrix_code()` mixes defaults with overrides and emits chunked arrays; when adding color features, adjust both the JSON schema and this formatter.
+- **Macros** GUI macro builder stores sequences as `tap/press/release/delay/text`; ensure any new action types are reflected in macro dialogs and export formatting.
+- **File Export** `generate_code_py_dialog()` saves `code.py`, copies `kmk/` and required libs (`adafruit_displayio_sh1106`, `adafruit_display_text`, `neopixel`) into the chosen CIRCUITPY drive; keep this path list updated with new firmware dependencies.
+- **Testing Hooks** `scripts/preview_gen.py` and `scripts/test_rgb_map_emit.py` spin the app without dialogs to snapshot generated code; add similar scripts rather than embedding CLI paths in `main.py`.
+- **Build Workflow** `python main.py` launches the GUI during development; `python build_exe.py` runs PyInstaller with `ChronosPadConfigurator.spec` to ship the Windows executable.
+- **Bundled KMK Copy** The repo contains a cached `kmk/` tree under `libraries/`; treat it as vendor code—only patch via upstream sync scripts, not ad-hoc edits.
+- **Error Surfaces** Most file operations surface via `QMessageBox`; when adding new async tasks, follow the same pattern (emit progress through signals, guard UI with dialogs).
+- **Theming** UI palettes come from `_apply_dark_stylesheet`, `_apply_light_stylesheet`, `_apply_cheerful_stylesheet`; add widgets using the shared geometry rules in `_base_geometry_qss()` to avoid regressions.
+- **Config Versioning** Saved JSON uses `version` keys (`"2.0"` current). Any schema change must migrate old payloads inside `load_configuration()` while keeping defaults in `build_default_rgb_matrix_config()`.
+- **Keycode Catalog** Key selection relies on categorized lists built in `create_keycode_selector()`; update those data sets and `_matches_category()` when introducing new KMK keycodes.
+- **Next Steps** Let me know if any part of the generator pipeline, persistence model, or build story still feels unclear and we can dive deeper.
