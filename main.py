@@ -1,4 +1,4 @@
-"""
+﻿"""
 KMK Macropad Configurator - Raspberry Pi Pico Edition
 
 Hardware Configuration (FIXED):
@@ -17,6 +17,8 @@ and extensions (encoder, RGB, analog input, display) without changing the
 underlying hardware pin configuration.
 """
 
+from __future__ import annotations
+
 import sys
 import re
 import ast
@@ -33,7 +35,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
-    QFormLayout, QDoubleSpinBox, QProgressDialog
+    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame
 )
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
@@ -304,6 +306,7 @@ keyboard.modules.append(encoder_handler)
 DEFAULT_ANALOGIN_CONFIG = '''import board
 from analogio import AnalogIn as AnalogInPin
 from kmk.keys import KC
+from kmk.extensions.media_keys import MediaKeys
 import time
 
 # Volume control via 10k sliding potentiometer
@@ -355,9 +358,14 @@ class VolumeSlider:
                 self.synced = True
                 return
 
+            # Press and release the key with proper HID send
             tap_keycode = KC.VOLU if delta > 0 else KC.VOLD
             for _ in range(self.step_size):
-                self.keyboard.tap_key(tap_keycode)
+                # Tap the key properly - add it, send HID, remove it, send HID again
+                self.keyboard.add_key(tap_keycode)
+                self.keyboard._send_hid()
+                self.keyboard.remove_key(tap_keycode)
+                self.keyboard._send_hid()
 
             self.last_value = current_value
             self.last_movement = current_time
@@ -376,6 +384,10 @@ class VolumeSlider:
     def on_powersave_disable(self, keyboard):
         return
 
+
+# Ensure media keys extension is loaded for volume control
+if not any(isinstance(ext, MediaKeys) for ext in keyboard.extensions):
+    keyboard.extensions.append(MediaKeys())
 
 volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval=0.05)
 keyboard.modules.append(volume_slider)'''
@@ -1526,6 +1538,7 @@ class AnalogInConfigDialog(QDialog):
             config = f'''import board
 from analogio import AnalogIn as AnalogInPin
 from kmk.keys import KC
+from kmk.extensions.media_keys import MediaKeys
 import time
 
 # Volume control via 10k sliding potentiometer on GP28
@@ -1583,14 +1596,13 @@ class VolumeSlider:
                 return
             
             # Normal operation: send volume commands based on direction
-            if delta > 0:
-                # Slider moved up (higher value) - increase volume
-                for _ in range(self.step_size):
-                    self.keyboard.tap_key(KC.VOLU)
-            else:
-                # Slider moved down (lower value) - decrease volume
-                for _ in range(self.step_size):
-                    self.keyboard.tap_key(KC.VOLD)
+            tap_keycode = KC.VOLU if delta > 0 else KC.VOLD
+            for _ in range(self.step_size):
+                # Properly tap the key with HID send
+                self.keyboard.add_key(tap_keycode)
+                self.keyboard._send_hid()
+                self.keyboard.remove_key(tap_keycode)
+                self.keyboard._send_hid()
             
             self.last_value = current_value
             self.last_movement = current_time
@@ -1614,6 +1626,11 @@ class VolumeSlider:
     def deinit(self, keyboard):
         """Clean up when keyboard is shutting down"""
         return
+
+# Ensure media keys extension is loaded for volume control
+from kmk.extensions.media_keys import MediaKeys
+if not any(isinstance(ext, MediaKeys) for ext in keyboard.extensions):
+    keyboard.extensions.append(MediaKeys())
 
 # Create and register volume slider module
 volume_slider = VolumeSlider(keyboard, board.GP28, poll_interval={poll_interval})
@@ -2356,13 +2373,206 @@ class PerKeyColorDialog(QDialog):
         button.setStyleSheet(f"background-color: {color}; color: {text_color};")
 
 
+class AdvancedSettingsDialog(QDialog):
+    """Dialog for advanced settings: boot.py configuration and encoder divisor."""
+    
+    def __init__(self, parent=None, encoder_divisor=4, boot_config=None):
+        super().__init__(parent)
+        self.setWindowTitle("Advanced Settings")
+        self.resize(650, 550)
+        
+        main_layout = QVBoxLayout(self)
+        
+        # Create tab widget for different setting categories
+        tabs = QTabWidget()
+        
+        # --- Encoder Settings Tab ---
+        encoder_tab = QWidget()
+        encoder_layout = QVBoxLayout(encoder_tab)
+        
+        encoder_group = QGroupBox("Encoder Configuration")
+        encoder_form = QFormLayout()
+        
+        self.divisor_spin = QSpinBox()
+        self.divisor_spin.setRange(1, 16)
+        self.divisor_spin.setValue(encoder_divisor)
+        self.divisor_spin.setToolTip(
+            "Number of encoder transitions required before firing the mapped action.\n"
+            "Lower = more sensitive, Higher = less sensitive.\n"
+            "Recommended: 4 for standard encoders."
+        )
+        encoder_form.addRow("Encoder Steps per Pulse:", self.divisor_spin)
+        
+        info_label = QLabel(
+            "<b>What is this?</b><br>"
+            "The encoder divisor controls how many physical 'clicks' or steps "
+            "the rotary encoder needs to turn before sending an action.<br><br>"
+            "<b>Lower values (1-2):</b> More sensitive, faster response<br>"
+            "<b>Higher values (4-8):</b> Less sensitive, more deliberate control<br><br>"
+            "Default is 4, which works well for most standard rotary encoders."
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("padding: 10px; background-color: rgba(100, 100, 100, 0.2); border-radius: 5px;")
+        encoder_layout.addWidget(info_label)
+        
+        encoder_group.setLayout(encoder_form)
+        encoder_layout.addWidget(encoder_group)
+        encoder_layout.addStretch()
+        
+        tabs.addTab(encoder_tab, "Encoder")
+        
+        # --- Boot.py Settings Tab ---
+        boot_tab = QWidget()
+        boot_layout = QVBoxLayout(boot_tab)
+        
+        boot_info = QLabel(
+            "<b>Boot Configuration (boot.py)</b><br>"
+            "These settings control CircuitPython's boot behavior. "
+            "The boot.py file runs before your main code and can configure "
+            "USB, storage, and other low-level settings."
+        )
+        boot_info.setWordWrap(True)
+        boot_layout.addWidget(boot_info)
+        
+        boot_group = QGroupBox("USB and Storage Settings")
+        boot_form = QVBoxLayout()
+        
+        self.enable_boot_py = QCheckBox("Enable custom boot.py configuration")
+        self.enable_boot_py.setChecked(boot_config is not None and boot_config.strip() != "")
+        self.enable_boot_py.toggled.connect(self.on_boot_toggle)
+        boot_form.addWidget(self.enable_boot_py)
+        
+        boot_form.addSpacing(10)
+        
+        # Common boot.py options
+        self.disable_storage_checkbox = QCheckBox("Make storage read-only (protect files from computer)")
+        self.disable_storage_checkbox.setToolTip(
+            "When enabled, the CIRCUITPY drive will be read-only from the computer.\n"
+            "This prevents accidental file deletion but requires editing on device."
+        )
+        
+        self.disable_usb_hid_checkbox = QCheckBox("Disable USB HID (keyboard/mouse)")
+        self.disable_usb_hid_checkbox.setToolTip(
+            "Disable USB keyboard/mouse functionality. Only use if you don't need HID."
+        )
+        
+        self.rename_drive_layout = QHBoxLayout()
+        self.rename_drive_checkbox = QCheckBox("Rename CIRCUITPY drive to:")
+        self.drive_name_edit = QLineEdit("CHRONOSPAD")
+        self.drive_name_edit.setMaxLength(11)
+        self.drive_name_edit.setToolTip("Custom name for the USB drive (max 11 characters)")
+        self.rename_drive_layout.addWidget(self.rename_drive_checkbox)
+        self.rename_drive_layout.addWidget(self.drive_name_edit)
+        
+        boot_form.addWidget(self.disable_storage_checkbox)
+        boot_form.addWidget(self.disable_usb_hid_checkbox)
+        boot_form.addLayout(self.rename_drive_layout)
+        
+        boot_form.addSpacing(10)
+        
+        boot_form.addWidget(QLabel("<b>Custom boot.py code:</b>"))
+        self.boot_code_editor = QTextEdit()
+        self.boot_code_editor.setPlaceholderText(
+            "# Optional: Add custom boot.py code here\n"
+            "# Example:\n"
+            "# import storage\n"
+            "# storage.remount('/', readonly=False)\n"
+        )
+        self.boot_code_editor.setMaximumHeight(180)
+        
+        if boot_config:
+            self.boot_code_editor.setPlainText(boot_config)
+        
+        boot_form.addWidget(self.boot_code_editor)
+        
+        boot_group.setLayout(boot_form)
+        boot_layout.addWidget(boot_group)
+        
+        tabs.addTab(boot_tab, "Boot Configuration")
+        
+        main_layout.addWidget(tabs)
+        
+        # Dialog buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box)
+        
+        # Initialize UI state
+        self.on_boot_toggle()
+    
+    def on_boot_toggle(self):
+        """Enable/disable boot.py controls based on checkbox."""
+        enabled = self.enable_boot_py.isChecked()
+        self.disable_storage_checkbox.setEnabled(enabled)
+        self.disable_usb_hid_checkbox.setEnabled(enabled)
+        self.rename_drive_checkbox.setEnabled(enabled)
+        self.drive_name_edit.setEnabled(enabled)
+        self.boot_code_editor.setEnabled(enabled)
+    
+    def get_encoder_divisor(self):
+        """Return the selected encoder divisor value."""
+        return self.divisor_spin.value()
+    
+    def get_boot_config(self):
+        """Generate boot.py configuration code."""
+        if not self.enable_boot_py.isChecked():
+            return ""
+        
+        lines = []
+        
+        # Check if any options are enabled
+        has_options = (
+            self.disable_storage_checkbox.isChecked() or
+            self.disable_usb_hid_checkbox.isChecked() or
+            self.rename_drive_checkbox.isChecked()
+        )
+        
+        if has_options:
+            if self.disable_storage_checkbox.isChecked():
+                lines.append("import storage")
+                lines.append("storage.disable_usb_drive()")
+                lines.append("")
+            
+            if self.disable_usb_hid_checkbox.isChecked():
+                lines.append("import usb_hid")
+                lines.append("usb_hid.disable()")
+                lines.append("")
+            
+            if self.rename_drive_checkbox.isChecked():
+                drive_name = self.drive_name_edit.text().strip()
+                if drive_name:
+                    lines.append("import storage")
+                    lines.append(f'storage.remount("/", readonly=False)')
+                    lines.append(f'storage.getmount("/").label = "{drive_name}"')
+                    lines.append('storage.remount("/", readonly=True)')
+                    lines.append("")
+        
+        # Add custom code
+        custom_code = self.boot_code_editor.toPlainText().strip()
+        if custom_code:
+            if lines:
+                lines.append("# Custom configuration:")
+            lines.append(custom_code)
+        
+        return "\n".join(lines)
+
+
 # --- Main Application Window ---
 class KMKConfigurator(QMainWindow):
     """The main application window for configuring KMK-based macropads."""
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("KMK Macropad Configurator")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle("KMK Macropad Configurator - Chronos Pad")
+        
+        # Set minimum window size and better default size
+        self.setMinimumSize(1200, 700)
+        self.resize(1400, 900)
+        
+        # Center window on screen
+        self.center_on_screen()
 
         # Check and download dependencies first
         self.check_dependencies()
@@ -2397,6 +2607,7 @@ class KMKConfigurator(QMainWindow):
         self.rgb_matrix_config = build_default_rgb_matrix_config()
         self.enable_display = True
         self.display_config_str = ""
+        self.boot_config_str = ""  # boot.py configuration
 
         self.initialize_keymap_data()
 
@@ -2411,22 +2622,25 @@ class KMKConfigurator(QMainWindow):
         main_layout.setSpacing(15)
 
 
-        # --- Left Panel (Hardware, Layers, Grid) ---
+        # --- Left Panel (File & Extensions) ---
+        # Set stretch factor to 2 for proportional resizing
         left_layout = QVBoxLayout()
         main_layout.addLayout(left_layout, 2)
 
         self.setup_file_io_ui(left_layout)
         self.setup_extensions_ui(left_layout)
-        self.setup_hardware_profile_ui(left_layout)
+        left_layout.addStretch()  # Push everything to the top
         
         # --- Center Panel (Macropad Grid) ---
+        # Set stretch factor to 4 for more space (center should be largest)
         center_layout = QVBoxLayout()
-        main_layout.addLayout(center_layout, 3)
+        main_layout.addLayout(center_layout, 4)
         self.setup_layer_management_ui(center_layout)
         self.setup_macropad_grid_ui(center_layout)
 
 
         # --- Right Panel (Keycode Selection, Macros) ---
+        # Set stretch factor to 2 for proportional resizing
         right_layout = QVBoxLayout()
         main_layout.addLayout(right_layout, 2)
 
@@ -2447,6 +2661,14 @@ class KMKConfigurator(QMainWindow):
             self.install_global_hover_effects()
         except Exception:
             pass
+    
+    def center_on_screen(self):
+        """Center the window on the screen."""
+        screen = QApplication.primaryScreen().geometry()
+        window_geometry = self.frameGeometry()
+        center_point = screen.center()
+        window_geometry.moveCenter(center_point)
+        self.move(window_geometry.topLeft())
 
     def check_dependencies(self):
         """Check if KMK firmware and CircuitPython libraries are available, download if not"""
@@ -2728,6 +2950,11 @@ class KMKConfigurator(QMainWindow):
                 f.write(self.analogin_config_str or '')
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
                 f.write(self.display_config_str or '')
+            
+            # Save boot.py configuration
+            with open(os.path.join(CONFIG_SAVE_DIR, 'boot.py'), 'w') as f:
+                boot_config = self.generate_boot_config() if hasattr(self, 'generate_boot_config') else self.boot_config_str
+                f.write(boot_config or '')
 
             rgb_config = self._export_rgb_config()
             with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
@@ -2846,46 +3073,83 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def setup_file_io_ui(self, parent_layout):
-        group = QGroupBox("File")
+        group = QGroupBox("📁 File Management")
         layout = QVBoxLayout()
         layout.setSpacing(10)
 
         # Config file selector (populated from kmk_Config_Save and repo root)
         file_select_layout = QHBoxLayout()
-        file_select_layout.addWidget(QLabel("Config file:"))
+        file_select_layout.addWidget(QLabel("Configuration:"))
         self.config_file_combo = QComboBox()
-        file_select_layout.addWidget(self.config_file_combo)
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setFixedWidth(70)
+        self.config_file_combo.setToolTip("Select a saved configuration to load")
+        file_select_layout.addWidget(self.config_file_combo, 1)
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setFixedWidth(35)
         refresh_btn.clicked.connect(self.populate_config_file_list)
+        refresh_btn.setToolTip("Refresh configuration list")
         file_select_layout.addWidget(refresh_btn)
         layout.addLayout(file_select_layout)
 
-        load_config_button = QPushButton("Load Configuration")
+        # Action buttons with icons
+        load_config_button = QPushButton("📂 Load Configuration")
         load_config_button.clicked.connect(self.load_configuration)
+        load_config_button.setToolTip("Load the selected configuration file")
         layout.addWidget(load_config_button)
 
-        save_config_button = QPushButton("Save Config")
+        save_config_button = QPushButton("💾 Save Configuration")
         save_config_button.clicked.connect(self.save_configuration_dialog)
+        save_config_button.setToolTip("Save current keymap and settings")
         layout.addWidget(save_config_button)
 
-        generate_button = QPushButton("Generate code.py")
+        generate_button = QPushButton("⚡ Generate code.py")
         generate_button.clicked.connect(self.generate_code_py_dialog)
+        generate_button.setToolTip("Export firmware to CIRCUITPY drive")
+        generate_button.setStyleSheet("QPushButton { font-weight: bold; }")
         layout.addWidget(generate_button)
 
+        layout.addSpacing(10)
+        
         # Theme selector
         theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("Theme:"))
+        theme_layout.addWidget(QLabel("🎨 Theme:"))
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Cheerful", "Light", "Dark"])
         self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        self.theme_combo.setToolTip("Change the UI color theme")
         # reflect current theme selection if available
         try:
             self.theme_combo.setCurrentText(self.current_theme)
         except Exception:
             pass
-        theme_layout.addWidget(self.theme_combo)
+        theme_layout.addWidget(self.theme_combo, 1)
         layout.addLayout(theme_layout)
+        
+        layout.addSpacing(10)
+        
+        # Profile management section
+        profile_label = QLabel("<b>Quick Profiles</b>")
+        layout.addWidget(profile_label)
+        
+        # Profile dropdown and delete button
+        profile_selection_layout = QHBoxLayout()
+        profile_selection_layout.addWidget(QLabel("Profile:"))
+        self.profile_combo = QComboBox()
+        self.profile_combo.currentIndexChanged.connect(self.load_selected_profile)
+        self.profile_combo.setToolTip("Quick-load a saved profile with keymap and settings")
+        profile_selection_layout.addWidget(self.profile_combo, 1)
+        
+        delete_profile_btn = QPushButton("🗑")
+        delete_profile_btn.setFixedWidth(35)
+        delete_profile_btn.clicked.connect(self.delete_selected_profile)
+        delete_profile_btn.setToolTip("Delete selected profile")
+        profile_selection_layout.addWidget(delete_profile_btn)
+        
+        layout.addLayout(profile_selection_layout)
+
+        save_profile_btn = QPushButton("💾 Save as Profile")
+        save_profile_btn.clicked.connect(self.save_current_profile)
+        save_profile_btn.setToolTip("Save current configuration as a named profile")
+        layout.addWidget(save_profile_btn)
 
         group.setLayout(layout)
         parent_layout.addWidget(group)
@@ -2894,57 +3158,112 @@ class KMKConfigurator(QMainWindow):
         self.populate_config_file_list()
 
     def setup_extensions_ui(self, parent_layout):
-        group = QGroupBox("Extensions")
-        layout = QVBoxLayout()
-
-        # Encoder (fixed pins: GP10, GP11, GP14)
-        enc_layout = QHBoxLayout()
-        self.enable_encoder_checkbox = QCheckBox("Encoder (GP10, GP11, GP14)")
+        """Setup extensions and advanced settings with tabbed interface"""
+        group = QGroupBox("Extensions & Settings")
+        main_layout = QVBoxLayout()
+        
+        # Create tab widget for extensions and advanced settings
+        self.extensions_tabs = QTabWidget()
+        
+        # --- Extensions Tab ---
+        extensions_tab = QWidget()
+        ext_scroll = QScrollArea()
+        ext_scroll.setWidgetResizable(True)
+        ext_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        ext_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        ext_content = QWidget()
+        ext_layout = QVBoxLayout(ext_content)
+        ext_layout.setSpacing(12)
+        
+        # Encoder Section with icon
+        encoder_group = QGroupBox("🎛 Rotary Encoder")
+        encoder_layout = QVBoxLayout()
+        enc_check_layout = QHBoxLayout()
+        self.enable_encoder_checkbox = QCheckBox("Enable Encoder (GP10, GP11, GP14)")
         self.enable_encoder_checkbox.setChecked(self.enable_encoder)
         self.enable_encoder_checkbox.toggled.connect(self.on_encoder_toggled)
-        enc_layout.addWidget(self.enable_encoder_checkbox)
-        enc_cfg_btn = QPushButton("Configure")
+        self.enable_encoder_checkbox.setToolTip("Rotary encoder with button for layer cycling and custom actions")
+        enc_check_layout.addWidget(self.enable_encoder_checkbox)
+        enc_check_layout.addStretch()
+        encoder_layout.addLayout(enc_check_layout)
+        
+        enc_btn_layout = QHBoxLayout()
+        enc_cfg_btn = QPushButton("⚙ Configure Actions")
         enc_cfg_btn.clicked.connect(self.configure_encoder)
-        enc_layout.addWidget(enc_cfg_btn)
+        enc_cfg_btn.setToolTip("Set up encoder rotation and button press actions")
+        enc_btn_layout.addWidget(enc_cfg_btn)
+        enc_btn_layout.addStretch()
         self.encoder_cfg_btn = enc_cfg_btn
-        layout.addLayout(enc_layout)
+        encoder_layout.addLayout(enc_btn_layout)
+        encoder_group.setLayout(encoder_layout)
+        ext_layout.addWidget(encoder_group)
 
-        # AnalogIn (fixed pin: GP28)
-        an_layout = QHBoxLayout()
-        self.enable_analogin_checkbox = QCheckBox("Analog Input (GP28 - Slider)")
+        # Analog Input Section with icon
+        analog_group = QGroupBox("📊 Analog Slider")
+        analog_layout = QVBoxLayout()
+        an_check_layout = QHBoxLayout()
+        self.enable_analogin_checkbox = QCheckBox("Enable Analog Input (GP28)")
         self.enable_analogin_checkbox.setChecked(self.enable_analogin)
         self.enable_analogin_checkbox.toggled.connect(self.on_analogin_toggled)
-        an_layout.addWidget(self.enable_analogin_checkbox)
-        an_cfg_btn = QPushButton("Configure")
+        self.enable_analogin_checkbox.setToolTip("10k potentiometer slider for volume or brightness control")
+        an_check_layout.addWidget(self.enable_analogin_checkbox)
+        an_check_layout.addStretch()
+        analog_layout.addLayout(an_check_layout)
+        
+        an_btn_layout = QHBoxLayout()
+        an_cfg_btn = QPushButton("⚙ Configure Function")
         an_cfg_btn.clicked.connect(self.configure_analogin)
-        an_layout.addWidget(an_cfg_btn)
+        an_cfg_btn.setToolTip("Choose between volume control or LED brightness")
+        an_btn_layout.addWidget(an_cfg_btn)
+        an_btn_layout.addStretch()
         self.analogin_cfg_btn = an_cfg_btn
-        layout.addLayout(an_layout)
+        analog_layout.addLayout(an_btn_layout)
+        analog_group.setLayout(analog_layout)
+        ext_layout.addWidget(analog_group)
 
-        # Display (fixed pins: SDA=GP20, SCL=GP21)
-        disp_layout = QHBoxLayout()
-        self.enable_display_checkbox = QCheckBox("Display (I2C: GP20/GP21)")
+        # Display Section with icon
+        display_group = QGroupBox("🖥 OLED Display")
+        display_layout = QVBoxLayout()
+        disp_check_layout = QHBoxLayout()
+        self.enable_display_checkbox = QCheckBox("Enable Display (I2C: GP20/GP21)")
         self.enable_display_checkbox.setChecked(self.enable_display)
         self.enable_display_checkbox.toggled.connect(self.on_display_toggled)
-        disp_layout.addWidget(self.enable_display_checkbox)
-        disp_cfg_btn = QPushButton("Configure")
+        self.enable_display_checkbox.setToolTip("128x64 OLED display showing current layer keymap")
+        disp_check_layout.addWidget(self.enable_display_checkbox)
+        disp_check_layout.addStretch()
+        display_layout.addLayout(disp_check_layout)
+        
+        disp_btn_layout = QHBoxLayout()
+        disp_cfg_btn = QPushButton("👁 Preview Layout")
         disp_cfg_btn.clicked.connect(self.configure_display)
-        disp_layout.addWidget(disp_cfg_btn)
+        disp_cfg_btn.setToolTip("Preview how keys will appear on the OLED display")
+        disp_btn_layout.addWidget(disp_cfg_btn)
+        disp_btn_layout.addStretch()
         self.display_cfg_btn = disp_cfg_btn
-        layout.addLayout(disp_layout)
+        display_layout.addLayout(disp_btn_layout)
+        display_group.setLayout(display_layout)
+        ext_layout.addWidget(display_group)
 
-        # Peg RGB Matrix
-        rgb_layout = QHBoxLayout()
-        self.enable_rgb_checkbox = QCheckBox("RGB Matrix (GP9)")
+        # RGB Matrix Section with icon
+        rgb_group = QGroupBox("💡 RGB Lighting")
+        rgb_layout = QVBoxLayout()
+        rgb_check_layout = QHBoxLayout()
+        self.enable_rgb_checkbox = QCheckBox("Enable RGB Matrix (GP9)")
         self.enable_rgb_checkbox.setChecked(self.enable_rgb)
         self.enable_rgb_checkbox.toggled.connect(self.on_rgb_toggled)
-        rgb_layout.addWidget(self.enable_rgb_checkbox)
-        rgb_cfg_btn = QPushButton("Configure")
+        self.enable_rgb_checkbox.setToolTip("SK6812MINI RGB LEDs - 20 per-key LEDs")
+        rgb_check_layout.addWidget(self.enable_rgb_checkbox)
+        rgb_check_layout.addStretch()
+        rgb_layout.addLayout(rgb_check_layout)
+        
+        rgb_btn_layout = QHBoxLayout()
+        rgb_cfg_btn = QPushButton("⚙ Global Settings")
         rgb_cfg_btn.clicked.connect(self.configure_rgb)
-        rgb_layout.addWidget(rgb_cfg_btn)
-        self.rgb_cfg_btn = rgb_cfg_btn
-        # Quick access button for per-key color mapping
-        rgb_colors_btn = QPushButton("Per-key Colors")
+        rgb_cfg_btn.setToolTip("Configure brightness, RGB order, and default colors")
+        rgb_btn_layout.addWidget(rgb_cfg_btn)
+        
+        rgb_colors_btn = QPushButton("🎨 Per-Key Colors")
         def open_per_key_colors():
             cfg = self.rgb_matrix_config
             layer_idx = self.current_layer if 0 <= self.current_layer < len(self.keymap_data) else 0
@@ -2964,14 +3283,139 @@ class KMKConfigurator(QMainWindow):
             if pc.exec():
                 self.save_extension_configs()
         rgb_colors_btn.clicked.connect(open_per_key_colors)
-        rgb_layout.addWidget(rgb_colors_btn)
+        rgb_colors_btn.setToolTip("Customize individual key colors for current layer")
+        rgb_btn_layout.addWidget(rgb_colors_btn)
+        rgb_btn_layout.addStretch()
+        self.rgb_cfg_btn = rgb_cfg_btn
         self.rgb_colors_btn = rgb_colors_btn
-        layout.addLayout(rgb_layout)
-
+        rgb_layout.addLayout(rgb_btn_layout)
+        rgb_group.setLayout(rgb_layout)
+        ext_layout.addWidget(rgb_group)
+        
+        ext_layout.addStretch()
+        
+        # Set up scroll area
+        ext_scroll.setWidget(ext_content)
+        ext_tab_layout = QVBoxLayout(extensions_tab)
+        ext_tab_layout.setContentsMargins(0, 0, 0, 0)
+        ext_tab_layout.addWidget(ext_scroll)
+        
+        self.extensions_tabs.addTab(extensions_tab, "🔌 Extensions")
+        
+        # --- Advanced Settings Tab ---
+        advanced_tab = QWidget()
+        adv_scroll = QScrollArea()
+        adv_scroll.setWidgetResizable(True)
+        adv_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        adv_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        adv_content = QWidget()
+        adv_layout = QVBoxLayout(adv_content)
+        adv_layout.setSpacing(12)
+        
+        # Encoder Sensitivity
+        encoder_adv_group = QGroupBox("🎛 Encoder Sensitivity")
+        encoder_adv_layout = QFormLayout()
+        
+        self.divisor_spin = QSpinBox()
+        self.divisor_spin.setRange(1, 16)
+        self.divisor_spin.setValue(self.encoder_divisor)
+        self.divisor_spin.setToolTip(
+            "Number of encoder steps before sending an action.\n"
+            "Lower = more sensitive (1-2), Higher = less sensitive (6-8)\n"
+            "Default: 4 works well for most encoders"
+        )
+        self.divisor_spin.valueChanged.connect(self.on_encoder_divisor_changed)
+        encoder_adv_layout.addRow("Steps per action:", self.divisor_spin)
+        
+        sensitivity_info = QLabel(
+            "💡 <i>Adjust if encoder feels too sensitive or unresponsive</i>"
+        )
+        sensitivity_info.setWordWrap(True)
+        sensitivity_info.setStyleSheet("color: #888; font-size: 10pt;")
+        encoder_adv_layout.addRow("", sensitivity_info)
+        
+        encoder_adv_group.setLayout(encoder_adv_layout)
+        adv_layout.addWidget(encoder_adv_group)
+        
+        # Boot Configuration
+        boot_group = QGroupBox("⚡ Boot Configuration (boot.py)")
+        boot_layout = QVBoxLayout()
+        
+        boot_info = QLabel(
+            "Configure how the device boots. <b>Use with caution!</b>"
+        )
+        boot_info.setWordWrap(True)
+        boot_layout.addWidget(boot_info)
+        
+        self.enable_boot_py = QCheckBox("Enable custom boot.py")
+        self.enable_boot_py.setChecked(bool(self.boot_config_str and self.boot_config_str.strip()))
+        self.enable_boot_py.toggled.connect(self.on_boot_toggle)
+        boot_layout.addWidget(self.enable_boot_py)
+        
+        # Boot options
+        self.boot_options_widget = QWidget()
+        boot_options_layout = QVBoxLayout(self.boot_options_widget)
+        boot_options_layout.setContentsMargins(20, 0, 0, 0)
+        
+        self.disable_storage_checkbox = QCheckBox("⚠ Make storage read-only from computer")
+        self.disable_storage_checkbox.setStyleSheet("QCheckBox { color: #ff6b6b; font-weight: bold; }")
+        self.disable_storage_checkbox.setToolTip(
+            "WARNING: The CIRCUITPY drive will be read-only from your computer.\n"
+            "You won't be able to edit files without special recovery steps!"
+        )
+        self.disable_storage_checkbox.toggled.connect(self.on_readonly_toggle)
+        boot_options_layout.addWidget(self.disable_storage_checkbox)
+        
+        self.disable_usb_hid_checkbox = QCheckBox("Disable USB keyboard/mouse (advanced)")
+        self.disable_usb_hid_checkbox.setToolTip(
+            "Only disable this if you know what you're doing.\n"
+            "Your device won't function as a keyboard!"
+        )
+        boot_options_layout.addWidget(self.disable_usb_hid_checkbox)
+        
+        rename_layout = QHBoxLayout()
+        self.rename_drive_checkbox = QCheckBox("Rename drive to:")
+        self.drive_name_edit = QLineEdit("CHRONOSPAD")
+        self.drive_name_edit.setMaxLength(11)
+        self.drive_name_edit.setMaximumWidth(150)
+        rename_layout.addWidget(self.rename_drive_checkbox)
+        rename_layout.addWidget(self.drive_name_edit)
+        rename_layout.addStretch()
+        boot_options_layout.addLayout(rename_layout)
+        
+        boot_options_layout.addWidget(QLabel("Custom boot.py code:"))
+        self.boot_code_editor = QTextEdit()
+        self.boot_code_editor.setPlaceholderText(
+            "# Advanced: Add custom boot.py code here\n"
+            "# Example: import storage\n"
+            "# storage.remount('/', readonly=False)"
+        )
+        self.boot_code_editor.setMaximumHeight(120)
+        boot_options_layout.addWidget(self.boot_code_editor)
+        
+        boot_layout.addWidget(self.boot_options_widget)
+        boot_group.setLayout(boot_layout)
+        adv_layout.addWidget(boot_group)
+        
+        adv_layout.addStretch()
+        
+        # Set up scroll area
+        adv_scroll.setWidget(adv_content)
+        adv_tab_layout = QVBoxLayout(advanced_tab)
+        adv_tab_layout.setContentsMargins(0, 0, 0, 0)
+        adv_tab_layout.addWidget(adv_scroll)
+        
+        self.extensions_tabs.addTab(advanced_tab, "⚙ Advanced")
+        
+        # Add tabs to main layout
+        main_layout.addWidget(self.extensions_tabs)
+        
         # Update button states based on checkbox states
         self.update_extension_button_states()
+        self.on_boot_toggle()  # Initialize boot options visibility
 
-        group.setLayout(layout)
+        group.setLayout(main_layout)
         parent_layout.addWidget(group)
 
     def on_theme_changed(self, name):
@@ -3026,6 +3470,80 @@ class KMKConfigurator(QMainWindow):
             self.rgb_cfg_btn.setEnabled(self.enable_rgb)
         if hasattr(self, 'rgb_colors_btn'):
             self.rgb_colors_btn.setEnabled(self.enable_rgb)
+    
+    def on_boot_toggle(self):
+        """Handle boot.py enable/disable toggle."""
+        enabled = self.enable_boot_py.isChecked()
+        if hasattr(self, 'boot_options_widget'):
+            self.boot_options_widget.setEnabled(enabled)
+        
+        # Update boot config string
+        if not enabled:
+            self.boot_config_str = ""
+        else:
+            self.boot_config_str = self.generate_boot_config()
+    
+    def on_readonly_toggle(self, checked):
+        """Show warning when user tries to enable read-only mode."""
+        if checked:
+            reply = QMessageBox.warning(
+                self,
+                "⚠ WARNING: Read-Only Storage",
+                "<b>You are about to make the CIRCUITPY drive read-only from your computer!</b><br><br>"
+                "This means:<br>"
+                "• You won't be able to edit or delete files from your computer<br>"
+                "• You'll need to modify code.py to disable this setting<br>"
+                "• Or use the CircuitPython bootloader to recover<br><br>"
+                "<b>Only do this if you want to prevent accidental file changes!</b><br><br>"
+                "Are you sure you want to continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                # User cancelled - uncheck the box
+                self.disable_storage_checkbox.setChecked(False)
+    
+    def on_encoder_divisor_changed(self, value):
+        """Handle encoder divisor spinbox change."""
+        self.encoder_divisor = value
+        self.save_extension_configs()
+    
+    def generate_boot_config(self):
+        """Generate boot.py code from UI settings."""
+        if not self.enable_boot_py.isChecked():
+            return ""
+        
+        lines = []
+        
+        if self.disable_storage_checkbox.isChecked():
+            lines.append("import storage")
+            lines.append("storage.disable_usb_drive()")
+            lines.append("")
+        
+        if self.disable_usb_hid_checkbox.isChecked():
+            lines.append("import usb_hid")
+            lines.append("usb_hid.disable()")
+            lines.append("")
+        
+        if self.rename_drive_checkbox.isChecked():
+            drive_name = self.drive_name_edit.text().strip()
+            if drive_name:
+                lines.append("import storage")
+                lines.append('storage.remount("/", readonly=False)')
+                lines.append(f'storage.getmount("/").label = "{drive_name}"')
+                lines.append('storage.remount("/", readonly=True)')
+                lines.append("")
+        
+        custom_code = self.boot_code_editor.toPlainText().strip()
+        if custom_code:
+            if lines:
+                lines.append("# Custom configuration:")
+            lines.append(custom_code)
+        
+        return "\n".join(lines)
+        if hasattr(self, 'rgb_colors_btn'):
+            self.rgb_colors_btn.setEnabled(self.enable_rgb)
 
     def sync_extension_checkboxes(self):
         """Ensure extension checkboxes reflect current enabled states without triggering signals."""
@@ -3040,13 +3558,39 @@ class KMKConfigurator(QMainWindow):
         _set_state(getattr(self, 'enable_display_checkbox', None), self.enable_display)
         _set_state(getattr(self, 'enable_rgb_checkbox', None), self.enable_rgb)
 
-    def on_diode_orientation_changed(self, orientation):
-        """Handle diode orientation change."""
-        self.diode_orientation = orientation
-
-
-
     # --- Extension configuration handlers ---
+    def open_advanced_settings(self):
+        """Open the advanced settings dialog for boot.py and encoder divisor."""
+        dialog = AdvancedSettingsDialog(
+            parent=self,
+            encoder_divisor=self.encoder_divisor,
+            boot_config=self.boot_config_str
+        )
+        if dialog.exec():
+            # Update encoder divisor
+            old_divisor = self.encoder_divisor
+            self.encoder_divisor = dialog.get_encoder_divisor()
+            
+            # Update boot.py config
+            self.boot_config_str = dialog.get_boot_config()
+            
+            # Save settings
+            self.save_extension_configs()
+            
+            # Notify user
+            changes = []
+            if old_divisor != self.encoder_divisor:
+                changes.append(f"Encoder divisor changed from {old_divisor} to {self.encoder_divisor}")
+            if self.boot_config_str:
+                changes.append("Boot configuration updated")
+            
+            if changes:
+                QMessageBox.information(
+                    self, 
+                    "Settings Updated", 
+                    "Advanced settings have been saved:\n\n" + "\n".join(f"• {c}" for c in changes)
+                )
+    
     def configure_encoder(self):
         """Configure encoder with enhanced dialog for automatic layer cycling."""
         num_layers = len(self.keymap_data)
@@ -3165,68 +3709,32 @@ class KMKConfigurator(QMainWindow):
         self.config_file_combo.addItems(display_names)
         self.config_file_combo.blockSignals(False)
     
-    def setup_hardware_profile_ui(self, parent_layout):
-        group = QGroupBox("Hardware Configuration")
-        layout = QVBoxLayout()
-        
-        # Display fixed hardware info (read-only)
-        info_layout = QGridLayout()
-        info_layout.addWidget(QLabel("Board:"), 0, 0)
-        info_layout.addWidget(QLabel("Raspberry Pi Pico"), 0, 1)
-        info_layout.addWidget(QLabel("Matrix:"), 1, 0)
-        info_layout.addWidget(QLabel(f"{FIXED_ROWS}x{FIXED_COLS}"), 1, 1)
-        layout.addLayout(info_layout)
-        
-        # Diode orientation selector
-        diode_layout = QHBoxLayout()
-        diode_layout.addWidget(QLabel("Diode Orientation:"))
-        self.diode_combo = QComboBox()
-        self.diode_combo.addItems(["COL2ROW", "ROW2COL"])
-        self.diode_combo.setCurrentText(self.diode_orientation)
-        self.diode_combo.currentTextChanged.connect(self.on_diode_orientation_changed)
-        diode_layout.addWidget(self.diode_combo)
-        layout.addLayout(diode_layout)
-        
-        # Profile dropdown and delete button
-        profile_selection_layout = QHBoxLayout()
-        profile_selection_layout.addWidget(QLabel("Profile:"))
-        self.profile_combo = QComboBox()
-        self.profile_combo.currentIndexChanged.connect(self.load_selected_profile)
-        profile_selection_layout.addWidget(self.profile_combo)
-        
-        delete_profile_btn = QPushButton("Del")
-        delete_profile_btn.setFixedWidth(40)
-        delete_profile_btn.clicked.connect(self.delete_selected_profile)
-        profile_selection_layout.addWidget(delete_profile_btn)
-        
-        layout.addLayout(profile_selection_layout)
-
-        save_profile_btn = QPushButton("Save Profile")
-        save_profile_btn.clicked.connect(self.save_current_profile)
-        layout.addWidget(save_profile_btn)
-
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-        parent_layout.addStretch()
-
-
     def setup_layer_management_ui(self, parent_layout):
         layout = QHBoxLayout()
+        
+        # Layer tabs with better styling
+        layer_label = QLabel("📑 <b>Layers:</b>")
+        layer_label.setFixedWidth(60)
+        layout.addWidget(layer_label)
+        
         self.layer_tabs = QTabWidget()
         self.layer_tabs.setUsesScrollButtons(True)
         self.layer_tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self.layer_tabs.currentChanged.connect(self.on_layer_changed)
-        layout.addWidget(self.layer_tabs)
+        self.layer_tabs.setToolTip("Switch between keyboard layers - each layer can have different key mappings")
+        layout.addWidget(self.layer_tabs, 1)
 
         layer_button_layout = QVBoxLayout()
-        add_layer_btn = QPushButton("+")
-        add_layer_btn.setFixedWidth(30)
+        add_layer_btn = QPushButton("➕")
+        add_layer_btn.setFixedSize(35, 35)
         add_layer_btn.clicked.connect(self.add_layer)
+        add_layer_btn.setToolTip("Add a new layer")
         layer_button_layout.addWidget(add_layer_btn)
 
-        remove_layer_btn = QPushButton("-")
-        remove_layer_btn.setFixedWidth(30)
+        remove_layer_btn = QPushButton("➖")
+        remove_layer_btn.setFixedSize(35, 35)
         remove_layer_btn.clicked.connect(self.remove_layer)
+        remove_layer_btn.setToolTip("Remove current layer")
         layer_button_layout.addWidget(remove_layer_btn)
         layer_button_layout.addStretch()
         layout.addLayout(layer_button_layout)
@@ -3235,7 +3743,8 @@ class KMKConfigurator(QMainWindow):
 
 
     def setup_macropad_grid_ui(self, parent_layout):
-        self.macropad_group = QGroupBox(f"Keymap (Layer {self.current_layer})")
+        self.macropad_group = QGroupBox(f"⌨ Keymap (Layer {self.current_layer})")
+        self.macropad_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.macropad_layout = QGridLayout()
         self.macropad_layout.setHorizontalSpacing(10)
         self.macropad_layout.setVerticalSpacing(10)
@@ -3243,37 +3752,45 @@ class KMKConfigurator(QMainWindow):
         parent_layout.addWidget(self.macropad_group, 1)
 
     def setup_keycode_selector_ui(self, parent_layout):
-        group = QGroupBox("Key Assignment")
+        group = QGroupBox("🔤 Key Assignment")
         layout = QVBoxLayout()
         self.selected_key_label = QLabel("Selected Key: None")
         self.selected_key_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.selected_key_label.setStyleSheet("font-weight: bold; padding: 5px;")
         layout.addWidget(self.selected_key_label)
         self.keycode_selector = self.create_keycode_selector()
-        layout.addWidget(self.keycode_selector)
+        self.keycode_selector.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.keycode_selector, 1)
 
         # Add button for creating combo keys
-        assign_combo_btn = QPushButton("Assign Combo...")
+        assign_combo_btn = QPushButton("⌨ Assign Combo...")
         assign_combo_btn.clicked.connect(self.assign_combo)
+        assign_combo_btn.setToolTip("Create key combinations like Ctrl+C")
         layout.addWidget(assign_combo_btn)
 
         group.setLayout(layout)
-        parent_layout.addWidget(group)
+        parent_layout.addWidget(group, 1)
 
     def setup_macro_ui(self, parent_layout):
-        group = QGroupBox("Macros")
+        group = QGroupBox("⚡ Macros")
         layout = QVBoxLayout()
         self.macro_list_widget = QListWidget()
-        layout.addWidget(self.macro_list_widget)
+        self.macro_list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.macro_list_widget.setToolTip("Double-click a macro to assign it to the selected key")
+        layout.addWidget(self.macro_list_widget, 1)
         # Clicking a macro in this list assigns it to the currently-selected key
         self.macro_list_widget.itemClicked.connect(self.on_macro_selected)
         
         macro_button_layout = QHBoxLayout()
-        add_macro_btn = QPushButton("Add")
+        add_macro_btn = QPushButton("➕ Add")
         add_macro_btn.clicked.connect(self.add_macro)
-        edit_macro_btn = QPushButton("Edit")
+        add_macro_btn.setToolTip("Create a new macro")
+        edit_macro_btn = QPushButton("✏ Edit")
         edit_macro_btn.clicked.connect(self.edit_macro)
-        remove_macro_btn = QPushButton("Remove")
+        edit_macro_btn.setToolTip("Edit selected macro")
+        remove_macro_btn = QPushButton("🗑 Remove")
         remove_macro_btn.clicked.connect(self.remove_macro)
+        remove_macro_btn.setToolTip("Delete selected macro")
         
         macro_button_layout.addWidget(add_macro_btn)
         macro_button_layout.addWidget(edit_macro_btn)
@@ -3281,7 +3798,7 @@ class KMKConfigurator(QMainWindow):
         
         layout.addLayout(macro_button_layout)
         group.setLayout(layout)
-        parent_layout.addWidget(group)
+        parent_layout.addWidget(group, 1)
 
     def closeEvent(self, event):
         """Save settings on application exit."""
@@ -3412,6 +3929,7 @@ class KMKConfigurator(QMainWindow):
                     "enabled": self.enable_rgb,
                     "matrix": self._export_rgb_config(),
                 },
+                "boot_config": self.boot_config_str,  # Save boot.py config
             }
             self.profiles[name] = profile_payload
             self.save_profiles()
@@ -3468,6 +3986,10 @@ class KMKConfigurator(QMainWindow):
                     display_section = extensions.get("display", {})
                     self.enable_display = display_section.get("enabled", self.enable_display)
                     self.display_config_str = display_section.get("config_str", self.display_config_str)
+
+                # Load boot.py configuration
+                if "boot_config" in profile:
+                    self.boot_config_str = profile.get("boot_config", "")
 
                 self.update_layer_tabs()
                 try:
@@ -3826,43 +4348,54 @@ display.root_group = splash
             # Handle macros
             if key_str.startswith("MACRO("):
                 macro_name = key_str[6:-1]  # Extract name from MACRO(name)
-                return macro_name[:6] if len(macro_name) > 6 else macro_name
+                return macro_name[:4] if len(macro_name) > 4 else macro_name
             
             # Handle layer switches
             if "MO(" in key_str or "TG(" in key_str or "TO(" in key_str:
-                return key_str.replace("KC.", "")[:6]
+                return key_str.replace("KC.", "")[:4]
             
             # Handle key combinations (e.g., KC.LCTL(KC.C))
             if "(" in key_str:
                 # Simplify combinations like LCTL(C) -> C^C
                 parts = key_str.replace("KC.", "").replace("(", "+").replace(")", "")
-                return parts[:6]
+                return parts[:4]
             
             # Standard keys - remove KC. prefix
             key = key_str.replace("KC.", "")
             
-            # Common abbreviations for display
+            # Common abbreviations for display (max 4 chars for small OLED)
             abbreviations = {
-                "LCTL": "LCtl", "RCTL": "RCtl",
-                "LSFT": "LSft", "RSFT": "RSft", 
-                "LALT": "LAlt", "RALT": "RAlt",
-                "LGUI": "LGui", "RGUI": "RGui",
-                "BSPC": "BkSp", "ENT": "Entr",
-                "SPC": "Spce", "TAB": "Tab",
+                # Modifiers (3 chars)
+                "LCTL": "LCt", "RCTL": "RCt",
+                "LSFT": "LSh", "RSFT": "RSh", 
+                "LALT": "LAl", "RALT": "RAl",
+                "LGUI": "LWi", "RGUI": "RWi",
+                # Common actions (3-4 chars)
+                "BSPC": "BkSp", "ENT": "Ent",
+                "SPC": "Spc", "TAB": "Tab",
                 "ESC": "Esc", "DEL": "Del",
+                # Navigation (3-4 chars)
                 "PGUP": "PgUp", "PGDN": "PgDn",
-                "HOME": "Home", "END": "End",
-                "UP": "Up", "DOWN": "Down",
-                "LEFT": "Left", "RGHT": "Rght",
-                "VOLU": "Vol+", "VOLD": "Vol-",
-                "MUTE": "Mute", "MPLY": "Play",
-                "MNXT": "Next", "MPRV": "Prev",
-                "MSTP": "Stop", "EJCT": "Ejct",
-                "BRIU": "Bri+", "BRID": "Bri-",
+                "HOME": "Hom", "END": "End",
+                "UP": "Up", "DOWN": "Dwn",
+                "LEFT": "Lft", "RGHT": "Rgt",
+                # Media (3-4 chars)
+                "VOLU": "V+", "VOLD": "V-",
+                "MUTE": "Mut", "MPLY": "Ply",
+                "MNXT": "Nxt", "MPRV": "Prv",
+                "MSTP": "Stp", "EJCT": "Ejt",
+                "BRIU": "B+", "BRID": "B-",
+                # Numbers stay as-is
+                "N1": "1", "N2": "2", "N3": "3", "N4": "4", "N5": "5",
+                "N6": "6", "N7": "7", "N8": "8", "N9": "9", "N0": "0",
+                # Function keys
+                "F1": "F1", "F2": "F2", "F3": "F3", "F4": "F4",
+                "F5": "F5", "F6": "F6", "F7": "F7", "F8": "F8",
+                "F9": "F9", "F10": "F10", "F11": "F11", "F12": "F12",
             }
             
             key = abbreviations.get(key, key)
-            return key[:6] if len(key) > 6 else key
+            return key[:4] if len(key) > 4 else key
         
         # Build display code with all layers
         code = '''import board
@@ -4457,9 +4990,22 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                             shutil.copy2(src, dst)
                             copied_files.append(lib_name)
                 
+                # Save boot.py if configured
+                boot_saved = False
+                if self.boot_config_str and self.boot_config_str.strip():
+                    boot_path = os.path.join(folder_path, "boot.py")
+                    try:
+                        with open(boot_path, 'w') as f:
+                            f.write(self.boot_config_str)
+                        boot_saved = True
+                    except Exception as e:
+                        QMessageBox.warning(self, "Warning", f"Could not save boot.py:\n{e}")
+                
                 msg = f"code.py saved successfully to:\n{file_path}\n\n"
                 if kmk_copied:
                     msg += f"✓ KMK firmware copied to {kmk_dest}\n\n"
+                if boot_saved:
+                    msg += f"✓ boot.py saved to {os.path.join(folder_path, 'boot.py')}\n\n"
                 msg += f"Libraries copied to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
                 QMessageBox.information(self, "Success", msg)
             except Exception as e:
@@ -4527,6 +5073,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     "config_str": self.display_config_str,
                 },
             },
+            "boot_config": self.boot_config_str,  # Save boot.py configuration
         }
 
         try:
@@ -4611,6 +5158,9 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 display_section = extensions.get("display", {})
                 self.enable_display = display_section.get("enabled", True)
                 self.display_config_str = display_section.get("config_str", "")
+                
+                # Load boot.py configuration
+                self.boot_config_str = config_data.get("boot_config", "")
                 
             else:
                 # Old format (v1.0) - backward compatibility

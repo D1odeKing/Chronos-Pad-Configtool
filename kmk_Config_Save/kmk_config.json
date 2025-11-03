@@ -85,7 +85,7 @@
                 ]
             ]
         ],
-        "current_layer": 1
+        "current_layer": 0
     },
     "macros": {
         "PASTE": [
@@ -157,7 +157,7 @@
             ],
             [
                 "delay",
-                "100"
+                "200"
             ],
             [
                 "tap",
@@ -250,49 +250,49 @@
             "default_key_color": "#FFFFFF",
             "default_underglow_color": "#000000",
             "key_colors": {
-                "1": "#FFD93D",
-                "2": "#FFD93D",
-                "3": "#FFD93D",
+                "0": "#FF6B6B",
                 "4": "#FF6B6B",
-                "5": "#FFD93D",
-                "6": "#FFD93D",
-                "7": "#FFD93D",
                 "8": "#FF6B6B",
-                "9": "#F0E68C",
-                "10": "#FFDAB9",
-                "11": "#A8E6CF",
                 "12": "#FF6B6B",
+                "9": "#FFDAB9",
+                "10": "#98FB98",
+                "11": "#F0E68C",
+                "1": "#FF0000",
+                "2": "#FF0000",
+                "3": "#FF0000",
+                "5": "#FFD93D",
+                "6": "#FF0000",
+                "7": "#FFD93D",
                 "13": "#FFD93D",
                 "14": "#FF6347",
                 "15": "#FFD93D",
                 "16": "#F38181",
                 "17": "#F38181",
                 "18": "#F38181",
-                "19": "#F38181",
-                "0": "#FF6B6B"
+                "19": "#F38181"
             },
             "layer_key_colors": {
                 "0": {
-                    "1": "#FFD93D",
-                    "2": "#FFD93D",
-                    "3": "#FFD93D",
+                    "0": "#FF6B6B",
                     "4": "#FF6B6B",
-                    "5": "#FFD93D",
-                    "6": "#FFD93D",
-                    "7": "#FFD93D",
                     "8": "#FF6B6B",
-                    "9": "#F0E68C",
-                    "10": "#FFDAB9",
-                    "11": "#A8E6CF",
                     "12": "#FF6B6B",
+                    "9": "#FFDAB9",
+                    "10": "#98FB98",
+                    "11": "#F0E68C",
+                    "1": "#FF0000",
+                    "2": "#FF0000",
+                    "3": "#FF0000",
+                    "5": "#FFD93D",
+                    "6": "#FF0000",
+                    "7": "#FFD93D",
                     "13": "#FFD93D",
                     "14": "#FF6347",
                     "15": "#FFD93D",
                     "16": "#F38181",
                     "17": "#F38181",
                     "18": "#F38181",
-                    "19": "#F38181",
-                    "0": "#FF6B6B"
+                    "19": "#F38181"
                 },
                 "1": {
                     "1": "#FF00FF",
@@ -323,7 +323,8 @@
     "extensions": {
         "encoder": {
             "enabled": true,
-            "config_str": "# --- Rotary Encoder Configuration ---\nfrom kmk.modules.encoder import EncoderHandler\n\n# Encoder configuration with layer cycling using KC.TO()\nencoder_handler = EncoderHandler()\nencoder_handler.pins = ((board.GP10, board.GP11, board.GP14, False),)\n\n# Build encoder map for each layer\n# Each layer's encoder: (CCW action, CW action, Button press action)\nencoder_map = []\nfor i in range(2):\n    next_layer = (i + 1) % 2\n    prev_layer = (i - 1) % 2\n    # CCW=prev layer, CW=next layer, Press=layer 0\n    encoder_map.append(((KC.TO(prev_layer), KC.TO(next_layer), KC.TO(0)),))\n\nencoder_handler.map = encoder_map\nkeyboard.modules.append(encoder_handler)\n\n# Initialize layer cycler after keymap is defined\n# NOTE: Add this line AFTER keyboard.keymap = [...] in your code.py:\n# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))"
+            "config_str": "# --- Rotary Encoder Configuration ---\nfrom kmk.modules.encoder import EncoderHandler\n\n# Encoder configuration with layer cycling using KC.TO()\nencoder_handler = EncoderHandler()\nencoder_handler.pins = ((board.GP10, board.GP11, board.GP14, False),)\n\n# Build encoder map for each layer\n# Each layer's encoder: (CCW action, CW action, Button press action)\nencoder_map = []\nfor i in range(2):\n    next_layer = (i + 1) % 2\n    prev_layer = (i - 1) % 2\n    # CCW=prev layer, CW=next layer, Press=layer 0\n    encoder_map.append(((KC.TO(prev_layer), KC.TO(next_layer), KC.TO(0)),))\n\nencoder_handler.map = encoder_map\nkeyboard.modules.append(encoder_handler)\n\n# Initialize layer cycler after keymap is defined\n# NOTE: Add this line AFTER keyboard.keymap = [...] in your code.py:\n# layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))",
+            "divisor": 2
         },
         "analogin": {
             "enabled": true,
@@ -333,5 +334,6 @@
             "enabled": true,
             "config_str": ""
         }
-    }
+    },
+    "boot_config": ""
 }
