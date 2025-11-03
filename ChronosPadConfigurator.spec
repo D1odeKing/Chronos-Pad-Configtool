@@ -1,5 +1,9 @@
 # Chronos Pad Configurator - PyInstaller Spec File
 # This file configures how the executable is built
+# Creates a single-file executable with all dependencies bundled
+
+import sys
+from pathlib import Path
 
 block_cipher = None
 
@@ -50,3 +54,4 @@ exe = EXE(
     entitlements_file=None,
     icon=None,  # Add 'icon.ico' here if you have an icon
 )
+

@@ -58,11 +58,26 @@ def get_application_path():
 # Set base directory for all file operations
 BASE_DIR = get_application_path()
 
+# Create organized folder structure for portable exe
+DATA_DIR = os.path.join(BASE_DIR, "data")
+LIBRARIES_DIR = os.path.join(BASE_DIR, "libraries")
+
+# Create folders if they don't exist
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LIBRARIES_DIR, exist_ok=True)
+
 # --- Default Values ---
 DEFAULT_KEY = "KC.NO"
-CONFIG_SAVE_DIR = os.path.join(BASE_DIR, "kmk_Config_Save")
+
+# Store configs in data/ subfolder for organized structure
+CONFIG_SAVE_DIR = os.path.join(DATA_DIR, "kmk_Config_Save")
+
+# Try to load profiles.json from data/ first, fallback to BASE_DIR for backward compatibility
+PROFILE_FILE_NEW = os.path.join(DATA_DIR, "profiles.json")
+PROFILE_FILE_OLD = os.path.join(BASE_DIR, "profiles.json")
+PROFILE_FILE = PROFILE_FILE_NEW if os.path.exists(PROFILE_FILE_NEW) else PROFILE_FILE_OLD
+
 MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
-PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
@@ -75,7 +90,8 @@ class DependencyDownloader(QThread):
     
     def __init__(self):
         super().__init__()
-        self.libraries_dir = os.path.join(BASE_DIR, "libraries")
+        # Use organized libraries folder
+        self.libraries_dir = LIBRARIES_DIR
         
     def run(self):
         """Download all required dependencies"""
