@@ -60,5 +60,93 @@
             "release",
             "KC.LCTL"
         ]
+    ],
+    "PASS": [
+        [
+            "tap",
+            "KC.ENT"
+        ],
+        [
+            "delay",
+            "200"
+        ],
+        [
+            "tap",
+            "KC.N8"
+        ],
+        [
+            "tap",
+            "KC.N0"
+        ],
+        [
+            "tap",
+            "KC.N1"
+        ],
+        [
+            "tap",
+            "KC.N2"
+        ]
+    ],
+    "WINL": [
+        [
+            "press",
+            "KC.LGUI"
+        ],
+        [
+            "press",
+            "KC.L"
+        ],
+        [
+            "release",
+            "KC.LGUI"
+        ],
+        [
+            "release",
+            "KC.L"
+        ]
+    ],
+    "ALTAB": [
+        [
+            "press",
+            "KC.LALT"
+        ],
+        [
+            "tap",
+            "KC.TAB"
+        ],
+        [
+            "release",
+            "KC.LALT"
+        ]
+    ],
+    "CMD": [
+        [
+            "press",
+            "KC.LGUI"
+        ],
+        [
+            "tap",
+            "KC.R"
+        ],
+        [
+            "release",
+            "KC.LGUI"
+        ],
+        [
+            "delay",
+            "10"
+        ],
+        [
+            "text",
+            "CMD.EXE"
+        ],
+        [
+            "delay",
+            "10"
+        ],
+        [
+            "tap",
+            "KC.ENT"
+        ]
     ]
 }
