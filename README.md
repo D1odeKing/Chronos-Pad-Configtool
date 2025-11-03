@@ -29,17 +29,32 @@ Complete documentation is organized in the [`docs/`](docs/) folder for easy navi
 
 ## 🎯 Features
 
+### Modern User Interface
+- ✅ **Fullscreen Compatible**: Responsive layout that scales perfectly to any screen size
+- ✅ **Tabbed Extensions Panel**: Organized interface with Extensions and Advanced tabs
+- ✅ **Icon-Rich Design**: Emoji icons throughout for quick visual recognition
+- ✅ **Smart Tooltips**: Comprehensive help text on every control
+- ✅ **Theme Support**: Choose from Cheerful, Light, or Dark themes
+
 ### Keymap Editor
 - ✅ **Visual 5×4 Grid Interface**: Intuitive button-based key assignment
 - ✅ **Multi-Layer Support**: Create unlimited layers with full layer switching
 - ✅ **Profile Management**: Save and load different configurations
 - ✅ **Full Keycode Library**: Letters, numbers, modifiers, media keys, and more
+- ✅ **Condensed Display Labels**: Optimized 3-4 character abbreviations for OLED
 
 ### Hardware Extensions
-- ✅ **Encoder**: Rotary encoder with layer cycling (GP10, GP11, GP14)
-- ⚠️ **Analog Input**: Slider potentiometer support (GP28, under development)
-- ✅ **OLED Display**: Live layer-aware keymap visualization (GP20, GP21)
-- ✅ **RGB Lighting**: Per-key and underglow RGB support (GP9)
+- ✅ **Encoder**: Rotary encoder with layer cycling and configurable sensitivity (GP10, GP11, GP14)
+- ✅ **Analog Input**: Slider potentiometer for volume or brightness control (GP28) - FIXED!
+- ✅ **OLED Display**: Live layer-aware keymap visualization with smart abbreviations (GP20, GP21)
+- ✅ **RGB Lighting**: Per-key and underglow RGB support with layer colors (GP9)
+
+### Advanced Settings
+- ✅ **Encoder Sensitivity Control**: Adjust steps per pulse (1-16) for perfect responsiveness
+- ✅ **Boot Configuration**: Full boot.py customization with safety warnings
+- ⚠️ **Read-Only Protection**: Comprehensive warnings before enabling read-only mode
+- ✅ **Drive Renaming**: Customize CIRCUITPY drive label
+- ✅ **USB Configuration**: Control USB HID and storage settings
 
 ### Macro System
 - ✅ **Visual Macro Builder**: Create complex sequences with GUI
@@ -50,7 +65,7 @@ Complete documentation is organized in the [`docs/`](docs/) folder for easy navi
 - ✅ **One-Click Export**: Generate complete KMK firmware code
 - ✅ **Auto-Detection**: Finds CIRCUITPY drive automatically
 - ✅ **Dependency Management**: Auto-downloads KMK firmware & libraries
-- ✅ **Direct Device Deployment**: Saves code.py and libraries to Pico
+- ✅ **Direct Device Deployment**: Saves code.py, boot.py, and libraries to Pico
 
 ## 🚀 Quick Start
 

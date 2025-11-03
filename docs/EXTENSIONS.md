@@ -9,7 +9,7 @@ This guide covers configuring all hardware extensions: Encoder, Analog Input, Di
 | Extension | Hardware | Status | Guide |
 |-----------|----------|--------|-------|
 | **Encoder** | GP10, GP11, GP14 | ✅ Fully working | [Link](#encoder) |
-| **Analog Input** | GP28 | ⚠️ Under development | [Link](#analog-input) |
+| **Analog Input** | GP28 | ✅ Volume control working! | [Link](#analog-input) |
 | **Display** | GP20, GP21 (I2C) | ✅ Fully working | [Link](#display) |
 | **RGB Matrix** | GP9 | ✅ Fully working | [Link](#rgb-matrix) |
 
@@ -24,12 +24,13 @@ The rotary encoder lets you control your keyboard by turning and clicking.
 - **Pins**: GP10 (A), GP11 (B), GP14 (Button)
 - **Features**: Layer cycling, volume control, brightness control, etc.
 - **Status**: ✅ Fully implemented
+- **Sensitivity**: Adjustable via Advanced tab (⚙)
 
 ### Enabling Encoder
 
-1. Go to **Extensions** panel
-2. Check **"Encoder (GP10, GP11, GP14)"**
-3. Click **"Configure"** button
+1. Go to **Extensions** tab (🔌)
+2. Check **"🎛 Rotary Encoder"**
+3. Click **"⚙ Configure Actions"** button
 
 ### Configuration
 
@@ -40,6 +41,19 @@ In the **Encoder Configuration** dialog:
 1. **Encoder Map**: Define what happens when you turn or press
 2. **Default**: Layer cycling (turn to change layers, press to toggle)
 
+#### Adjusting Sensitivity
+
+If your encoder feels too sensitive or unresponsive:
+
+1. Go to **Advanced** tab (⚙)
+2. Adjust **"Steps per action"** slider (1-16)
+   - **Lower (1-2)**: More sensitive, faster response
+   - **Higher (6-8)**: Less sensitive, more deliberate
+   - **Default: 4** - Works for most encoders
+3. Save configuration and re-deploy code.py
+
+**How it works:** The divisor sets how many encoder "clicks" are needed before an action fires. If your encoder sends 4 pulses per detent but you want instant response, set divisor to 1.
+
 #### Code Snippet: Layer Cycling
 
 ```python
@@ -48,6 +62,13 @@ import board
 from kmk.keys import KC
 
 # Create encoder handler
+encoder_handler = EncoderHandler()
+
+# Define the pins (GP10=A, GP11=B, GP14=Button)
+encoder_handler.pins = ((board.GP10, board.GP11, board.GP14),)
+
+# Set divisor (sensitivity) - adjust in Advanced tab
+encoder_handler.divisor = 4  # 1-16, lower = more sensitive
 encoder_handler = EncoderHandler()
 
 # Define the pins (GP10=A, GP11=B, GP14=Button)
@@ -154,18 +175,18 @@ keyboard.modules.append(encoder_handler)
 
 ### Overview
 
-The analog input lets you use a slider or potentiometer to control your keyboard.
+The analog slider lets you control volume or RGB brightness with a hardware potentiometer.
 
 - **Pin**: GP28 (Analog)
 - **Hardware**: 10k slider potentiometer (Chronos Pad)
-- **Features**: Volume control, brightness, custom ranges
-- **Status**: ⚠️ **Under active development** - May not work perfectly yet
+- **Features**: Volume control (✅ working!), brightness control
+- **Status**: ✅ **Volume control fully working!**
 
 ### Enabling Analog Input
 
-1. Go to **Extensions** panel
-2. Check **"Analog Input (GP28 - Slider)"**
-3. Click **"Configure"** button
+1. Go to **Extensions** tab (🔌)
+2. Check **"📊 Analog Slider"**
+3. Click **"⚙ Configure Function"** button
 
 ### Configuration
 
@@ -173,68 +194,127 @@ The analog input lets you use a slider or potentiometer to control your keyboard
 
 In the **Analog Input Configuration** dialog:
 
-1. **Slider Range**: Map the slider to specific values
-2. **Output Action**: What happens when you move the slider
+1. **Function Mode**: Choose Volume Control or Brightness Control
+2. **Sensitivity**: How quickly the slider responds
+3. **Polling Rate**: How often to check the slider (ms)
 
-#### Code Snippet: Volume Control
+#### Volume Control (Recommended)
 
+**How it works:**
+- Move slider up → Volume increases
+- Move slider down → Volume decreases
+- Uses proper KMK API with MediaKeys extension
+- **Status: ✅ Fully working in latest version!**
+
+**Generated code:**
 ```python
 from kmk.modules.analogin import AnalogInputs, AnalogInput
 from analogio import AnalogIn
 import board
-from kmk.keys import KC
+from kmk.extensions.media_keys import MediaKeys  # Required!
 
-# Create analog input from slider on GP28
-slider = AnalogInput(AnalogIn(board.GP28))
+# Enable media keys
+media_keys = MediaKeys()
+keyboard.extensions.append(media_keys)
 
-# Map the slider to volume control
-# Range: 0-65535 → KC.VOLD (quiet) to KC.VOLU (loud)
-analog = AnalogInputs(
-    [slider],
-    [[AnalogKey(KC.VOLU, min=32768, max=65535)]]  # Upper half = volume up
-)
+# Volume slider module
+class VolumeSlider:
+    def __init__(self, pin, keyboard):
+        self.keyboard = keyboard
+        self.slider = AnalogIn(pin)
+        self.last_value = None
+        
+    def during_bootup(self, keyboard):
+        return
+        
+    def before_matrix_scan(self, keyboard):
+        return
+        
+    def after_matrix_scan(self, keyboard):
+        # Read slider position (0-65535)
+        current_value = self.slider.value
+        
+        # Ignore small changes (noise filtering)
+        if self.last_value is None:
+            self.last_value = current_value
+            return
+            
+        diff = abs(current_value - self.last_value)
+        if diff < 2000:  # Threshold
+            return
+            
+        # Volume up
+        if current_value > self.last_value:
+            from kmk.keys import KC
+            self.keyboard.add_key(KC.VOLU)
+            self.keyboard._send_hid()  # Send immediately
+            self.keyboard.remove_key(KC.VOLU)
+            self.keyboard._send_hid()  # Clear
+            
+        # Volume down
+        elif current_value < self.last_value:
+            from kmk.keys import KC
+            self.keyboard.add_key(KC.VOLD)
+            self.keyboard._send_hid()
+            self.keyboard.remove_key(KC.VOLD)
+            self.keyboard._send_hid()
+            
+        self.last_value = current_value
+        
+    def before_hid_send(self, keyboard):
+        return
+        
+    def after_hid_send(self, keyboard):
+        return
+        
+    def on_powersave_enable(self, keyboard):
+        return
+        
+    def on_powersave_disable(self, keyboard):
+        return
 
-keyboard.modules.append(analog)
+# Create and add the volume slider
+volume_slider = VolumeSlider(board.GP28, keyboard)
+keyboard.modules.append(volume_slider)
 ```
 
-#### Code Snippet: Custom Range Mapping
+**Key improvements:**
+- Uses `keyboard.add_key()` + `keyboard._send_hid()` for instant response
+- Filters noise with threshold (2000 units)
+- Requires MediaKeys extension (auto-added by configurator)
+- No lag, instant volume changes
 
+#### Brightness Control
+
+**How it works:**
+- Move slider up → RGB brightness increases
+- Move slider down → RGB brightness decreases
+- Updates RGB matrix brightness parameter
+
+**Code snippet:**
 ```python
-# Map slider to brightness control
-slider = AnalogInput(AnalogIn(board.GP28))
-
-# Value ranges:
-# 0-21845       = Brightness down
-# 21845-43690   = Nothing
-# 43690-65535   = Brightness up
-
-analog = AnalogInputs(
-    [slider],
-    [[
-        AnalogKey(KC.BRID, min=0, max=21845),      # Lower third: brightness down
-        AnalogKey(KC.BRIU, min=43690, max=65535),  # Upper third: brightness up
-    ]]
-)
-
-keyboard.modules.append(analog)
+# Similar to volume, but controls RGB matrix brightness
+# Uses self.keyboard.rgb_matrix.brightness property
 ```
 
-### Known Issues
+### Troubleshooting
 
-⚠️ **Analog input is under development:**
+**Slider not responding:**
+- Check MediaKeys extension is enabled
+- Verify GP28 wiring
+- Adjust sensitivity/threshold in configuration
+- Re-deploy code.py
 
-- Slider sensitivity may need tuning
-- Rapid updates can cause lag
-- Some key mappings not fully tested
-- Check GitHub issues for latest status
+**Volume changes too fast:**
+- Increase threshold value (noise filter)
+- Reduce polling frequency
+- Adjust sensitivity slider
 
-### Workaround
-
-For now, if analog input isn't reliable:
-
-1. Disable Analog Input extension
-2. Use encoder rotation for volume/brightness instead
-3. Consider using it as a macro trigger in future updates
+**"Volume control not working" error:**
+- ✅ **Fixed in latest version!**
+- Make sure you're running the latest configurator
+- MediaKeys must be enabled (auto-added)
+- Try re-generating and re-deploying code.py
 
 ---
 

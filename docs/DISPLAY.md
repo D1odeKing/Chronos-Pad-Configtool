@@ -40,25 +40,27 @@ Physical layout matches display layout
 
 ### Key Abbreviations
 
-Keys are shortened to fit the display:
+Keys are condensed to 3-4 characters to fit the 128×64 OLED:
 
 | Full Name | Display | Full Name | Display |
 |-----------|---------|-----------|---------|
-| KC.A | A | KC.LCTL | LCtl |
-| KC.BACKSPACE | BkSp | KC.LSFT | LSft |
-| KC.SPACE | Spce | KC.LALT | LAlt |
-| KC.ENTER | Entr | KC.LGUI | LGui |
-| KC.TAB | Tab | KC.RCTL | RCtl |
-| KC.ESC | Esc | KC.RSFT | RSft |
-| KC.DELETE | Del | KC.RALT | RAlt |
-| KC.HOME | Home | KC.RGUI | RGui |
-| KC.END | End | KC.VOLUME_UP | Vol+ |
-| KC.PAGE_UP | PgUp | KC.VOLUME_DOWN | Vol- |
-| KC.PAGE_DOWN | PgDn | KC.MUTE | Mute |
-| KC.UP | Up | KC.MEDIA_PLAY | Play |
-| KC.DOWN | Down | KC.MEDIA_NEXT | Next |
-| KC.LEFT | Left | KC.MEDIA_PREV | Prev |
-| KC.RIGHT | Rght | KC.MEDIA_STOP | Stop |
+| KC.A | A | KC.LCTL | LCt |
+| KC.BACKSPACE | BSp | KC.LSFT | LSh |
+| KC.SPACE | Spc | KC.LALT | LAl |
+| KC.ENTER | Ent | KC.LGUI | LGu |
+| KC.TAB | Tab | KC.RCTL | RCt |
+| KC.ESC | Esc | KC.RSFT | RSh |
+| KC.DELETE | Del | KC.RALT | RAl |
+| KC.HOME | Hom | KC.RGUI | RGu |
+| KC.END | End | KC.VOLUME_UP | V+ |
+| KC.PAGE_UP | PUp | KC.VOLUME_DOWN | V- |
+| KC.PAGE_DOWN | PDn | KC.MUTE | Mut |
+| KC.UP | Up | KC.MEDIA_PLAY | Ply |
+| KC.DOWN | Dwn | KC.MEDIA_NEXT | Nxt |
+| KC.LEFT | Lft | KC.MEDIA_PREV | Prv |
+| KC.RIGHT | Rgt | KC.MEDIA_STOP | Stp |
+
+**Maximum length: 3-4 characters** for optimal readability on small displays.
 
 ### Layer Switches
 
@@ -66,11 +68,11 @@ Layer control keys show their target:
 
 | Key | Display |
 |-----|---------|
-| KC.MO(1) | MO(1) |
-| KC.TO(2) | TO(2) |
-| KC.TG(3) | TG(3) |
-| KC.LAYER_PREV | Prev← |
-| KC.LAYER_NEXT | Next→ |
+| KC.MO(1) | MO1 |
+| KC.TO(2) | TO2 |
+| KC.TG(3) | TG3 |
+| KC.LAYER_PREV | L← |
+| KC.LAYER_NEXT | L→ |
 
 ### Special Cases
 

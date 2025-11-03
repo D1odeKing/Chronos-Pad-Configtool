@@ -7,12 +7,14 @@ Learn how to use the Chronos Pad Configurator to create your custom keyboard con
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Creating a Keymap](#creating-a-keymap)
-3. [Working with Layers](#working-with-layers)
-4. [Creating Macros](#creating-macros)
-5. [Configuring Extensions](#configuring-extensions)
-6. [Saving & Loading](#saving--loading)
-7. [Deploying to Your Device](#deploying-to-your-device)
+2. [Understanding the UI](#understanding-the-ui)
+3. [Creating a Keymap](#creating-a-keymap)
+4. [Working with Layers](#working-with-layers)
+5. [Creating Macros](#creating-macros)
+6. [Configuring Extensions](#configuring-extensions)
+7. [Advanced Settings](#advanced-settings)
+8. [Saving & Loading](#saving--loading)
+9. [Deploying to Your Device](#deploying-to-your-device)
 
 ---
 
@@ -28,11 +30,85 @@ Learn how to use the Chronos Pad Configurator to create your custom keyboard con
 python main.py
 ```
 
+### Window Modes
+
+The configurator is **fully responsive** and works in any window size:
+- **Normal Mode**: Resizable window with all panels visible
+- **Maximized Mode**: Expands to fill screen while maintaining proportions
+- **Fullscreen Mode** (F11): Immersive full-screen experience
+
+> 💡 **Tip**: Press F11 to toggle fullscreen mode for maximum working space!
+
 ### First Time?
 
-1. The tool detects your configuration
+1. The tool auto-detects dependencies and offers to download them
 2. Initializes a blank 5×4 keymap
-3. Loads previous profiles if available
+3. Loads previous session if available
+
+---
+
+## Understanding the UI
+
+The configurator uses a **three-panel layout** that scales beautifully:
+
+```
+┌────────────────┬──────────────────────┬────────────────┐
+│  LEFT PANEL    │   CENTER PANEL       │  RIGHT PANEL   │
+│  (Settings)    │   (Keymap Grid)      │  (Assignment)  │
+├────────────────┼──────────────────────┼────────────────┤
+│ 📁 File Mgmt   │ 📑 Layer Tabs        │ 🔤 Key Types   │
+│ 🔌 Extensions  │ ⌨ 5×4 Key Grid       │ ⚡ Macros       │
+│ ⚙ Hardware     │                      │                │
+└────────────────┴──────────────────────┴────────────────┘
+```
+
+### Left Panel
+
+**📁 File Management**
+- Load/save configurations
+- Generate code.py for deployment
+- Theme selection (Cheerful, Light, Dark)
+
+**🔌 Extensions Tab**
+- 🎛 Rotary Encoder configuration
+- 📊 Analog Slider (volume/brightness)
+- 🖥 OLED Display preview
+- 💡 RGB Lighting settings
+
+**⚙ Advanced Tab**
+- Encoder sensitivity (steps per pulse)
+- Boot.py configuration
+- Read-only mode warnings
+- USB settings
+
+**⚙ Hardware & Profiles**
+- Device information
+- Diode orientation
+- Save/load profiles
+
+### Center Panel
+
+**📑 Layer Management**
+- Tab-based layer switching
+- ➕ Add new layers
+- ➖ Remove layers
+
+**⌨ Keymap Grid**
+- Visual 5×4 button grid
+- Click to select keys
+- Shows current key assignments
+
+### Right Panel
+
+**🔤 Key Assignment**
+- Tabbed keycode categories
+- Click to assign to selected key
+- Search and filter options
+
+**⚡ Macros**
+- List of created macros
+- ➕ Add, ✏ Edit, 🗑 Remove
+- Click macro to assign to key
 
 ---
 
@@ -40,61 +116,42 @@ python main.py
 
 ### Step 1: Configure Hardware
 
-1. Look at the **"Hardware Configuration"** panel (left side)
-2. Set **Diode Orientation**:
-   - `COL2ROW`: Most common for custom keyboards
-   - `ROW2COL`: Check your PCB documentation
-3. Leave other settings as-is (fixed pins for Chronos Pad)
-
-```
-Hardware Configuration:
-┌─────────────────────────┐
-│ Board: Raspberry Pi Pico│
-│ Matrix: 5x4             │
-│ Diode: [COL2ROW  ▼]     │
-│ Profile: [Custom    ▼] │
-└─────────────────────────┘
-```
+1. Look at the **"⚙ Hardware & Profiles"** panel (left side, bottom)
+2. Review device information:
+   - Board: Raspberry Pi Pico 2
+   - Matrix: 5 rows × 4 columns (20 keys)
+   - Features: Encoder • RGB • OLED • Analog
+3. Set **Diode Orientation**:
+   - `COL2ROW`: Standard for Chronos Pad (default)
+   - `ROW2COL`: Check your PCB if using custom board
 
 ### Step 2: Select a Key
 
 1. Click any button in the **5×4 grid** (center panel)
-2. The button will highlight in blue
-3. Look at the **"Selected Key"** label to confirm
-
-```
-Keymap (Layer 0):
-┌─────────────────────────────┐
-│ [A]  [B]  [C]  [D]          │
-│ [E]  [F]  [G]  [H]          │
-│ [I]  [J]  [K]  [L]          │
-│ [M]  [N]  [O]  [P]          │
-│ [Q]  [R]  [S]  [T]          │
-└─────────────────────────────┘
-Selected Key: (0, 0)  ← Shows row, col
-```
+2. The button highlights with a colored border
+3. **Selected Key** label shows coordinates
 
 ### Step 3: Assign a Keycode
 
-1. With a key selected, browse the **"Key Assignment"** tabs (right side)
-2. Choose a category (Letters, Numbers, Modifiers, Media, etc.)
+1. With a key selected, browse the **"🔤 Key Assignment"** tabs (right side)
+2. Choose a category (Basic, Modifiers, Navigation, Media, etc.)
 3. Click a keycode to assign it
-4. The grid button updates with the new key
+4. The grid button updates immediately with the new key
 
 **Common Keycode Categories:**
-- **Letters**: A-Z, quick access
-- **Numbers**: 0-9, @#$% symbols
-- **Modifiers**: Shift, Ctrl, Alt, GUI
-- **Navigation**: Arrow keys, Home, End, Page Up/Down
-- **Media**: Volume, mute, play, next
-- **Functions**: F1-F24 keys
-- **Special**: Enter, Space, Tab, Backspace
-- **Macros**: Your custom macros (created in Macros section)
+- **Basic**: Letters A-Z, numbers 0-9
+- **Modifiers**: Ctrl, Shift, Alt, GUI (Windows/Cmd)
+- **Navigation**: Arrows, Home, End, Page Up/Down
+- **Function**: F1-F24 function keys
+- **Media**: Volume, mute, play/pause, next/prev
+- **Mouse**: Mouse movement and clicks
+- **Layers**: Layer switching keys (MO, TG, DF)
+- **Misc**: Special keys, Reset, Transparent
 
 **Example Workflow:**
 ```
 1. Click key at position (0, 2)
-2. Go to "Letters" tab
+2. Go to "Basic" tab in Key Assignment
 3. Click "C"
 4. Key (0, 2) now shows "C"
 ```
@@ -250,54 +307,109 @@ Click **"New action"** and choose:
 
 ## Configuring Extensions
 
-Extensions are optional hardware features. Enable only what you need.
+Extensions add powerful hardware features to your Chronos Pad. All extensions are organized in a modern tabbed interface.
 
-### Available Extensions
+### Extensions Tab (🔌)
 
-All extensions are in the **Extensions panel** (top right):
+Navigate to the **Extensions** tab in the left panel to access all hardware features:
 
-- ✅ **Encoder** (GP10, GP11, GP14) - Rotary encoder with button
-- ⚠️ **Analog Input** (GP28) - Slider potentiometer (under development)
-- ✅ **Display** (GP20, GP21) - OLED screen with keymap view
-- ✅ **RGB Matrix** (GP9) - Per-key LED lighting
+#### 🎛 Rotary Encoder
+- **Pins**: GP10 (A), GP11 (B), GP14 (Button)
+- **Features**: Layer cycling, custom rotation/button actions
+- Check the box to enable
+- Click **"⚙ Configure Actions"** to set up rotation and button
+- See [ENCODER_SETUP.md](../ENCODER_SETUP.md) for details
 
-### Enabling/Disabling Extensions
+#### 📊 Analog Slider
+- **Pin**: GP28
+- **Function**: Volume control or RGB brightness
+- Check the box to enable
+- Click **"⚙ Configure Function"** to choose mode:
+  - **Volume Control**: Slider controls system volume (WORKING!)
+  - **Brightness Control**: Slider controls RGB LED brightness
+- Adjust sensitivity and polling rate
 
-1. Check/uncheck the checkbox next to an extension
-2. When unchecked, the code isn't included in `code.py`
-3. When checked, the "Configure" button becomes active
-
-```
-Extensions:
-☑ Encoder (GP10, GP11, GP14)        [Configure]
-☑ Analog Input (GP28 - Slider)      [Configure]
-☑ Display (I2C: GP20/GP21)          [Configure]
-☑ RGB Matrix (GP9)                  [Configure]
-    └─ [Per-key Colors]
-```
-
-### Configuring Each Extension
-
-Click **"Configure"** for each enabled extension:
-
-**Encoder Configuration**
-- Assign keys to rotation/button
-- See [EXTENSIONS.md](EXTENSIONS.md) for details
-
-**Display Configuration**
-- Preview auto-generated display code
-- Shows all layers
+#### 🖥 OLED Display
+- **Pins**: GP20 (SDA), GP21 (SCL)
+- **Type**: 128×64 SH1106 OLED
+- **Features**: Live keymap visualization with layer support
+- Check the box to enable
+- Click **"👁 Preview Layout"** to see generated display code
+- Uses condensed 3-4 character abbreviations for optimal readability
 - See [DISPLAY.md](DISPLAY.md) for details
 
-**RGB Configuration**
-- Set default colors
-- Map colors per-key
-- See [EXTENSIONS.md](EXTENSIONS.md) for details
+#### 💡 RGB Lighting
+- **Pin**: GP9
+- **LEDs**: 20× SK6812MINI (per-key)
+- **Features**: Per-key colors, underglow, layer-specific colors
+- Check the box to enable
+- Click **"⚙ Global Settings"** for brightness and defaults
+- Click **"🎨 Per-Key Colors"** to customize individual keys
+- Supports different colors per layer
+- See [LAYER_RGB_SWITCHING.md](LAYER_RGB_SWITCHING.md) for details
 
-**Analog Input Configuration**
-- Assign slider range
-- Map to keys/macros
-- See [EXTENSIONS.md](EXTENSIONS.md) for details
+> 💡 **Tip**: All extensions are optional! Disable unused features to save memory and reduce code complexity.
+
+---
+
+## Advanced Settings
+
+The **Advanced** tab (⚙) provides power-user configuration options.
+
+### Encoder Sensitivity
+
+**Steps per action** (Encoder divisor):
+- Controls how many encoder "clicks" before sending an action
+- Range: 1-16 steps
+- **Lower values (1-2)**: More sensitive, faster response
+- **Higher values (6-8)**: Less sensitive, more deliberate control
+- **Default: 4** - Works well for most standard rotary encoders
+
+**When to adjust:**
+- Encoder feels too "jumpy" → Increase steps
+- Encoder feels unresponsive → Decrease steps
+
+### Boot Configuration (⚡ boot.py)
+
+Configure how your device boots. **Use with caution!**
+
+#### Enable Custom boot.py
+Check this box to create a custom boot.py file. Options include:
+
+**⚠ Make storage read-only from computer** (RED WARNING!)
+- CIRCUITPY drive becomes read-only when accessed from computer
+- **You cannot edit files from your computer!**
+- Requires editing code.py or bootloader recovery to undo
+- **Warning dialog** will appear before enabling
+- Only use this to protect against accidental file changes
+
+**Disable USB keyboard/mouse (advanced)**
+- Disables HID functionality
+- Only use if you know what you're doing
+- Device won't work as a keyboard if enabled!
+
+**Rename drive to:**
+- Change CIRCUITPY drive label
+- Maximum 11 characters
+- Example: "CHRONOSPAD", "MYBOARD", "MACRO20"
+
+**Custom boot.py code:**
+- Advanced: Add your own boot.py Python code
+- Use for custom imports, initialization, etc.
+- Runs before code.py on device boot
+
+#### Safety Features
+
+The configurator includes multiple safety layers:
+1. **Visual Warning**: Read-only checkbox styled in bold red
+2. **Confirmation Dialog**: Shows consequences before enabling
+3. **Auto-uncheck**: If you click "No", checkbox reverts
+4. **Documentation**: Tooltips explain every option
+
+> ⚠️ **Important**: If you enable read-only mode by accident:
+> 1. Edit code.py on the device (add a line to disable)
+> 2. Or enter UF2 bootloader mode and re-flash CircuitPython
+> 3. See [CIRCUITPYTHON_SETUP.md](CIRCUITPYTHON_SETUP.md) for recovery
 
 ---
 
@@ -307,7 +419,7 @@ Click **"Configure"** for each enabled extension:
 
 Save your work to JSON file:
 
-1. Click **File → Save Configuration**
+1. Click **"💾 Save Configuration"** in File Management
 2. Choose a filename and location
 3. Click **Save**
 
@@ -316,30 +428,33 @@ Save your work to JSON file:
 **What's saved:**
 - ✅ All layers and keymaps
 - ✅ Macro definitions
-- ✅ RGB color settings
+- ✅ RGB color settings (per-key and per-layer)
 - ✅ Extension configurations
+- ✅ Encoder divisor and settings
+- ✅ Boot.py configuration
 - ✅ Profiles
 
-**File format:** JSON (human-readable)
+**File format:** JSON v2.0 (human-readable, structured)
 
 ### Load Configuration
 
-1. Click **File → Load Configuration**
-2. Select a JSON file
+1. Select a config from the dropdown, or click **"📂 Load Configuration"**
+2. Browse to a JSON file
 3. Click **Open**
-4. Configuration loads into the editor
+4. Configuration loads immediately
 
 **Features:**
-- Auto-detects 5×4 grid and adapts if needed
-- Preserves macro assignments
-- Loads all layer data
+- Auto-detects format version
+- Backward compatible with v1.0 configs
+- Adapts to 5×4 grid if needed
+- Preserves all settings
 
 ### Profiles
 
-Save multiple named configurations:
+Save multiple named configurations for quick switching:
 
-1. Configure your keyboard (keys, macros, extensions)
-2. Click **"Save Profile"** in Hardware Configuration
+1. Configure your keyboard (keys, macros, extensions, advanced settings)
+2. Click **"💾 Save as Profile"** in Hardware & Profiles
 3. Enter a name (e.g., "Gaming", "Work", "Default")
 4. Click **OK**
 
@@ -416,6 +531,26 @@ The tool automatically:
 - Enable Display extension in Extensions panel
 - Click Configure to preview
 - Re-deploy code.py
+
+**Volume control slider not working**
+- ✅ **Fixed in latest version!**
+- Enable Analog Slider in Extensions tab
+- Configure for "Volume Control" mode
+- Requires MediaKeys extension (auto-imported)
+- Move slider to test volume up/down
+
+**Encoder too sensitive/unresponsive**
+- Go to Advanced tab (⚙)
+- Adjust "Steps per action" (1-16)
+- Lower = more sensitive, Higher = less sensitive
+- Default is 4 steps
+- Re-save code.py after changing
+
+**Device becomes read-only**
+- Advanced tab → Boot Configuration
+- Uncheck "Make storage read-only"
+- Save configuration and re-deploy
+- Or see [CIRCUITPYTHON_SETUP.md](CIRCUITPYTHON_SETUP.md) for recovery
 
 ---
 
