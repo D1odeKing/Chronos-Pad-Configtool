@@ -5011,7 +5011,23 @@ class KMKConfigurator(QMainWindow):
         self.populate_config_file_list()
 
     def setup_extensions_ui(self, parent_layout):
-        """Setup extensions and advanced settings with tabbed interface"""
+        """
+        Setup extensions and advanced settings with modern toggle switches.
+        
+        Creates collapsible cards for each hardware extension:
+        - Rotary Encoder (GP10, GP11, GP14)
+        - Analog Slider (GP28)
+        - OLED Display (I2C: GP20/GP21)
+        - RGB Matrix (GP9)
+        
+        Each card includes:
+        - Toggle switch for enable/disable (blue = enabled, gray = disabled)
+        - Configuration button for advanced settings
+        - Visual feedback via theme-aware styling
+        
+        Changes to extension state automatically update firmware generation
+        and persist in config.json.
+        """
         group = QGroupBox("Extensions & Settings")
         main_layout = QVBoxLayout()
         
@@ -5029,87 +5045,109 @@ class KMKConfigurator(QMainWindow):
         ext_layout = QVBoxLayout(ext_content)
         ext_layout.setSpacing(12)
         
-        # Encoder Section with icon
-        encoder_group = QGroupBox("🎛 Rotary Encoder")
-        encoder_layout = QVBoxLayout()
-        enc_check_layout = QHBoxLayout()
-        self.enable_encoder_checkbox = QCheckBox("Enable Encoder (GP10, GP11, GP14)")
-        self.enable_encoder_checkbox.setChecked(self.enable_encoder)
-        self.enable_encoder_checkbox.toggled.connect(self.on_encoder_toggled)
-        self.enable_encoder_checkbox.setToolTip("Rotary encoder with button for layer cycling and custom actions")
-        enc_check_layout.addWidget(self.enable_encoder_checkbox)
-        enc_check_layout.addStretch()
-        encoder_layout.addLayout(enc_check_layout)
+        # Encoder Section with modern toggle switch
+        encoder_card = CollapsibleCard("🎛 Rotary Encoder", start_collapsed=False)
+        encoder_layout = encoder_card.get_content_layout()
+        encoder_layout.setSpacing(8)
         
-        enc_btn_layout = QHBoxLayout()
+        # Toggle row: Label + Switch
+        enc_toggle_layout = QHBoxLayout()
+        enc_label = QLabel("Enable Encoder (GP10, GP11, GP14)")
+        enc_label.setToolTip("Rotary encoder with button for layer cycling and custom actions")
+        self.enable_encoder_toggle = ToggleSwitch()
+        self.enable_encoder_toggle.setChecked(self.enable_encoder)
+        self.enable_encoder_toggle.toggled.connect(self.on_encoder_toggled)
+        self.enable_encoder_toggle.setToolTip("Toggle encoder extension on/off")
+        enc_toggle_layout.addWidget(enc_label)
+        enc_toggle_layout.addStretch()
+        enc_toggle_layout.addWidget(self.enable_encoder_toggle)
+        encoder_layout.addLayout(enc_toggle_layout)
+        
+        # Configure button
         enc_cfg_btn = QPushButton("⚙ Configure Actions")
         enc_cfg_btn.clicked.connect(self.configure_encoder)
         enc_cfg_btn.setToolTip("Set up encoder rotation and button press actions")
-        enc_btn_layout.addWidget(enc_cfg_btn)
-        enc_btn_layout.addStretch()
+        enc_cfg_btn.setMaximumWidth(200)
         self.encoder_cfg_btn = enc_cfg_btn
-        encoder_layout.addLayout(enc_btn_layout)
-        encoder_group.setLayout(encoder_layout)
-        ext_layout.addWidget(encoder_group)
-
-        # Analog Input Section with icon
-        analog_group = QGroupBox("📊 Analog Slider")
-        analog_layout = QVBoxLayout()
-        an_check_layout = QHBoxLayout()
-        self.enable_analogin_checkbox = QCheckBox("Enable Analog Input (GP28)")
-        self.enable_analogin_checkbox.setChecked(self.enable_analogin)
-        self.enable_analogin_checkbox.toggled.connect(self.on_analogin_toggled)
-        self.enable_analogin_checkbox.setToolTip("10k potentiometer slider for volume or brightness control")
-        an_check_layout.addWidget(self.enable_analogin_checkbox)
-        an_check_layout.addStretch()
-        analog_layout.addLayout(an_check_layout)
+        encoder_layout.addWidget(enc_cfg_btn)
         
-        an_btn_layout = QHBoxLayout()
+        ext_layout.addWidget(encoder_card)
+
+        # Analog Input Section with modern toggle switch
+        analog_card = CollapsibleCard("📊 Analog Slider", start_collapsed=False)
+        analog_layout = analog_card.get_content_layout()
+        analog_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        an_toggle_layout = QHBoxLayout()
+        an_label = QLabel("Enable Analog Input (GP28)")
+        an_label.setToolTip("10k potentiometer slider for volume or brightness control")
+        self.enable_analogin_toggle = ToggleSwitch()
+        self.enable_analogin_toggle.setChecked(self.enable_analogin)
+        self.enable_analogin_toggle.toggled.connect(self.on_analogin_toggled)
+        self.enable_analogin_toggle.setToolTip("Toggle analog input extension on/off")
+        an_toggle_layout.addWidget(an_label)
+        an_toggle_layout.addStretch()
+        an_toggle_layout.addWidget(self.enable_analogin_toggle)
+        analog_layout.addLayout(an_toggle_layout)
+        
+        # Configure button
         an_cfg_btn = QPushButton("⚙ Configure Function")
         an_cfg_btn.clicked.connect(self.configure_analogin)
         an_cfg_btn.setToolTip("Choose between volume control or LED brightness")
-        an_btn_layout.addWidget(an_cfg_btn)
-        an_btn_layout.addStretch()
+        an_cfg_btn.setMaximumWidth(200)
         self.analogin_cfg_btn = an_cfg_btn
-        analog_layout.addLayout(an_btn_layout)
-        analog_group.setLayout(analog_layout)
-        ext_layout.addWidget(analog_group)
-
-        # Display Section with icon
-        display_group = QGroupBox("🖥 OLED Display")
-        display_layout = QVBoxLayout()
-        disp_check_layout = QHBoxLayout()
-        self.enable_display_checkbox = QCheckBox("Enable Display (I2C: GP20/GP21)")
-        self.enable_display_checkbox.setChecked(self.enable_display)
-        self.enable_display_checkbox.toggled.connect(self.on_display_toggled)
-        self.enable_display_checkbox.setToolTip("128x64 OLED display showing current layer keymap")
-        disp_check_layout.addWidget(self.enable_display_checkbox)
-        disp_check_layout.addStretch()
-        display_layout.addLayout(disp_check_layout)
+        analog_layout.addWidget(an_cfg_btn)
         
-        disp_btn_layout = QHBoxLayout()
+        ext_layout.addWidget(analog_card)
+
+        # Display Section with modern toggle switch
+        display_card = CollapsibleCard("🖥 OLED Display", start_collapsed=False)
+        display_layout = display_card.get_content_layout()
+        display_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        disp_toggle_layout = QHBoxLayout()
+        disp_label = QLabel("Enable Display (I2C: GP20/GP21)")
+        disp_label.setToolTip("128x64 OLED display showing current layer keymap")
+        self.enable_display_toggle = ToggleSwitch()
+        self.enable_display_toggle.setChecked(self.enable_display)
+        self.enable_display_toggle.toggled.connect(self.on_display_toggled)
+        self.enable_display_toggle.setToolTip("Toggle display extension on/off")
+        disp_toggle_layout.addWidget(disp_label)
+        disp_toggle_layout.addStretch()
+        disp_toggle_layout.addWidget(self.enable_display_toggle)
+        display_layout.addLayout(disp_toggle_layout)
+        
+        # Configure button
         disp_cfg_btn = QPushButton("👁 Preview Layout")
         disp_cfg_btn.clicked.connect(self.configure_display)
         disp_cfg_btn.setToolTip("Preview how keys will appear on the OLED display")
-        disp_btn_layout.addWidget(disp_cfg_btn)
-        disp_btn_layout.addStretch()
+        disp_cfg_btn.setMaximumWidth(200)
         self.display_cfg_btn = disp_cfg_btn
-        display_layout.addLayout(disp_btn_layout)
-        display_group.setLayout(display_layout)
-        ext_layout.addWidget(display_group)
-
-        # RGB Matrix Section with icon
-        rgb_group = QGroupBox("💡 RGB Lighting")
-        rgb_layout = QVBoxLayout()
-        rgb_check_layout = QHBoxLayout()
-        self.enable_rgb_checkbox = QCheckBox("Enable RGB Matrix (GP9)")
-        self.enable_rgb_checkbox.setChecked(self.enable_rgb)
-        self.enable_rgb_checkbox.toggled.connect(self.on_rgb_toggled)
-        self.enable_rgb_checkbox.setToolTip("SK6812MINI RGB LEDs - 20 per-key LEDs")
-        rgb_check_layout.addWidget(self.enable_rgb_checkbox)
-        rgb_check_layout.addStretch()
-        rgb_layout.addLayout(rgb_check_layout)
+        display_layout.addWidget(disp_cfg_btn)
         
+        ext_layout.addWidget(display_card)
+
+        # RGB Matrix Section with modern toggle switch
+        rgb_card = CollapsibleCard("💡 RGB Lighting", start_collapsed=False)
+        rgb_layout = rgb_card.get_content_layout()
+        rgb_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        rgb_toggle_layout = QHBoxLayout()
+        rgb_label = QLabel("Enable RGB Matrix (GP9)")
+        rgb_label.setToolTip("SK6812MINI RGB LEDs - 20 per-key LEDs")
+        self.enable_rgb_toggle = ToggleSwitch()
+        self.enable_rgb_toggle.setChecked(self.enable_rgb)
+        self.enable_rgb_toggle.toggled.connect(self.on_rgb_toggled)
+        self.enable_rgb_toggle.setToolTip("Toggle RGB matrix extension on/off")
+        rgb_toggle_layout.addWidget(rgb_label)
+        rgb_toggle_layout.addStretch()
+        rgb_toggle_layout.addWidget(self.enable_rgb_toggle)
+        rgb_layout.addLayout(rgb_toggle_layout)
+        
+        # Configure buttons row
         rgb_btn_layout = QHBoxLayout()
         rgb_cfg_btn = QPushButton("⚙ Global Settings")
         rgb_cfg_btn.clicked.connect(self.configure_rgb)
@@ -5142,8 +5180,8 @@ class KMKConfigurator(QMainWindow):
         self.rgb_cfg_btn = rgb_cfg_btn
         self.rgb_colors_btn = rgb_colors_btn
         rgb_layout.addLayout(rgb_btn_layout)
-        rgb_group.setLayout(rgb_layout)
-        ext_layout.addWidget(rgb_group)
+        
+        ext_layout.addWidget(rgb_card)
         
         ext_layout.addStretch()
         
@@ -5472,17 +5510,29 @@ class KMKConfigurator(QMainWindow):
             self.rgb_colors_btn.setEnabled(self.enable_rgb)
 
     def sync_extension_checkboxes(self):
-        """Ensure extension checkboxes reflect current enabled states without triggering signals."""
-        def _set_state(checkbox, value):
-            if checkbox:
-                checkbox.blockSignals(True)
-                checkbox.setChecked(value)
-                checkbox.blockSignals(False)
+        """
+        Ensure extension toggle switches reflect current enabled states without triggering signals.
+        
+        This method synchronizes the UI state with the internal enabled flags
+        after loading a configuration or applying changes. Signal blocking prevents
+        recursive toggling events during synchronization.
+        
+        Updates:
+        - encoder toggle (enable_encoder_toggle)
+        - analog input toggle (enable_analogin_toggle)
+        - display toggle (enable_display_toggle)
+        - RGB matrix toggle (enable_rgb_toggle)
+        """
+        def _set_state(toggle_switch, value):
+            if toggle_switch:
+                toggle_switch.blockSignals(True)
+                toggle_switch.setChecked(value)
+                toggle_switch.blockSignals(False)
 
-        _set_state(getattr(self, 'enable_encoder_checkbox', None), self.enable_encoder)
-        _set_state(getattr(self, 'enable_analogin_checkbox', None), self.enable_analogin)
-        _set_state(getattr(self, 'enable_display_checkbox', None), self.enable_display)
-        _set_state(getattr(self, 'enable_rgb_checkbox', None), self.enable_rgb)
+        _set_state(getattr(self, 'enable_encoder_toggle', None), self.enable_encoder)
+        _set_state(getattr(self, 'enable_analogin_toggle', None), self.enable_analogin)
+        _set_state(getattr(self, 'enable_display_toggle', None), self.enable_display)
+        _set_state(getattr(self, 'enable_rgb_toggle', None), self.enable_rgb)
 
     # --- Extension configuration handlers ---
     def open_advanced_settings(self):
