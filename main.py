@@ -3328,6 +3328,7 @@ class KMKConfigurator(QMainWindow):
         self.selected_key_coords = None
         self.macropad_buttons = {}
         self.current_layer = 0
+        self.layer_clipboard = None  # For copy/paste layer operations
         
         # Fixed hardware configuration
         self.rows = FIXED_ROWS
@@ -5725,6 +5726,93 @@ class KMKConfigurator(QMainWindow):
         else:
             QMessageBox.information(self, "No Key Selected", "Please select a key on the grid first.")
 
+    def clear_current_layer(self):
+        """
+        Clear all keys in the current layer to KC.NO.
+        
+        Prompts user for confirmation before clearing. This operation can be
+        undone by reloading a saved configuration.
+        
+        Note:
+            Updates the grid display immediately after clearing.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Clear Layer",
+            f"Clear all keys in Layer {self.current_layer}?\n\nThis will set all keys to KC.NO.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Clear all keys in current layer
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    self.keymap_data[self.current_layer][r][c] = "KC.NO"
+            self.update_macropad_display()
+            QMessageBox.information(self, "Layer Cleared", f"Layer {self.current_layer} has been cleared.")
+
+    def copy_current_layer(self):
+        """
+        Copy the current layer to clipboard (internal storage).
+        
+        Stores layer data as JSON in an internal clipboard variable.
+        Can be pasted to any layer using paste_to_current_layer().
+        
+        Note:
+            Only one layer can be in the clipboard at a time.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        # Store layer data in clipboard
+        self.layer_clipboard = [row[:] for row in self.keymap_data[self.current_layer]]
+        QMessageBox.information(
+            self, 
+            "Layer Copied", 
+            f"Layer {self.current_layer} copied to clipboard.\n\nYou can now paste it to another layer."
+        )
+
+    def paste_to_current_layer(self):
+        """
+        Paste clipboard layer data to the current layer.
+        
+        Replaces all keys in the current layer with the copied layer data.
+        Prompts for confirmation before overwriting.
+        
+        Note:
+            Requires copy_current_layer() to have been called first.
+        """
+        if not hasattr(self, 'layer_clipboard') or not self.layer_clipboard:
+            QMessageBox.warning(
+                self, 
+                "No Layer Copied", 
+                "No layer data in clipboard.\n\nUse 'Copy' first to copy a layer."
+            )
+            return
+        
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Paste Layer",
+            f"Paste clipboard to Layer {self.current_layer}?\n\nThis will overwrite all current keys.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Paste layer data
+            for r in range(min(self.rows, len(self.layer_clipboard))):
+                for c in range(min(self.cols, len(self.layer_clipboard[r]))):
+                    self.keymap_data[self.current_layer][r][c] = self.layer_clipboard[r][c]
+            self.update_macropad_display()
+            QMessageBox.information(self, "Layer Pasted", f"Layer data pasted to Layer {self.current_layer}.")
+
     def setup_macro_ui(self, parent_layout):
         """Setup macro and TapDance management with tabbed interface."""
         # Create tab widget for Macros and TapDance
@@ -7610,10 +7698,17 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         if self.selected_key_coords == clicked_coords:
             self.selected_key_coords = None
             self.selected_key_label.setText("Selected Key: None")
+            # Update grid selection label if it exists
+            if hasattr(self, 'grid_selection_label'):
+                self.grid_selection_label.setText("Selected: None")
             # The button's check state is toggled automatically by PyQt
         else: # Otherwise, select the new key
             self.selected_key_coords = clicked_coords
+            key_value = self.keymap_data[self.current_layer][row][col] if self.current_layer < len(self.keymap_data) else "KC.NO"
             self.selected_key_label.setText(f"Selected Key: ({row}, {col})")
+            # Update grid selection label if it exists
+            if hasattr(self, 'grid_selection_label'):
+                self.grid_selection_label.setText(f"Selected: (Row {row}, Col {col}) | {key_value}")
             current_button = self.macropad_buttons.get(clicked_coords)
             if current_button:
                 current_button.setChecked(True)
