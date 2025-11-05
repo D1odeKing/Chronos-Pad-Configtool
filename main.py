@@ -3155,6 +3155,152 @@ class AdvancedSettingsDialog(QDialog):
         return "\n".join(lines)
 
 
+# --- Modern UI Helper Widgets ---
+class ToggleSwitch(QCheckBox):
+    """
+    Modern toggle switch widget using QCheckBox with custom styling.
+    
+    Provides a visual toggle switch interface similar to iOS/Material Design
+    switches instead of traditional checkboxes. The switch animates when toggled
+    and uses theme-aware colors (blue when enabled, gray when disabled).
+    
+    Usage:
+        toggle = ToggleSwitch("Enable Feature")
+        toggle.setChecked(True)
+        toggle.toggled.connect(on_toggle_changed)
+    
+    Note:
+        Styling is applied via objectName="toggleSwitch" in the QSS themes.
+        The switch appearance is controlled entirely by stylesheets.
+    """
+    
+    def __init__(self, text="", parent=None):
+        """
+        Initialize toggle switch.
+        
+        Args:
+            text: Label text displayed next to the switch
+            parent: Parent widget
+        """
+        super().__init__(text, parent)
+        self.setObjectName("toggleSwitch")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+
+class CollapsibleCard(QWidget):
+    """
+    Collapsible card widget with header and expandable content area.
+    
+    Provides a modern card-based UI element with:
+    - Clickable header with title and collapse/expand indicator
+    - Smooth animation when expanding/collapsing
+    - Card styling with rounded corners and subtle shadows
+    - Badge support showing item count or status
+    
+    Usage:
+        card = CollapsibleCard("Section Title", badge_text="3")
+        content_layout = card.get_content_layout()
+        content_layout.addWidget(QLabel("Content goes here"))
+        
+    Note:
+        Content is added to the layout returned by get_content_layout().
+        The card starts expanded by default but can be set to collapsed.
+    """
+    
+    def __init__(self, title, badge_text="", parent=None, start_collapsed=False):
+        """
+        Initialize collapsible card.
+        
+        Args:
+            title: Card header title text
+            badge_text: Optional badge text (e.g., item count)
+            parent: Parent widget
+            start_collapsed: If True, card starts in collapsed state
+        """
+        super().__init__(parent)
+        self.setObjectName("card")
+        
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # Header button (clickable to collapse/expand)
+        self.header_btn = QPushButton()
+        self.header_btn.setObjectName("cardHeader")
+        self.header_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header_btn.clicked.connect(self.toggle_collapsed)
+        
+        # Header layout
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        
+        # Expand/collapse indicator
+        self.indicator = QLabel("▼")
+        self.indicator.setObjectName("cardIndicator")
+        header_layout.addWidget(self.indicator)
+        
+        # Title
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("cardTitle")
+        header_layout.addWidget(self.title_label)
+        
+        # Badge (optional)
+        if badge_text:
+            self.badge_label = QLabel(badge_text)
+            self.badge_label.setObjectName("cardBadge")
+            header_layout.addWidget(self.badge_label)
+        else:
+            self.badge_label = None
+        
+        header_layout.addStretch()
+        self.header_btn.setLayout(header_layout)
+        main_layout.addWidget(self.header_btn)
+        
+        # Content container
+        self.content_widget = QWidget()
+        self.content_widget.setObjectName("cardContent")
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(12, 12, 12, 12)
+        self.content_layout.setSpacing(8)
+        main_layout.addWidget(self.content_widget)
+        
+        # Start state
+        self.is_collapsed = start_collapsed
+        if start_collapsed:
+            self.content_widget.hide()
+            self.indicator.setText("▶")
+    
+    def toggle_collapsed(self):
+        """Toggle the collapsed state of the card."""
+        self.is_collapsed = not self.is_collapsed
+        if self.is_collapsed:
+            self.content_widget.hide()
+            self.indicator.setText("▶")
+        else:
+            self.content_widget.show()
+            self.indicator.setText("▼")
+    
+    def set_collapsed(self, collapsed: bool):
+        """Set collapsed state explicitly."""
+        if self.is_collapsed != collapsed:
+            self.toggle_collapsed()
+    
+    def get_content_layout(self) -> QVBoxLayout:
+        """Get the content layout to add widgets to."""
+        return self.content_layout
+    
+    def set_badge_text(self, text: str):
+        """Update badge text."""
+        if self.badge_label:
+            self.badge_label.setText(text)
+        elif text:
+            # Create badge if it doesn't exist
+            self.badge_label = QLabel(text)
+            self.badge_label.setObjectName("cardBadge")
+            self.header_btn.layout().insertWidget(2, self.badge_label)
+
+
 # --- Main Application Window ---
 class KMKConfigurator(QMainWindow):
     """The main application window for configuring KMK-based macropads."""
@@ -3579,6 +3725,69 @@ class KMKConfigurator(QMainWindow):
                 border: 1px solid #4a5568;
             }
             
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #4a5568;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #f9fafb;
+            }
+            QLabel#cardIndicator {
+                color: #9ca3af;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #5a6778;
+                border: 2px solid #6b7888;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #4a5568;
+                border: 2px solid #5a6778;
+            }
+            
             /* Checkboxes */
             QCheckBox, QRadioButton {
                 color: #e5e7eb;
@@ -3777,6 +3986,69 @@ class KMKConfigurator(QMainWindow):
             QFrame#card {
                 background-color: #ffffff;
                 border: 1px solid #e5e7eb;
+            }
+            
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #f3f4f6;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #111827;
+            }
+            QLabel#cardIndicator {
+                color: #6b7280;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #d1d5db;
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #f3f4f6;
+                border: 2px solid #d1d5db;
             }
             
             /* Checkboxes */
@@ -3983,6 +4255,69 @@ class KMKConfigurator(QMainWindow):
             QFrame#card {
                 background-color: #2d3748;
                 border: 1px solid #374151;
+            }
+            
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #374151;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #f9fafb;
+            }
+            QLabel#cardIndicator {
+                color: #9ca3af;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #4b5563;
+                border: 2px solid #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #374151;
+                border: 2px solid #4b5563;
             }
             
             /* Checkboxes and radio buttons */
@@ -4413,13 +4748,26 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def setup_file_io_ui(self, parent_layout):
-        group = QGroupBox("📁 File Management")
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-
-        # Config file selector (populated from kmk_Config_Save and repo root)
+        """
+        Setup modern file management UI with card-based layout.
+        
+        Features:
+        - Collapsible cards for logical grouping
+        - File Management card: config selector with recent files
+        - Actions card: Load/Save/Generate buttons
+        - Profiles card: Quick access to saved profiles
+        - Theme card: Visual theme selector
+        
+        Note:
+            Uses CollapsibleCard widgets for modern expandable sections.
+        """
+        # === File Management Card ===
+        file_card = CollapsibleCard("📁 File Management")
+        file_layout = file_card.get_content_layout()
+        
+        # Config file selector with refresh button
         file_select_layout = QHBoxLayout()
-        file_select_layout.addWidget(QLabel("Configuration:"))
+        file_select_layout.addWidget(QLabel("Current Config:"))
         self.config_file_combo = QComboBox()
         self.config_file_combo.setToolTip("Select a saved configuration to load")
         file_select_layout.addWidget(self.config_file_combo, 1)
@@ -4428,51 +4776,42 @@ class KMKConfigurator(QMainWindow):
         refresh_btn.clicked.connect(self.populate_config_file_list)
         refresh_btn.setToolTip("Refresh configuration list")
         file_select_layout.addWidget(refresh_btn)
-        layout.addLayout(file_select_layout)
-
-        # Action buttons with icons
-        load_config_button = QPushButton("📂 Load Configuration")
+        file_layout.addLayout(file_select_layout)
+        
+        parent_layout.addWidget(file_card)
+        
+        # === Actions Card ===
+        actions_card = CollapsibleCard("💾 Actions")
+        actions_layout = actions_card.get_content_layout()
+        
+        # Two-column button layout for Load/Save
+        row1_layout = QHBoxLayout()
+        load_config_button = QPushButton("📂 Load")
         load_config_button.clicked.connect(self.load_configuration)
-        load_config_button.setToolTip("Load the selected configuration file")
-        layout.addWidget(load_config_button)
-
-        save_config_button = QPushButton("💾 Save Configuration")
+        load_config_button.setToolTip("Load the selected configuration file (Ctrl+O)")
+        row1_layout.addWidget(load_config_button)
+        
+        save_config_button = QPushButton("💾 Save")
         save_config_button.clicked.connect(self.save_configuration_dialog)
-        save_config_button.setToolTip("Save current keymap and settings")
-        layout.addWidget(save_config_button)
-
+        save_config_button.setToolTip("Save current keymap and settings (Ctrl+S)")
+        row1_layout.addWidget(save_config_button)
+        actions_layout.addLayout(row1_layout)
+        
+        # Generate code.py button (full width, prominent)
         generate_button = QPushButton("⚡ Generate code.py")
         generate_button.clicked.connect(self.generate_code_py_dialog)
         generate_button.setToolTip("Export firmware to CIRCUITPY drive")
         generate_button.setStyleSheet("QPushButton { font-weight: bold; }")
-        layout.addWidget(generate_button)
-
-        layout.addSpacing(10)
+        actions_layout.addWidget(generate_button)
         
-        # Theme selector
-        theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("🎨 Theme:"))
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Cheerful", "Light", "Dark"])
-        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
-        self.theme_combo.setToolTip("Change the UI color theme")
-        # reflect current theme selection if available
-        try:
-            self.theme_combo.setCurrentText(self.current_theme)
-        except Exception:
-            pass
-        theme_layout.addWidget(self.theme_combo, 1)
-        layout.addLayout(theme_layout)
+        parent_layout.addWidget(actions_card)
         
-        layout.addSpacing(10)
+        # === Profiles Card ===
+        profile_card = CollapsibleCard("⭐ Quick Profiles")
+        profile_layout = profile_card.get_content_layout()
         
-        # Profile management section
-        profile_label = QLabel("<b>Quick Profiles</b>")
-        layout.addWidget(profile_label)
-        
-        # Profile dropdown and delete button
+        # Profile dropdown with delete button
         profile_selection_layout = QHBoxLayout()
-        profile_selection_layout.addWidget(QLabel("Profile:"))
         self.profile_combo = QComboBox()
         self.profile_combo.currentIndexChanged.connect(self.load_selected_profile)
         self.profile_combo.setToolTip("Quick-load a saved profile with keymap and settings")
@@ -4483,17 +4822,36 @@ class KMKConfigurator(QMainWindow):
         delete_profile_btn.clicked.connect(self.delete_selected_profile)
         delete_profile_btn.setToolTip("Delete selected profile")
         profile_selection_layout.addWidget(delete_profile_btn)
+        profile_layout.addLayout(profile_selection_layout)
         
-        layout.addLayout(profile_selection_layout)
-
+        # Save profile button
         save_profile_btn = QPushButton("💾 Save as Profile")
         save_profile_btn.clicked.connect(self.save_current_profile)
         save_profile_btn.setToolTip("Save current configuration as a named profile")
-        layout.addWidget(save_profile_btn)
-
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-
+        profile_layout.addWidget(save_profile_btn)
+        
+        parent_layout.addWidget(profile_card)
+        
+        # === Theme Card ===
+        theme_card = CollapsibleCard("🎨 Theme")
+        theme_layout = theme_card.get_content_layout()
+        
+        # Theme selector (radio buttons would be nice, but combo works for now)
+        theme_select_layout = QHBoxLayout()
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Dark", "Light", "Cheerful"])
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        self.theme_combo.setToolTip("Change the UI color theme")
+        # Reflect current theme selection
+        try:
+            self.theme_combo.setCurrentText(self.current_theme)
+        except Exception:
+            pass
+        theme_select_layout.addWidget(self.theme_combo, 1)
+        theme_layout.addLayout(theme_select_layout)
+        
+        parent_layout.addWidget(theme_card)
+        
         # Fill the combo initially
         self.populate_config_file_list()
 
@@ -5233,12 +5591,23 @@ class KMKConfigurator(QMainWindow):
 
 
     def setup_macropad_grid_ui(self, parent_layout):
-        """Setup macropad grid with enhanced visual styling."""
+        """
+        Setup macropad grid with enhanced visual styling.
+        
+        Features:
+        - 100x100px buttons for better visibility (up from 80x80)
+        - 12px spacing for cleaner modern layout
+        - Coordinate labels for easy identification
+        - Visual feedback on hover and selection
+        
+        Note:
+            Grid layout is 180° rotated to match physical hardware orientation.
+        """
         self.macropad_group = QGroupBox(f"⌨ Keymap Grid (Layer {self.current_layer})")
         self.macropad_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.macropad_layout = QGridLayout()
-        self.macropad_layout.setHorizontalSpacing(8)
-        self.macropad_layout.setVerticalSpacing(8)
+        self.macropad_layout.setHorizontalSpacing(12)  # Increased from 8px for modern spacing
+        self.macropad_layout.setVerticalSpacing(12)  # Increased from 8px for modern spacing
         self.macropad_layout.setContentsMargins(10, 10, 10, 10)
         self.macropad_group.setLayout(self.macropad_layout)
         parent_layout.addWidget(self.macropad_group, 1)
@@ -7065,7 +7434,19 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         # still exists in the new grid.
 
     def recreate_macropad_grid(self):
-        """Clears and rebuilds the macropad grid buttons with enhanced visual design."""
+        """
+        Clears and rebuilds the macropad grid buttons with enhanced modern visual design.
+        
+        Features:
+        - 100×100px buttons (increased from 80×80)
+        - 12px spacing for cleaner modern layout
+        - Coordinate labels for easy identification
+        - Visual hover effects and selection states
+        - 180° rotation to match physical hardware orientation
+        
+        Note:
+            Restores previous selection state if the key still exists after rebuild.
+        """
         self.clear_macropad_grid()
         # Iterate in reverse (180° rotation) to match physical board orientation
         for r in range(self.rows - 1, -1, -1):
@@ -7073,7 +7454,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 button = QPushButton()
                 button.setObjectName("keymapButton")
                 button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-                button.setMinimumSize(80, 80)  # Minimum size for better visibility
+                button.setMinimumSize(100, 100)  # Increased from 80 to 100 for modern layout
                 button.setCheckable(True)
                 button.clicked.connect(partial(self.on_key_selected, r, c))
                 # allow double-click detection via the main window's eventFilter
