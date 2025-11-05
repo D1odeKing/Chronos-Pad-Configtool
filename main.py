@@ -3434,7 +3434,12 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #454545; border: 1px solid #555555; color: #e0e0e0; }
             QPushButton:hover { background: #505050; }
             QPushButton:pressed { background: #3f3f3f; }
-            QPushButton#keymapButton:checked { background-color: #5a5a5a; border: 2px solid #707070; color: #ffffff; }
+            QPushButton#keymapButton:checked { 
+                background-color: #2a5a8a; 
+                border: 3px solid #4a9aff; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #454545; }
             QListWidget::item:hover { background-color: #464646; }
             QListWidget::item:selected { background-color: #505050; color: #ffffff; font-weight: 600; }
@@ -3463,7 +3468,12 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #e8e8e8; border: 1px solid #d0d0d0; color: #333333; }
             QPushButton:hover { background: #e0e0e0; }
             QPushButton:pressed { background: #d8d8d8; }
-            QPushButton#keymapButton:checked { background-color: #c0c0c0; border: 2px solid #909090; color: #000000; }
+            QPushButton#keymapButton:checked { 
+                background-color: #5a9adf; 
+                border: 3px solid #2070c0; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #e8e8e8; }
             QListWidget::item:hover { background-color: #e0e0e0; }
             QListWidget::item:selected { background-color: #d0d0d0; color: #000000; font-weight: 600; }
@@ -3492,7 +3502,12 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #3d3d3d; border: 1px solid #4d4d4d; color: #d5d5d5; }
             QPushButton:hover { background: #454545; }
             QPushButton:pressed { background: #353535; }
-            QPushButton#keymapButton:checked { background-color: #4a4a4a; border: 2px solid #6a6a6a; color: #ffffff; }
+            QPushButton#keymapButton:checked { 
+                background-color: #2a5a8a; 
+                border: 3px solid #4a9aff; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #3d3d3d; }
             QListWidget::item:hover { background-color: #3e3e3e; }
             QListWidget::item:selected { background-color: #454545; color: #ffffff; font-weight: 600; }
@@ -4811,6 +4826,65 @@ class KMKConfigurator(QMainWindow):
         self.save_profiles()
         self.save_session_state()
         event.accept()
+    
+    def keyPressEvent(self, event):
+        """
+        Handle keyboard navigation for keymap grid.
+        
+        Allows users to navigate the keymap grid using arrow keys and select
+        keys without needing to use the mouse. This improves accessibility and
+        workflow efficiency.
+        
+        Args:
+            event: QKeyEvent containing the key press information
+        
+        Navigation:
+            - Arrow Up/Down/Left/Right: Move selection in the grid
+            - Enter/Return: Focus on keycode selector for quick assignment
+            - Delete/Backspace: Clear selected key (set to KC.NO)
+        
+        Note:
+            Grid coordinates are in physical board orientation (reversed for display)
+        """
+        key = event.key()
+        
+        # Arrow key navigation
+        if key in (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right):
+            if self.selected_key_coords is None:
+                # No key selected, start at top-left (0, 0)
+                self.on_key_selected(0, 0)
+            else:
+                row, col = self.selected_key_coords
+                
+                # Navigate based on arrow key
+                if key == Qt.Key.Key_Up:
+                    row = max(0, row - 1)
+                elif key == Qt.Key.Key_Down:
+                    row = min(self.rows - 1, row + 1)
+                elif key == Qt.Key.Key_Left:
+                    col = max(0, col - 1)
+                elif key == Qt.Key.Key_Right:
+                    col = min(self.cols - 1, col + 1)
+                
+                # Select the new key
+                self.on_key_selected(row, col)
+            
+            event.accept()
+        
+        # Delete/Backspace to clear selected key
+        elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.clear_selected_key()
+            event.accept()
+        
+        # Enter/Return to focus keycode selector
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if hasattr(self, 'keycode_selector'):
+                self.keycode_selector.setFocus()
+            event.accept()
+        
+        else:
+            # Pass other keys to parent
+            super().keyPressEvent(event)
 
     # --- File I/O and Profile Management ---
 
