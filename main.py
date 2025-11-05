@@ -6560,6 +6560,8 @@ class KMKConfigurator(QMainWindow):
             QWidget container with complete keycode selector UI
         """
         container = QWidget()
+        container.setMinimumWidth(450)
+        container.setMinimumHeight(600)
         main_layout = QVBoxLayout(container)
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(8)
@@ -6576,9 +6578,11 @@ class KMKConfigurator(QMainWindow):
         
         # LEFT: Category Sidebar
         sidebar_widget = QWidget()
+        sidebar_widget.setMinimumWidth(140)
+        sidebar_widget.setMaximumWidth(220)
         sidebar_layout = QVBoxLayout(sidebar_widget)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(4)
+        sidebar_layout.setSpacing(2)  # Very tight spacing for compact windowed display
         
         # Store category buttons for state management
         self.category_buttons = {}
@@ -6593,17 +6597,21 @@ class KMKConfigurator(QMainWindow):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(f"Show {category} keycodes")
             btn.setCheckable(True)
-            btn.setMinimumWidth(140)
-            btn.setMinimumHeight(50)
-            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            btn.setMinimumHeight(44)  # Smaller for windowed mode
+            btn.setMaximumHeight(48)  # More compact maximum
+            btn.setMinimumWidth(135)
+            btn.setMaximumWidth(180)  # Narrower max to prevent stretching
+            btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(lambda checked, cat=category: self.select_category(cat))
             sidebar_layout.addWidget(btn)
             self.category_buttons[category] = btn
         
-        sidebar_layout.addStretch()
+        # Add stretch at bottom to push buttons to top in fullscreen
+        sidebar_layout.addStretch(1)
         
         # RIGHT: Keycode Content Area
         content_widget = QWidget()
+        content_widget.setMinimumWidth(300)
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(8)
@@ -6611,9 +6619,11 @@ class KMKConfigurator(QMainWindow):
         # Keycode list
         self.keycode_list = QListWidget()
         self.keycode_list.setSpacing(2)
+        self.keycode_list.setMinimumHeight(300)
+        self.keycode_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.keycode_list.itemClicked.connect(self.on_keycode_assigned)
         self.keycode_list.itemDoubleClicked.connect(self.on_keycode_assigned)
-        content_layout.addWidget(self.keycode_list)
+        content_layout.addWidget(self.keycode_list, 1)  # Stretch factor to grow
         
         # Quick action buttons
         actions_layout = QHBoxLayout()
@@ -6644,11 +6654,13 @@ class KMKConfigurator(QMainWindow):
         splitter.setStretchFactor(0, 0)  # Sidebar fixed-ish
         splitter.setStretchFactor(1, 1)  # Content grows
         
-        main_layout.addWidget(splitter, 1)  # Stretch factor 1
+        main_layout.addWidget(splitter, 3)  # Stretch factor 3 (more room for keycodes)
         
         # BOTTOM: Macros and TapDance Section
         macro_td_tabs = QTabWidget()
-        macro_td_tabs.setMaximumHeight(250)
+        macro_td_tabs.setMinimumHeight(180)
+        macro_td_tabs.setMaximumHeight(300)
+        macro_td_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         
         # Macros Tab
         macros_widget = QWidget()
@@ -6776,9 +6788,9 @@ class KMKConfigurator(QMainWindow):
                 color: white;
                 font-weight: bold;
                 border-radius: 6px;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 text-align: center;
-                font-size: 11pt;
+                font-size: 9pt;
             }
             QPushButton:hover {
                 background-color: #60a5fa;
@@ -6797,9 +6809,9 @@ class KMKConfigurator(QMainWindow):
                 background-color: #374151;
                 color: #e5e7eb;
                 border-radius: 6px;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 text-align: center;
-                font-size: 10pt;
+                font-size: 9pt;
             }
             QPushButton:hover {
                 background-color: #4b5563;
