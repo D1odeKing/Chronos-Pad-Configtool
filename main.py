@@ -4475,6 +4475,35 @@ class KMKConfigurator(QMainWindow):
                 border: 2px solid #4b5563;
             }
             
+            /* Category Pills (horizontal keycode category buttons) */
+            QPushButton#categoryPill {
+                background-color: #374151;
+                border: 1px solid #4b5563;
+                border-radius: 16px;
+                padding: 6px 16px;
+                color: #9ca3af;
+                font-weight: 500;
+                min-width: 80px;
+            }
+            QPushButton#categoryPill:hover {
+                background-color: #4b5563;
+                border: 1px solid #6b7280;
+                color: #e5e7eb;
+            }
+            QPushButton#categoryPill:checked {
+                background-color: #4a9aff;
+                border: 2px solid #60a5fa;
+                color: #ffffff;
+                font-weight: 600;
+            }
+            QPushButton#categoryPill:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QPushButton#categoryPill:pressed {
+                background-color: #2563eb;
+            }
+            
             /* Checkboxes and radio buttons */
             QCheckBox, QRadioButton {
                 color: #e5e7eb;
@@ -6504,7 +6533,25 @@ class KMKConfigurator(QMainWindow):
             
     # --- Key Assignment ---
     def create_keycode_selector(self):
-        """Create keycode selector with global search across all categories."""
+        """
+        Create modern keycode selector with category pills and search.
+        
+        Features:
+        - Horizontal scrollable category pills for quick navigation
+        - Global search across all keycode categories
+        - Tab-based organization with icons
+        - Dynamic macro and TapDance lists
+        - Persistent tab selection in session state
+        
+        Layout:
+        1. Global search bar
+        2. Horizontal category pill buttons (scrollable)
+        3. Tab widget with keycode lists
+        4. Search results list (shown when searching)
+        
+        Returns:
+            QWidget container with complete keycode selector UI
+        """
         container = QWidget()
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(5, 5, 5, 5)
@@ -6515,6 +6562,57 @@ class KMKConfigurator(QMainWindow):
         self.keycode_search_box.setPlaceholderText("🔍 Search all keycodes…")
         self.keycode_search_box.setClearButtonEnabled(True)
         container_layout.addWidget(self.keycode_search_box)
+        
+        # Category pills (horizontal scrollable buttons)
+        pills_scroll = QScrollArea()
+        pills_scroll.setWidgetResizable(True)
+        pills_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        pills_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        pills_scroll.setMaximumHeight(50)
+        
+        pills_widget = QWidget()
+        pills_layout = QHBoxLayout(pills_widget)
+        pills_layout.setContentsMargins(0, 0, 0, 0)
+        pills_layout.setSpacing(8)
+        
+        # Store pill buttons for activation state
+        self.category_pills = []
+        
+        # Create pill button for each category
+        category_list = list(KEYCODES.keys())
+        for idx, category in enumerate(category_list):
+            pill_btn = QPushButton(f"{self._get_category_icon(category)} {category}")
+            pill_btn.setObjectName("categoryPill")
+            pill_btn.setCheckable(True)
+            pill_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            pill_btn.setToolTip(f"Show {category} keycodes")
+            pill_btn.clicked.connect(lambda checked, i=idx: self._on_category_pill_clicked(i))
+            pills_layout.addWidget(pill_btn)
+            self.category_pills.append(pill_btn)
+        
+        # Add special category pills for Macros and TapDance
+        macro_pill = QPushButton("⚡ Macros")
+        macro_pill.setObjectName("categoryPill")
+        macro_pill.setCheckable(True)
+        macro_pill.setCursor(Qt.CursorShape.PointingHandCursor)
+        macro_pill.setToolTip("Show available macros")
+        macro_pill.clicked.connect(lambda: self._on_category_pill_clicked(len(category_list)))
+        pills_layout.addWidget(macro_pill)
+        self.category_pills.append(macro_pill)
+        
+        td_pill = QPushButton("🎯 TapDance")
+        td_pill.setObjectName("categoryPill")
+        td_pill.setCheckable(True)
+        td_pill.setCursor(Qt.CursorShape.PointingHandCursor)
+        td_pill.setToolTip("Show TapDance keys from custom code")
+        td_pill.clicked.connect(lambda: self._on_category_pill_clicked(len(category_list) + 1))
+        pills_layout.addWidget(td_pill)
+        self.category_pills.append(td_pill)
+        
+        pills_layout.addStretch()
+        pills_scroll.setWidget(pills_widget)
+        container_layout.addWidget(pills_scroll)
 
         # Results list shown only when global search is active
         self.keycode_search_results = QListWidget()
@@ -6586,8 +6684,12 @@ class KMKConfigurator(QMainWindow):
         # Store reference for session persistence
         self.keycode_tabs = tab_widget
         self.keycode_search_box.textChanged.connect(self._filter_all_keycodes)
-        # Connect tab change signal to save session state
-        tab_widget.currentChanged.connect(lambda: self.save_session_state())
+        # Connect tab change signal to save session state and sync pills
+        tab_widget.currentChanged.connect(self._on_tab_changed)
+        
+        # Set first pill as active by default
+        if self.category_pills:
+            self.category_pills[0].setChecked(True)
         
         return container
     
@@ -6646,6 +6748,45 @@ class KMKConfigurator(QMainWindow):
             self.on_keycode_assigned(proxy_item)
             # Clear search to return to tab view
             self.keycode_search_box.clear()
+    
+    def _on_category_pill_clicked(self, index: int):
+        """
+        Handle category pill button clicks for quick navigation.
+        
+        Updates the active tab to match the clicked category pill and
+        synchronizes the visual state of all pills (only one active).
+        
+        Args:
+            index: Tab index to navigate to (matches pill button index)
+        """
+        # Update tab selection
+        if hasattr(self, 'keycode_tabs') and self.keycode_tabs:
+            self.keycode_tabs.setCurrentIndex(index)
+        
+        # Update pill visual states (uncheck all except clicked)
+        for i, pill in enumerate(self.category_pills):
+            pill.setChecked(i == index)
+        
+        # Save session state
+        self.save_session_state()
+    
+    def _on_tab_changed(self, index: int):
+        """
+        Handle tab widget changes to synchronize category pills.
+        
+        When user clicks a tab directly (not via pill), this updates
+        the pill button states to match the selected tab.
+        
+        Args:
+            index: New active tab index
+        """
+        # Update pill visual states
+        if hasattr(self, 'category_pills'):
+            for i, pill in enumerate(self.category_pills):
+                pill.setChecked(i == index)
+        
+        # Save session state
+        self.save_session_state()
 
     def on_keycode_assigned(self, item):
         keycode = item.text()
