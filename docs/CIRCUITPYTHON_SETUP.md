@@ -1,6 +1,6 @@
 # CircuitPython Setup Guide
 
-> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from David (D1odeKing).
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from D10D3K1NG.
 
 ---
 

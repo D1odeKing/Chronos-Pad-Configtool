@@ -7,7 +7,7 @@
 ### Development Process
 
 - **AI Role**: GitHub Copilot generated all code, documentation, and technical implementations
-- **Human Role**: David (D1odeKing) provided:
+- **Human Role**: D10D3K1NG provided:
   - Project requirements and specifications
   - Feature requests and design feedback
   - Bug detection and quality assurance
@@ -19,8 +19,8 @@
 
 The source code in this repository represents a collaboration between:
 - **AI Code Generation**: GitHub Copilot (OpenAI/Microsoft)
-- **Project Direction**: David (D1odeKing)
-- **Testing & Validation**: David (D1odeKing)
+- **Project Direction**: D10D3K1NG
+- **Testing & Validation**: D10D3K1NG
 
 ### Licensing
 
@@ -31,7 +31,7 @@ While the code was AI-generated, it is offered as open-source software for commu
 ### Acknowledgments
 
 - **GitHub Copilot**: For code generation, documentation, and technical implementation
-- **David (D1odeKing)**: For project vision, requirements, testing, and quality assurance
+- **D10D3K1NG**: For project vision, requirements, testing, and quality assurance
 - **KMK Firmware Community**: For the excellent keyboard firmware foundation
 - **Adafruit**: For CircuitPython and hardware libraries
 

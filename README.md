@@ -9,7 +9,7 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![KMK Firmware](https://img.shields.io/badge/KMK-GPL--3.0-orange.svg)
 ![AI Generated](https://img.shields.io/badge/AI-Generated%20Code-blueviolet.svg)
 
-> **🤖 AI-Generated Code Notice**: This project's codebase was primarily written by **GitHub Copilot AI** with project direction, testing, and bug detection by **David (D1odeKing)**. See [Attribution](docs/ATTRIBUTION.md) for details.
+> **🤖 AI-Generated Code Notice**: This project's codebase was primarily written by **GitHub Copilot AI** with project direction, testing, and bug detection by **D10D3K1NG**. See [Attribution](docs/ATTRIBUTION.md) for details.
 
 > **⚠️ Hardware Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
 
