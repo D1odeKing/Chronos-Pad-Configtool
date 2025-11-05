@@ -1213,7 +1213,7 @@ class EncoderConfigDialog(QDialog):
             "Hardware: Pin A=GP10, Pin B=GP11, Button=GP14"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("background-color: #E3F2FD; padding: 8px; border-radius: 4px;")
+        info.setObjectName("infoBox")
         main_layout.addWidget(info)
         
         # Hardware pins (fixed for Chronos Pad)
@@ -2439,7 +2439,7 @@ class TapDanceDialog(QDialog):
             "Supports all key types including HoldTap (MT, LT), TT, and Macros."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("background-color: #E3F2FD; padding: 10px; border-radius: 4px;")
+        info.setObjectName("infoBox")
         layout.addWidget(info)
         
         # TapDance entries
@@ -2860,7 +2860,7 @@ class ComboDialog(QDialog):
             "For example: Press Q + W simultaneously to send ESC."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("background-color: #FFF3E0; padding: 10px; border-radius: 4px;")
+        info.setObjectName("infoBox")
         layout.addWidget(info)
         
         # Combo entries
@@ -3355,6 +3355,8 @@ class KMKConfigurator(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             success = self.load_configuration(file_path=config_file, show_message=False)
             if success:
+                # Restore session state after loading config
+                self.restore_session_state()
                 return
 
         self.reset_to_defaults()
@@ -3411,6 +3413,7 @@ class KMKConfigurator(QMainWindow):
             QListWidget::item:hover { background-color: #464646; }
             QListWidget::item:selected { background-color: #505050; color: #ffffff; font-weight: 600; }
             QLabel { color: #e5e5e5; }
+            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
             QLineEdit:focus { border: 1px solid #808080; background-color: #484848; }
             QSpinBox { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
@@ -3439,6 +3442,7 @@ class KMKConfigurator(QMainWindow):
             QListWidget::item:hover { background-color: #e0e0e0; }
             QListWidget::item:selected { background-color: #d0d0d0; color: #000000; font-weight: 600; }
             QLabel { color: #222222; }
+            QLabel#infoBox { background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
             QLineEdit:focus { border: 1px solid #909090; background-color: #fafafa; }
             QSpinBox { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
@@ -3467,6 +3471,7 @@ class KMKConfigurator(QMainWindow):
             QListWidget::item:hover { background-color: #3e3e3e; }
             QListWidget::item:selected { background-color: #454545; color: #ffffff; font-weight: 600; }
             QLabel { color: #e5e5e5; }
+            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
             QLineEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
             QSpinBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
@@ -3503,6 +3508,39 @@ class KMKConfigurator(QMainWindow):
             QLineEdit, QSpinBox, QComboBox { border-radius: 6px; padding: 6px; }
             QListWidget { border-radius: 8px; }
         '''
+    
+    def get_info_box_style(self, variant='info'):
+        """Get theme-aware style for info boxes
+        
+        Args:
+            variant: 'info' (blue), 'success' (green), 'warning' (orange), or 'neutral' (gray)
+        """
+        if self.current_theme == 'Dark':
+            # Dark mode - darker backgrounds with lighter text
+            styles = {
+                'info': "background-color: #1e3a5f; color: #b3d4ff; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #5f4a1e; color: #ffd699; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #3a3a3a; color: #d5d5d5; padding: 10px; border-radius: 4px;"
+            }
+        elif self.current_theme == 'Light':
+            # Light mode - light backgrounds with dark text
+            styles = {
+                'info': "background-color: #E3F2FD; color: #0d47a1; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #FFF3E0; color: #e65100; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #f5f5f5; color: #424242; padding: 10px; border-radius: 4px;"
+            }
+        else:  # Cheerful
+            # Cheerful mode - similar to light but with more vibrant colors
+            styles = {
+                'info': "background-color: #E3F2FD; color: #0d47a1; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #FFF3E0; color: #e65100; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #f5f5f5; color: #424242; padding: 10px; border-radius: 4px;"
+            }
+        
+        return styles.get(variant, styles['neutral'])
 
     # --- Extension config persistence ---
     def save_extension_configs(self):
@@ -3653,7 +3691,7 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def load_ui_settings(self):
-        """Load UI settings (theme) from kmk_Config_Save/ui_settings.json."""
+        """Load UI settings (theme and session state) from kmk_Config_Save/ui_settings.json."""
         try:
             settings_path = os.path.join(CONFIG_SAVE_DIR, 'ui_settings.json')
             if os.path.exists(settings_path):
@@ -3662,6 +3700,63 @@ class KMKConfigurator(QMainWindow):
                     theme = settings.get('theme', 'Dark')
                     if theme in ['Cheerful', 'Light', 'Dark']:
                         self.current_theme = theme
+        except Exception:
+            pass
+
+    def save_session_state(self):
+        """Save current UI session state (layer, selected key, active tabs)."""
+        try:
+            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            session_data = {
+                'current_layer': self.current_layer,
+                'selected_key_coords': self.selected_key_coords,
+                'extension_tab_index': getattr(self.extensions_tabs, 'currentIndex', lambda: 0)(),
+                'keycode_tab_index': getattr(self.keycode_tabs, 'currentIndex', lambda: 0)(),
+            }
+            session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
+            with open(session_path, 'w') as f:
+                json.dump(session_data, f, indent=4)
+        except Exception:
+            pass
+
+    def restore_session_state(self):
+        """Restore UI session state from last session."""
+        try:
+            session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
+            if os.path.exists(session_path):
+                with open(session_path, 'r') as f:
+                    session_data = json.load(f)
+                
+                # Restore current layer
+                layer = session_data.get('current_layer', 0)
+                if 0 <= layer < len(self.keymap_data):
+                    self.current_layer = layer
+                    # Update layer tabs UI
+                    if hasattr(self, 'layer_tabs'):
+                        self.layer_tabs.setCurrentIndex(layer)
+                
+                # Restore selected key
+                coords = session_data.get('selected_key_coords')
+                if coords and isinstance(coords, list) and len(coords) == 2:
+                    row, col = coords
+                    if 0 <= row < self.rows and 0 <= col < self.cols:
+                        self.selected_key_coords = coords
+                        self.update_macropad_display()
+                
+                # Restore extension tab
+                ext_tab_idx = session_data.get('extension_tab_index', 0)
+                if hasattr(self, 'extensions_tabs'):
+                    max_idx = self.extensions_tabs.count() - 1
+                    if 0 <= ext_tab_idx <= max_idx:
+                        self.extensions_tabs.setCurrentIndex(ext_tab_idx)
+                
+                # Restore keycode tab
+                key_tab_idx = session_data.get('keycode_tab_index', 0)
+                if hasattr(self, 'keycode_tabs'):
+                    max_idx = self.keycode_tabs.count() - 1
+                    if 0 <= key_tab_idx <= max_idx:
+                        self.keycode_tabs.setCurrentIndex(key_tab_idx)
+                        
         except Exception:
             pass
 
@@ -3907,7 +4002,7 @@ class KMKConfigurator(QMainWindow):
             "<b>Use cases:</b> Custom modules, TapDance, Combos, StringSubs, etc."
         )
         custom_code_info.setWordWrap(True)
-        custom_code_info.setStyleSheet("background-color: #E8F5E9; padding: 10px; border-radius: 4px;")
+        custom_code_info.setObjectName("infoBox")  # Tag for theme updates
         custom_code_layout.addWidget(custom_code_info)
         
         self.custom_extension_code = QTextEdit()
@@ -4064,6 +4159,9 @@ class KMKConfigurator(QMainWindow):
         
         self.extensions_tabs.addTab(advanced_tab, "⚙ Advanced")
         
+        # Connect tab change signal to save session state
+        self.extensions_tabs.currentChanged.connect(lambda: self.save_session_state())
+        
         # Add tabs to main layout
         main_layout.addWidget(self.extensions_tabs)
         
@@ -4169,6 +4267,8 @@ class KMKConfigurator(QMainWindow):
         """Handle custom extension code changes."""
         self.custom_ext_code = self.custom_extension_code.toPlainText()
         self.save_extension_configs()
+        # Update TapDance list when code changes
+        self.update_tapdance_list()
     
     def generate_boot_config(self):
         """Generate boot.py code from UI settings."""
@@ -4359,6 +4459,32 @@ class KMKConfigurator(QMainWindow):
                 if current_code.strip():
                     current_code += "\n\n"
                 self.custom_extension_code.setPlainText(current_code + code)
+                # Update TapDance keycode list
+                self.update_tapdance_list()
+    
+    def update_tapdance_list(self):
+        """Parse custom extension code to find TapDance definitions and update the selector"""
+        if not hasattr(self, 'tapdance_keycode_list'):
+            return
+        
+        self.tapdance_keycode_list.clear()
+        
+        # Parse the custom extension code for TapDance definitions
+        custom_code = self.custom_extension_code.toPlainText() if hasattr(self, 'custom_extension_code') else ""
+        
+        # Find lines like: TD_NAME = KC.TD(...)
+        import re
+        td_pattern = r'^([A-Z_][A-Z0-9_]*)\s*=\s*KC\.TD\s*\('
+        
+        td_names = []
+        for line in custom_code.split('\n'):
+            match = re.match(td_pattern, line.strip())
+            if match:
+                td_names.append(match.group(1))
+        
+        if td_names:
+            self.tapdance_keycode_list.addItems(sorted(td_names))
+
     
     def add_combo_helper(self):
         """Open Combo helper dialog"""
@@ -4486,9 +4612,10 @@ class KMKConfigurator(QMainWindow):
         parent_layout.addWidget(group, 1)
 
     def closeEvent(self, event):
-        """Save settings on application exit."""
+        """Save settings and session state on application exit."""
         self.save_macros()
         self.save_profiles()
+        self.save_session_state()
         event.accept()
 
     # --- File I/O and Profile Management ---
@@ -4714,6 +4841,16 @@ class KMKConfigurator(QMainWindow):
         self.macro_keycode_list = QListWidget()
         self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
         tab_widget.addTab(self.macro_keycode_list, "Macros")
+        
+        # Tab for TapDance
+        self.tapdance_keycode_list = QListWidget()
+        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        tab_widget.addTab(self.tapdance_keycode_list, "TapDance")
+        
+        # Store reference for session persistence
+        self.keycode_tabs = tab_widget
+        # Connect tab change signal to save session state
+        tab_widget.currentChanged.connect(lambda: self.save_session_state())
         
         return tab_widget
 
@@ -6017,6 +6154,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             for button in self.macropad_buttons.values():
                 button.setChecked(False)
             self.update_macropad_display()
+            # Save session state when layer changes
+            self.save_session_state()
 
     def update_layer_tabs(self):
         """Clears and rebuilds the layer tabs from the keymap data."""
@@ -6058,6 +6197,9 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             current_button = self.macropad_buttons.get(clicked_coords)
             if current_button:
                 current_button.setChecked(True)
+        
+        # Save session state when key selection changes
+        self.save_session_state()
 
     def update_macropad_display(self):
         """Updates the text on all grid buttons to reflect the current layer's keymap."""
