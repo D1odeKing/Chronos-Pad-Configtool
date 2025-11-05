@@ -3301,6 +3301,158 @@ class CollapsibleCard(QWidget):
             self.header_btn.layout().insertWidget(2, self.badge_label)
 
 
+class ToastNotification(QWidget):
+    """
+    Modern toast notification widget for brief user feedback.
+    
+    Features:
+    - Appears bottom-right of parent window
+    - Auto-dismisses after timeout (default 3 seconds)
+    - Smooth fade-in/fade-out animations
+    - Can be manually dismissed
+    - Icon support for different message types (info, success, warning, error)
+    
+    Usage:
+        toast = ToastNotification.show_message(
+            parent_window, 
+            "Configuration saved!", 
+            ToastNotification.SUCCESS,
+            duration=3000
+        )
+    
+    Note:
+        Uses QPropertyAnimation for smooth fade effects.
+        Automatically destroys itself after animation completes.
+    """
+    
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+    
+    def __init__(self, parent, message, message_type=INFO, duration=3000):
+        """
+        Initialize toast notification.
+        
+        Args:
+            parent: Parent window
+            message: Message text to display
+            message_type: Type of message (INFO, SUCCESS, WARNING, ERROR)
+            duration: How long to show toast in milliseconds (default 3000)
+        """
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        
+        # Setup UI
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        
+        # Icon based on type
+        icon_text = {
+            self.INFO: "ℹ️",
+            self.SUCCESS: "✅",
+            self.WARNING: "⚠️",
+            self.ERROR: "❌"
+        }.get(message_type, "ℹ️")
+        
+        icon_label = QLabel(icon_text)
+        icon_label.setStyleSheet("font-size: 16pt;")
+        layout.addWidget(icon_label)
+        
+        # Message
+        message_label = QLabel(message)
+        message_label.setStyleSheet("""
+            color: #ffffff;
+            font-size: 10pt;
+            padding: 0 8px;
+        """)
+        message_label.setWordWrap(True)
+        layout.addWidget(message_label)
+        
+        # Background color based on type
+        bg_colors = {
+            self.INFO: "#4a9aff",
+            self.SUCCESS: "#4ade80",
+            self.WARNING: "#fb923c",
+            self.ERROR: "#ef4444"
+        }
+        bg_color = bg_colors.get(message_type, "#4a9aff")
+        
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {bg_color};
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }}
+        """)
+        
+        self.adjustSize()
+        self.duration = duration
+        
+    def show_animated(self):
+        """Show toast with fade-in animation."""
+        # Position at bottom-right of parent
+        if self.parent():
+            parent_rect = self.parent().rect()
+            x = parent_rect.width() - self.width() - 20
+            y = parent_rect.height() - self.height() - 20
+            self.move(x, y)
+        
+        # Fade in
+        self.setWindowOpacity(0)
+        self.show()
+        
+        fade_in = QPropertyAnimation(self, b"windowOpacity")
+        fade_in.setDuration(200)
+        fade_in.setStartValue(0)
+        fade_in.setEndValue(0.95)
+        fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+        fade_in.finished.connect(self.start_timer)
+        fade_in.start()
+        
+        self.fade_in_anim = fade_in  # Keep reference
+    
+    def start_timer(self):
+        """Start countdown to auto-dismiss."""
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(self.duration, self.hide_animated)
+    
+    def hide_animated(self):
+        """Hide toast with fade-out animation."""
+        fade_out = QPropertyAnimation(self, b"windowOpacity")
+        fade_out.setDuration(200)
+        fade_out.setStartValue(0.95)
+        fade_out.setEndValue(0)
+        fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
+        fade_out.finished.connect(self.deleteLater)
+        fade_out.start()
+        
+        self.fade_out_anim = fade_out  # Keep reference
+    
+    @staticmethod
+    def show_message(parent, message, message_type=INFO, duration=3000):
+        """
+        Static method to show a toast notification.
+        
+        Args:
+            parent: Parent window
+            message: Message text
+            message_type: Type of message (INFO, SUCCESS, WARNING, ERROR)
+            duration: Display duration in milliseconds
+            
+        Returns:
+            ToastNotification instance
+            
+        Example:
+            ToastNotification.show_message(self, "Key assigned: KC.A", ToastNotification.SUCCESS)
+        """
+        toast = ToastNotification(parent, message, message_type, duration)
+        toast.show_animated()
+        return toast
+
+
 # --- Main Application Window ---
 class KMKConfigurator(QMainWindow):
     """The main application window for configuring KMK-based macropads."""
@@ -5874,7 +6026,13 @@ class KMKConfigurator(QMainWindow):
         if self.current_layer >= len(self.keymap_data):
             return
         self.key_clipboard = self.keymap_data[self.current_layer][row][col]
-        # Optionally show a brief message (could use toast notifications in Phase 4)
+        # Show toast notification
+        ToastNotification.show_message(
+            self, 
+            f"Key copied: {self.key_clipboard}", 
+            ToastNotification.INFO,
+            duration=2000
+        )
 
     def paste_key_value(self, row, col):
         """Paste clipboard value to a specific key."""
@@ -5884,6 +6042,13 @@ class KMKConfigurator(QMainWindow):
             return
         self.keymap_data[self.current_layer][row][col] = self.key_clipboard
         self.update_macropad_display()
+        # Show toast notification
+        ToastNotification.show_message(
+            self, 
+            f"Key pasted: {self.key_clipboard}", 
+            ToastNotification.SUCCESS,
+            duration=2000
+        )
 
     def set_key_value(self, row, col, value):
         """Set a specific key to a given value."""
@@ -5891,6 +6056,14 @@ class KMKConfigurator(QMainWindow):
             return
         self.keymap_data[self.current_layer][row][col] = value
         self.update_macropad_display()
+        # Show toast notification
+        value_display = "No Key" if value == "KC.NO" else ("Transparent" if value == "KC.TRNS" else value)
+        ToastNotification.show_message(
+            self, 
+            f"Key set to: {value_display}", 
+            ToastNotification.SUCCESS,
+            duration=2000
+        )
 
     def setup_macro_ui(self, parent_layout):
         """Setup macro and TapDance management with tabbed interface."""
