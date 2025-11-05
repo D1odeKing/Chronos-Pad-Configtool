@@ -36,10 +36,10 @@ from PyQt6.QtWidgets import (
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
     QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter,
-    QListWidgetItem
+    QListWidgetItem, QMenu
 )
 from PyQt6.QtWidgets import QTextEdit
-from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal, QPoint
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
@@ -3329,6 +3329,7 @@ class KMKConfigurator(QMainWindow):
         self.macropad_buttons = {}
         self.current_layer = 0
         self.layer_clipboard = None  # For copy/paste layer operations
+        self.key_clipboard = None  # For copy/paste individual key operations
         
         # Fixed hardware configuration
         self.rows = FIXED_ROWS
@@ -5813,6 +5814,84 @@ class KMKConfigurator(QMainWindow):
             self.update_macropad_display()
             QMessageBox.information(self, "Layer Pasted", f"Layer data pasted to Layer {self.current_layer}.")
 
+    def show_key_context_menu(self, row, col, pos):
+        """
+        Show context menu for grid key with common operations.
+        
+        Menu options:
+        - Copy Key: Copies key value to internal clipboard
+        - Paste Key: Pastes clipboard value to this key
+        - Set to Transparent: Sets key to KC.TRNS
+        - Set to No Key: Sets key to KC.NO
+        - Delete: Same as Set to No Key
+        
+        Args:
+            row: Row index of the key
+            col: Column index of the key
+            pos: Position where context menu should appear
+            
+        Note:
+            All operations update the grid display immediately.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        menu = QMenu(self)
+        
+        # Copy key action
+        copy_action = menu.addAction("📋 Copy Key")
+        copy_action.triggered.connect(lambda: self.copy_key_value(row, col))
+        
+        # Paste key action
+        paste_action = menu.addAction("📌 Paste Key")
+        paste_action.triggered.connect(lambda: self.paste_key_value(row, col))
+        if not hasattr(self, 'key_clipboard') or not self.key_clipboard:
+            paste_action.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # Set to transparent
+        transparent_action = menu.addAction("🔄 Set to Transparent")
+        transparent_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.TRNS"))
+        
+        # Set to no key
+        no_key_action = menu.addAction("✖ Set to No Key")
+        no_key_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.NO"))
+        
+        menu.addSeparator()
+        
+        # Delete (same as no key)
+        delete_action = menu.addAction("🗑 Delete")
+        delete_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.NO"))
+        
+        # Show menu at button position
+        button = self.macropad_buttons.get((row, col))
+        if button:
+            menu.exec(button.mapToGlobal(pos))
+
+    def copy_key_value(self, row, col):
+        """Copy the value of a specific key to clipboard."""
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.key_clipboard = self.keymap_data[self.current_layer][row][col]
+        # Optionally show a brief message (could use toast notifications in Phase 4)
+
+    def paste_key_value(self, row, col):
+        """Paste clipboard value to a specific key."""
+        if not hasattr(self, 'key_clipboard') or not self.key_clipboard:
+            return
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.keymap_data[self.current_layer][row][col] = self.key_clipboard
+        self.update_macropad_display()
+
+    def set_key_value(self, row, col, value):
+        """Set a specific key to a given value."""
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.keymap_data[self.current_layer][row][col] = value
+        self.update_macropad_display()
+
     def setup_macro_ui(self, parent_layout):
         """Setup macro and TapDance management with tabbed interface."""
         # Create tab widget for Macros and TapDance
@@ -7596,6 +7675,10 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 button.clicked.connect(partial(self.on_key_selected, r, c))
                 # allow double-click detection via the main window's eventFilter
                 button.installEventFilter(self)
+                
+                # Enable context menu (right-click)
+                button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                button.customContextMenuRequested.connect(partial(self.show_key_context_menu, r, c))
                 
                 # Add coordinate label for easier identification
                 button.setProperty("coords", f"({r},{c})")
