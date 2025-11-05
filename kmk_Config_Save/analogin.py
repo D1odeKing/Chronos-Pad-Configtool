@@ -1,4 +1,3 @@
-import board
 from analogio import AnalogIn as AnalogInPin
 import time
 
@@ -66,6 +65,6 @@ class BrightnessSlider:
         """Called when powersave is disabled"""
         return
 
-# Create and register brightness slider module
+# Create and register brightness slider extension
 brightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval=0.05)
-keyboard.modules.append(brightness_slider)
+keyboard.extensions.append(brightness_slider)
