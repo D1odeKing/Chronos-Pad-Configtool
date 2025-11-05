@@ -3548,7 +3548,8 @@ class KMKConfigurator(QMainWindow):
         right_layout.setSpacing(10)
 
         self.setup_keycode_selector_ui(right_layout)
-        self.setup_macro_ui(right_layout)
+        # Macros and TapDance are now integrated into keycode selector
+        # self.setup_macro_ui(right_layout)  # REMOVED: Now part of keycode selector
         
         # Add panels to splitter
         self.main_splitter.addWidget(left_widget)
@@ -6587,11 +6588,14 @@ class KMKConfigurator(QMainWindow):
         for category in self.category_list:
             icon = self._get_category_icon(category)
             count = len(KEYCODES[category])
-            btn = QPushButton(f"{icon} {category} ({count})")
+            btn = QPushButton(f"{icon} {category}\n({count})")
             btn.setObjectName("categoryButton")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(f"Show {category} keycodes")
             btn.setCheckable(True)
+            btn.setMinimumWidth(140)
+            btn.setMinimumHeight(50)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(lambda checked, cat=category: self.select_category(cat))
             sidebar_layout.addWidget(btn)
             self.category_buttons[category] = btn
@@ -6636,7 +6640,7 @@ class KMKConfigurator(QMainWindow):
         # Add sidebar and content to splitter
         splitter.addWidget(sidebar_widget)
         splitter.addWidget(content_widget)
-        splitter.setSizes([150, 400])
+        splitter.setSizes([180, 400])  # Give sidebar more room (was 150)
         splitter.setStretchFactor(0, 0)  # Sidebar fixed-ish
         splitter.setStretchFactor(1, 1)  # Content grows
         
@@ -6772,8 +6776,9 @@ class KMKConfigurator(QMainWindow):
                 color: white;
                 font-weight: bold;
                 border-radius: 6px;
-                padding: 10px 12px;
-                text-align: left;
+                padding: 8px 12px;
+                text-align: center;
+                font-size: 11pt;
             }
             QPushButton:hover {
                 background-color: #60a5fa;
@@ -6792,8 +6797,9 @@ class KMKConfigurator(QMainWindow):
                 background-color: #374151;
                 color: #e5e7eb;
                 border-radius: 6px;
-                padding: 10px 12px;
-                text-align: left;
+                padding: 8px 12px;
+                text-align: center;
+                font-size: 10pt;
             }
             QPushButton:hover {
                 background-color: #4b5563;
