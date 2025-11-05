@@ -1,21 +1,273 @@
 # Chronos Pad Copilot Guide
+
+## Documentation Standards
+**CRITICAL**: All code, functions, classes, and UI components MUST have professional, comprehensive documentation.
+
+### Documentation Requirements
+- **Every Function**: Detailed docstring explaining purpose, parameters, return values, and side effects
+- **Every Class**: Clear description of responsibility, state management, and usage patterns
+- **Complex Logic**: Inline comments explaining WHY, not just WHAT
+- **UI Components**: Purpose, user interaction flow, and data binding explanations
+- **File Structure**: README or header comments explaining organization and relationships
+- **Code Examples**: Include usage examples in docstrings for non-trivial functions
+- **Error Handling**: Document expected exceptions and error recovery strategies
+
+### Documentation Style Guide
+```python
+def function_name(param1: type, param2: type) -> return_type:
+    """
+    Brief one-line summary of what this function does.
+    
+    Detailed explanation of the function's purpose, behavior, and any important
+    implementation details. Explain WHY this function exists and how it fits
+    into the larger system architecture.
+    
+    Args:
+        param1: Clear description of the parameter's purpose and valid values
+        param2: Description including constraints, format requirements, or examples
+    
+    Returns:
+        Description of return value, including structure for complex types
+    
+    Raises:
+        ExceptionType: When and why this exception occurs
+    
+    Example:
+        >>> result = function_name("value1", 42)
+        >>> print(result)
+        Expected output
+    
+    Note:
+        Any important caveats, performance considerations, or usage warnings
+    """
+```
+
+## Architecture Overview
 - **Architecture** `main.py` drives everything through the `KMKConfigurator` PyQt6 window; the class sets up panels for file IO, extensions, a 5×4 key grid, macro tools, and keeps UI/state in sync.
 - **Hardware Model** All configs assume the fixed Chronos Pad wiring declared near the top of `main.py` (`FIXED_ROW_PINS`, encoder pins, RGB pin, OLED I2C pins); do not rewrite these unless the hardware spec changes.
 - **State Shape** `self.keymap_data` stores layers as row-major 5×4 lists using KC.* strings; macros live in `self.macros` as `{name: [(action, value)]}` tuples; RGB data sits in `self.rgb_matrix_config` with stringified indices for per-key color overrides.
-- **Persistence** `kmk_Config_Save/` holds user state: `config.json` (full snapshot), `encoder.py` / `analogin.py` / `display.py` snippets, and `rgb_matrix.json`; always update these helpers when changing serialization logic.
-- **Profiles** `profiles.json` is bundled via `ChronosPadConfigurator.spec` and loaded in `setup_hardware_profile_ui`; keep backward compatibility when expanding its schema.
-- **Dependency Flow** `DependencyDownloader` pulls KMK firmware and the Adafruit bundle into `libraries/`; reuse `KMK_SKIP_DEP_CHECK=1` when running headless scripts or tests.
-- **Startup UX** A previous session prompt is controlled by `KMK_SKIP_STARTUP_DIALOG`; headless helpers in `scripts/` set both skip variables before instantiating `KMKConfigurator`.
-- **Code Generation** `get_generated_python_code()` is the single source for exported firmware; it merges hardware pins, macros, encoder/analog/display snippets, and RGB output from `_generate_rgb_matrix_code()`—keep changes consistent across these helpers.
-- **Display Sync** Layer-aware OLED rendering comes from `generate_display_layout_code_with_layer_support()` plus `LayerDisplaySync`; update both if you touch layer tracking or key label formatting.
-- **RGB Rules** `_generate_rgb_matrix_code()` mixes defaults with overrides and emits chunked arrays; when adding color features, adjust both the JSON schema and this formatter.
-- **Macros** GUI macro builder stores sequences as `tap/press/release/delay/text`; ensure any new action types are reflected in macro dialogs and export formatting.
-- **File Export** `generate_code_py_dialog()` saves `code.py`, copies `kmk/` and required libs (`adafruit_displayio_sh1106`, `adafruit_display_text`, `neopixel`) into the chosen CIRCUITPY drive; keep this path list updated with new firmware dependencies.
-- **Testing Hooks** `scripts/preview_gen.py` and `scripts/test_rgb_map_emit.py` spin the app without dialogs to snapshot generated code; add similar scripts rather than embedding CLI paths in `main.py`.
-- **Build Workflow** `python main.py` launches the GUI during development; `python build_exe.py` runs PyInstaller with `ChronosPadConfigurator.spec` to ship the Windows executable.
-- **Bundled KMK Copy** The repo contains a cached `kmk/` tree under `libraries/`; treat it as vendor code—only patch via upstream sync scripts, not ad-hoc edits.
-- **Error Surfaces** Most file operations surface via `QMessageBox`; when adding new async tasks, follow the same pattern (emit progress through signals, guard UI with dialogs).
-- **Theming** UI palettes come from `_apply_dark_stylesheet`, `_apply_light_stylesheet`, `_apply_cheerful_stylesheet`; add widgets using the shared geometry rules in `_base_geometry_qss()` to avoid regressions.
-- **Config Versioning** Saved JSON uses `version` keys (`"2.0"` current). Any schema change must migrate old payloads inside `load_configuration()` while keeping defaults in `build_default_rgb_matrix_config()`.
-- **Keycode Catalog** Key selection relies on categorized lists built in `create_keycode_selector()`; update those data sets and `_matches_category()` when introducing new KMK keycodes.
-- **Next Steps** Let me know if any part of the generator pipeline, persistence model, or build story still feels unclear and we can dive deeper.
+
+## UI Structure & Resizability
+- **Main Layout** Three-panel QSplitter design (Left: File/Extensions | Center: Keymap Grid | Right: Key Assignment/Macros/TapDance)
+- **Resizable Panels** All panels user-resizable via QSplitter; sizes persist in session.json
+- **Initial Sizes** Left=250px, Center=500px, Right=550px (user-adjustable, remembered between sessions)
+- **Panel Contents**:
+  - **Left**: File management, configuration profiles, extension toggles (Encoder, RGB, Display, Analog Input)
+  - **Center**: Layer tabs, keymap grid (5×4 buttons with coordinates and icons), info bar
+  - **Right**: Keycode selector with search, Macro/TapDance tabbed management, quick actions
+
+## Modern UI Vision (Next Generation)
+The application should evolve toward a modern, streamlined design with the following characteristics:
+
+### Visual Design Principles
+- **Clean Material Design**: Rounded corners (8px), subtle shadows, smooth transitions
+- **Card-Based Layout**: Group related controls into visually distinct cards with subtle borders
+- **Better Visual Hierarchy**: Use size, color, and spacing to guide user attention
+- **Dark Mode First**: Design around the dark theme; light themes should feel like variants
+- **Accessibility**: High contrast ratios, clear focus indicators, readable typography
+
+### Left Panel (File Management & Extensions)
+**Current State**: Stacked sections with basic buttons
+**Vision**:
+- **Collapsible Cards**: File management, Quick Profiles, Extensions as collapsible sections
+- **Better File Workflow**: 
+  - File selector dropdown with preview of selected config
+  - Recent files quick-access button
+  - "New Configuration" template selector
+- **Extensions Redesign**:
+  - Icon + Label + Toggle switch (instead of checkbox) for each extension
+  - Inline quick-config buttons that open dialogs with minimal friction
+  - Visual indicators showing enabled/disabled state (blue = enabled, gray = disabled)
+- **Profile Management**:
+  - Profile cards showing config name, key count, last modified date
+  - Drag-to-reorder support (future enhancement)
+  - Favorite/star button for quick access
+
+### Center Panel (Keymap Grid)
+**Current State**: 5×4 buttons with coordinates and visual feedback
+**Vision**:
+- **Grid Enhancement**:
+  - Larger buttons (100x100px) with better spacing (12px)
+  - Show layer indicator in top-left corner of each button
+  - Highlight key under mouse hover with subtle glow effect
+  - Selected key: bright blue border (3px) + blue glow shadow
+- **Layer Management**:
+  - Horizontal tabs with layer preview icons
+  - Show key count per layer as small badge
+  - Quick layer duplication/deletion icons
+  - Right-click context menu: Duplicate Layer, Delete, Rename, Clear All Keys
+- **Grid Actions Bar**:
+  - Above grid: Quick actions (Clear Layer, Copy Layer, Paste Layer, Reset to Default)
+  - Context-sensitive help showing current selection info
+  - Coordinates display: "Selected: (Row 2, Col 3) | KC.A"
+
+### Right Panel (Key Assignment)
+**Current State**: Keycode tabs + Macros/TapDance tabs below
+**Vision**:
+- **Top Section - Key Assignment Card**:
+  - Large, prominent display of selected key
+  - Show current assignment (icon + text + description)
+  - Clear visual feedback: "No Key Selected" vs actual key
+  - Quick action buttons in a button group: [⌨ Combo] [✖ Clear] [🔄 Transparent]
+  
+- **Keycode Selector Redesign**:
+  - Search bar with autocomplete and category filter
+  - Horizontal category pills (scrollable): Letters | Numbers | Editing | Modifiers | etc.
+  - Grid view of keycodes (3 columns) instead of list
+  - Each keycode shows icon + name + visual category badge
+  - Hover shows tooltip with full keycode name
+  
+- **Macro/TapDance Section**:
+  - Split into two sections side-by-side (50/50 width)
+  - **Macros Section**:
+    - List of available macros with mini indicator (⚡ icon)
+    - Add/Edit/Delete buttons in a floating action menu
+    - Click macro to assign to selected key
+  - **TapDance Section**:
+    - List of available TapDance keys with indicator (🎯 icon)
+    - Button to open TapDance builder
+    - Refresh button to sync with custom code
+
+### Overall Layout Improvements
+- **Floating Action Buttons**: Context-sensitive FABs for common actions
+- **Tooltips**: Every control has helpful tooltips explaining its purpose
+- **Keyboard Shortcuts**: Visual cues showing keyboard shortcuts (e.g., "↑↓←→ Navigate | ⌫ Clear")
+- **Consistent Spacing**: 
+  - 4px for small gaps
+  - 8px for medium gaps  
+  - 16px for large gaps between major sections
+- **Typography**:
+  - Headers: Bold, 12pt, tracking +0.5%
+  - Labels: Regular, 10pt
+  - Values/Keycodes: Monospace, 11pt
+- **Color Usage**:
+  - Blue (#4a9aff): Active/selected/interactive states
+  - Green (#4ade80): Success/enabled states
+  - Orange (#fb923c): Warnings/alerts
+  - Red (#ef4444): Destructive actions
+  - Gray (#6b7280): Disabled/secondary states
+
+### Navigation & Workflow
+- **Keyboard-First**: All major functions accessible via keyboard
+- **Mouse-Friendly**: Drag-and-drop support for future enhancements
+- **Context Menus**: Right-click on grid, macros, layers for contextual actions
+- **Breadcrumb Navigation**: Show current layer/section context
+- **Undo/Redo**: Visual indicators showing undo/redo stack
+
+### Implementation Priority
+1. **Phase 1 (Visual Polish)**:
+   - Update button styles with rounded corners and better hover states
+   - Add card-based styling to grouped controls
+   - Improve spacing and alignment throughout
+   - Enhanced focus indicators for accessibility
+
+2. **Phase 2 (Structural Improvements)**:
+   - Redesign keycode selector with grid view
+   - Split Macros/TapDance into side-by-side layout
+   - Add floating action menus
+   - Implement context menus
+
+3. **Phase 3 (Advanced Features)**:
+   - Drag-and-drop for layer reordering
+   - Grid right-click context menu
+   - Undo/Redo system
+   - Advanced search and filtering
+
+
+## Keycode Organization
+- **Categories** Letters, Numbers & Symbols, Editing, Modifiers, Navigation, Function Keys, Media & Volume, Brightness, Numpad, Mouse, Layer Switching, Special
+- **Search** Each keycode tab has a search filter for quick lookup
+- **Icons** Category-specific icons (🔤 🔢 ✏ ⌨ 🧭 🔧 🔊 💡 🖱 📚 ⭐) for visual identification
+- **Dynamic Lists** Macros and TapDance tabs populated from user-defined content
+
+## Session Persistence
+- **Saves**: Current layer, selected key coordinates, active tab indices (extensions, keycodes), splitter panel sizes
+- **Storage**: `kmk_Config_Save/session.json`
+- **Auto-save Triggers**: Layer changes, key selection, tab switches, panel resizing, app close
+- **Restoration**: Automatically restores complete UI state on next app launch
+
+## Persistence Layer
+- **Config Directory** `kmk_Config_Save/` holds user state: `config.json` (full snapshot), extension snippets (`encoder.py`, `analogin.py`, `display.py`), `rgb_matrix.json`, `session.json`
+- **Global Macros** `data/macros.json` stores macros shared across all configurations
+- **Profiles** `profiles.json` is bundled via `ChronosPadConfigurator.spec` and loaded in `setup_hardware_profile_ui`; keep backward compatibility when expanding its schema
+- **Always update helper files** when changing serialization logic to maintain data integrity
+
+## Dependency Management
+- **DependencyDownloader** Pulls KMK firmware and the Adafruit CircuitPython bundle into `libraries/`
+- **Skip Checks** Use `KMK_SKIP_DEP_CHECK=1` when running headless scripts or tests
+- **Startup Dialog** Previous session prompt controlled by `KMK_SKIP_STARTUP_DIALOG`; headless helpers in `scripts/` set both skip variables
+
+## Code Generation Pipeline
+- **Primary Function** `get_generated_python_code()` is the single source for exported firmware
+- **Merges**: Hardware pins, macros, encoder/analog/display snippets, RGB output from `_generate_rgb_matrix_code()`
+- **Keep Consistent** Changes to any generator must be reflected across all helpers
+- **Display Sync** Layer-aware OLED rendering from `generate_display_layout_code_with_layer_support()` plus `LayerDisplaySync`; update both if touching layer tracking
+- **RGB Rules** `_generate_rgb_matrix_code()` mixes defaults with overrides and emits chunked arrays; adjust both JSON schema and formatter together
+
+## Macro & TapDance System
+- **Macro Storage** GUI macro builder stores sequences as `tap/press/release/delay/text` tuples
+- **TapDance Integration** Parsed from custom extension code using regex (`TD_* = KC.TD(...)`)
+- **Management UI** Tabbed interface (⚡ Macros | 🎯 TapDance) in right panel
+- **Dynamic Updates** `update_tapdance_list()` scans custom code and populates both keycode selector and management tab
+- **Action Types** Ensure any new action types are reflected in macro dialogs and export formatting
+
+## File Export Workflow
+- **Function** `generate_code_py_dialog()` saves `code.py` to CIRCUITPY drive
+- **Copies Required** `kmk/` directory and required libs (`adafruit_displayio_sh1106`, `adafruit_display_text`, `neopixel`)
+- **Update Path List** Keep this list current with new firmware dependencies
+
+## Testing & Development
+- **Testing Hooks** `scripts/preview_gen.py` and `scripts/test_rgb_map_emit.py` spin the app without dialogs to snapshot generated code
+- **Pattern** Add similar scripts rather than embedding CLI paths in `main.py`
+- **Build Workflow** 
+  - Development: `python main.py` launches GUI
+  - Production: `python build_exe.py` runs PyInstaller with `ChronosPadConfigurator.spec`
+- **Bundled KMK** The repo contains a cached `kmk/` tree under `libraries/`; treat as vendor code—only patch via upstream sync scripts
+
+## UI Theming & Styling
+- **Theme Functions** `_apply_dark_stylesheet`, `_apply_light_stylesheet`, `_apply_cheerful_stylesheet`
+- **Base Geometry** Shared geometry rules in `_base_geometry_qss()` to avoid regressions
+- **Named Elements** Use objectName for theme-aware styling (e.g., `QLabel#infoBox`)
+- **Theme-Aware** Info boxes and special elements adapt to current theme automatically
+
+## Error Handling Patterns
+- **File Operations** Surface via `QMessageBox` to inform user
+- **Async Tasks** Follow pattern: emit progress through signals, guard UI with dialogs
+- **Graceful Degradation** UI should remain functional even if optional components fail to initialize
+
+## Configuration Versioning
+- **Version Keys** Saved JSON uses `version` keys (`"2.0"` current)
+- **Migration** Any schema change must migrate old payloads inside `load_configuration()`
+- **Defaults** Keep defaults in `build_default_rgb_matrix_config()` for backward compatibility
+
+## Keycode Management
+- **Catalog** Key selection relies on categorized lists built in `create_keycode_selector()`
+- **Adding Keycodes** Update data sets in KEYCODES dictionary and ensure category icons match
+- **Search Filter** `_filter_keycode_list()` handles real-time filtering in each tab
+
+## Code Quality Standards
+1. **Function Length** Keep functions under 50 lines; extract complex logic into helpers
+2. **Single Responsibility** Each function/class should do ONE thing well
+3. **Type Hints** Use type hints for all function signatures
+4. **Error Messages** User-facing errors must be clear, actionable, and helpful
+5. **Comments** Explain WHY, not WHAT; code should be self-documenting through naming
+6. **Naming Conventions**:
+   - Classes: PascalCase
+   - Functions/Methods: snake_case
+   - Constants: UPPER_SNAKE_CASE
+   - Private methods: _leading_underscore
+7. **Magic Numbers** Extract to named constants with clear documentation
+8. **DRY Principle** Don't Repeat Yourself; create reusable functions for common patterns
+
+## Git Commit Standards
+- **Format**: `type: Brief description` followed by detailed bullet points
+- **Types**: feat, fix, docs, refactor, test, style, chore
+- **Detail Level**: Explain WHAT changed and WHY; technical details in sub-bullets
+- **Breaking Changes**: Always document in commit message
+
+## Next Steps & Maintenance
+- **Adding Features** Start with documentation, then implementation
+- **Refactoring** Always maintain or improve existing documentation
+- **Bug Fixes** Document the root cause and solution in comments
+- **UI Changes** Update this guide with new layout/interaction patterns
+- **Questions** If any part of the pipeline, persistence model, or build story is unclear, request clarification before proceeding

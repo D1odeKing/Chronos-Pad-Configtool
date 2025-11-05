@@ -35,7 +35,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
-    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame
+    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter
 )
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
@@ -77,7 +77,8 @@ PROFILE_FILE_NEW = os.path.join(DATA_DIR, "profiles.json")
 PROFILE_FILE_OLD = os.path.join(BASE_DIR, "profiles.json")
 PROFILE_FILE = PROFILE_FILE_NEW if os.path.exists(PROFILE_FILE_NEW) else PROFILE_FILE_OLD
 
-MACRO_FILE = os.path.join(CONFIG_SAVE_DIR, "macros.json")
+# Global macros file (shared across all configs)
+MACRO_FILE = os.path.join(DATA_DIR, "macros.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
@@ -450,14 +451,20 @@ display.root_group = splash
 # --- KMK Keycode Data ---
 # Expanded to include more common keys like function keys and miscellaneous controls.
 KEYCODES = {
-    "Basic": [
+    "Letters": [
         "KC.A", "KC.B", "KC.C", "KC.D", "KC.E", "KC.F", "KC.G", "KC.H", "KC.I",
         "KC.J", "KC.K", "KC.L", "KC.M", "KC.N", "KC.O", "KC.P", "KC.Q", "KC.R",
-        "KC.S", "KC.T", "KC.U", "KC.V", "KC.W", "KC.X", "KC.Y", "KC.Z",
+        "KC.S", "KC.T", "KC.U", "KC.V", "KC.W", "KC.X", "KC.Y", "KC.Z"
+    ],
+    "Numbers & Symbols": [
         "KC.N1", "KC.N2", "KC.N3", "KC.N4", "KC.N5", "KC.N6", "KC.N7", "KC.N8",
-        "KC.N9", "KC.N0", "KC.ENT", "KC.ESC", "KC.BSPC", "KC.TAB", "KC.SPC",
+        "KC.N9", "KC.N0", 
         "KC.MINS", "KC.EQL", "KC.LBRC", "KC.RBRC", "KC.BSLS", "KC.SCLN",
         "KC.QUOT", "KC.GRV", "KC.COMM", "KC.DOT", "KC.SLSH"
+    ],
+    "Editing": [
+        "KC.ENT", "KC.ESC", "KC.BSPC", "KC.TAB", "KC.SPC", "KC.DEL", "KC.INS",
+        "KC.CAPS", "KC.PSCR", "KC.SLCK", "KC.PAUS", "KC.APP"
     ],
     "Modifiers": [
         "KC.LCTL", "KC.LSFT", "KC.LALT", "KC.LGUI",
@@ -465,20 +472,21 @@ KEYCODES = {
     ],
     "Navigation": [
         "KC.UP", "KC.DOWN", "KC.LEFT", "KC.RGHT",
-        "KC.HOME", "KC.END", "KC.PGUP", "KC.PGDN", "KC.DEL", "KC.INS"
+        "KC.HOME", "KC.END", "KC.PGUP", "KC.PGDN"
     ],
-    "Function": [
+    "Function Keys": [
         "KC.F1", "KC.F2", "KC.F3", "KC.F4", "KC.F5", "KC.F6",
         "KC.F7", "KC.F8", "KC.F9", "KC.F10", "KC.F11", "KC.F12",
         "KC.F13", "KC.F14", "KC.F15", "KC.F16", "KC.F17", "KC.F18",
-        "KC.F19", "KC.F20", "KC.F21", "KC.F22", "KC.F23", "KC.F24",
+        "KC.F19", "KC.F20", "KC.F21", "KC.F22", "KC.F23", "KC.F24"
     ],
-    "Media": [
+    "Media & Volume": [
         "KC.MUTE", "KC.VOLU", "KC.VOLD",
-        "KC.BRIU", "KC.BRID",
-        "KC.MNXT", "KC.MPRV", "KC.MSTP",
-        "KC.MPLY", "KC.EJCT",
-        "KC.MFFD", "KC.MRWD"
+        "KC.MNXT", "KC.MPRV", "KC.MSTP", "KC.MPLY", 
+        "KC.MFFD", "KC.MRWD", "KC.EJCT"
+    ],
+    "Brightness": [
+        "KC.BRIU", "KC.BRID"
     ],
     "Numpad": [
         "KC.KP_0", "KC.KP_1", "KC.KP_2", "KC.KP_3", "KC.KP_4",
@@ -489,16 +497,17 @@ KEYCODES = {
     ],
     "Mouse": [
         "KC.MS_UP", "KC.MS_DOWN", "KC.MS_LEFT", "KC.MS_RIGHT",
-        "KC.MW_UP", "KC.MW_DOWN", "KC.MB_L", "KC.MB_R", "KC.MB_M"
+        "KC.MW_UP", "KC.MW_DOWN", 
+        "KC.MB_L", "KC.MB_R", "KC.MB_M"
     ],
-    "Layers": [
+    "Layer Switching": [
         "KC.MO(1)", "KC.MO(2)", "KC.MO(3)", "KC.MO(4)", "KC.MO(5)",
+        "KC.TO(0)", "KC.TO(1)", "KC.TO(2)", "KC.TO(3)", "KC.TO(4)", "KC.TO(5)",
         "KC.TG(1)", "KC.TG(2)", "KC.TG(3)", "KC.TG(4)", "KC.TG(5)",
         "KC.DF(0)", "KC.DF(1)", "KC.DF(2)", "KC.DF(3)", "KC.DF(4)", "KC.DF(5)"
     ],
-    "Misc": [
-        "KC.NO", "KC.TRNS", "KC.RESET", "KC.CLCK", "KC.PSCR", "KC.SLCK",
-        "KC.PAUS", "KC.NLCK", "KC.APP"
+    "Special": [
+        "KC.NO", "KC.TRNS", "KC.RESET"
     ]
 }
 
@@ -1212,7 +1221,7 @@ class EncoderConfigDialog(QDialog):
             "Hardware: Pin A=GP10, Pin B=GP11, Button=GP14"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("background-color: #E3F2FD; padding: 8px; border-radius: 4px;")
+        info.setObjectName("infoBox")
         main_layout.addWidget(info)
         
         # Hardware pins (fixed for Chronos Pad)
@@ -1495,6 +1504,25 @@ class AnalogInConfigDialog(QDialog):
         self.step_size_spin.setToolTip("Number of volume steps per slider movement")
         form_layout.addRow(self.step_size_label, self.step_size_spin)
         
+        # Min/Max brightness (only for brightness mode)
+        self.min_brightness_label = QLabel("Min Brightness:")
+        self.min_brightness_spin = QDoubleSpinBox()
+        self.min_brightness_spin.setRange(0.0, 1.0)
+        self.min_brightness_spin.setSingleStep(0.05)
+        self.min_brightness_spin.setDecimals(2)
+        self.min_brightness_spin.setValue(0.0)
+        self.min_brightness_spin.setToolTip("Minimum brightness when slider is at bottom (0.0-1.0)")
+        form_layout.addRow(self.min_brightness_label, self.min_brightness_spin)
+        
+        self.max_brightness_label = QLabel("Max Brightness:")
+        self.max_brightness_spin = QDoubleSpinBox()
+        self.max_brightness_spin.setRange(0.0, 1.0)
+        self.max_brightness_spin.setSingleStep(0.05)
+        self.max_brightness_spin.setDecimals(2)
+        self.max_brightness_spin.setValue(0.3)
+        self.max_brightness_spin.setToolTip("Maximum brightness when slider is at top (0.0-1.0)")
+        form_layout.addRow(self.max_brightness_label, self.max_brightness_spin)
+        
         main_layout.addLayout(form_layout)
         
         main_layout.addSpacing(20)
@@ -1525,10 +1553,18 @@ class AnalogInConfigDialog(QDialog):
             self.mode_brightness.setChecked(False)
             self.step_size_label.setEnabled(True)
             self.step_size_spin.setEnabled(True)
+            self.min_brightness_label.setEnabled(False)
+            self.min_brightness_spin.setEnabled(False)
+            self.max_brightness_label.setEnabled(False)
+            self.max_brightness_spin.setEnabled(False)
         elif sender == self.mode_brightness and self.mode_brightness.isChecked():
             self.mode_volume.setChecked(False)
             self.step_size_label.setEnabled(False)
             self.step_size_spin.setEnabled(False)
+            self.min_brightness_label.setEnabled(True)
+            self.min_brightness_spin.setEnabled(True)
+            self.max_brightness_label.setEnabled(True)
+            self.max_brightness_spin.setEnabled(True)
         elif sender is None:
             # Initial setup - volume is default
             if not self.mode_volume.isChecked() and not self.mode_brightness.isChecked():
@@ -1548,6 +1584,8 @@ class AnalogInConfigDialog(QDialog):
         poll_interval = self.poll_interval_spin.value()
         threshold = self.threshold_spin.value()
         step_size = self.step_size_spin.value()
+        min_brightness = self.min_brightness_spin.value()
+        max_brightness = self.max_brightness_spin.value()
         
         if is_volume_mode:
             # Generate volume control code
@@ -1660,12 +1698,14 @@ import time
 
 # LED brightness control via 10k sliding potentiometer on GP28
 class BrightnessSlider:
-    def __init__(self, keyboard, pin, poll_interval={poll_interval}):
+    def __init__(self, keyboard, pin, poll_interval={poll_interval}, min_brightness={min_brightness}, max_brightness={max_brightness}):
         self.keyboard = keyboard
         self.analog_pin = AnalogInPin(pin)
         self.poll_interval = poll_interval
         self.last_poll = time.monotonic()
         self.threshold = {threshold}  # Minimum change to trigger brightness adjustment (out of 65535)
+        self.min_brightness = min_brightness
+        self.max_brightness = max_brightness
         
     def read_value(self):
         """Read analog value (0-65535)"""
@@ -1690,9 +1730,9 @@ class BrightnessSlider:
         self.last_poll = current_time
         current_value = self.read_value()
         
-        # Convert 16-bit ADC value (0-65535) to brightness (0.0-1.0)
-        # Using 0.3 as max to reduce current consumption
-        target_brightness = (current_value / 65535.0) * 0.3
+        # Convert 16-bit ADC value (0-65535) to brightness range (min_brightness to max_brightness)
+        brightness_range = self.max_brightness - self.min_brightness
+        target_brightness = self.min_brightness + (current_value / 65535.0) * brightness_range
         
         # Check if keyboard has RGB extension
         if hasattr(keyboard, 'extensions'):
@@ -1723,7 +1763,7 @@ class BrightnessSlider:
         return
 
 # Create and register brightness slider module
-brightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval={poll_interval})
+brightness_slider = BrightnessSlider(keyboard, board.GP28, poll_interval={poll_interval}, min_brightness={min_brightness}, max_brightness={max_brightness})
 keyboard.modules.append(brightness_slider)
 '''
         
@@ -2389,6 +2429,544 @@ class PerKeyColorDialog(QDialog):
         button.setStyleSheet(f"background-color: {color}; color: {text_color};")
 
 
+class TapDanceDialog(QDialog):
+    """Dialog for creating TapDance configurations based on KMK documentation"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("TapDance Helper")
+        self.resize(700, 600)
+        
+        layout = QVBoxLayout(self)
+        
+        # Info
+        info = QLabel(
+            "<b>TapDance</b><br>"
+            "Define keys that perform different actions based on the number of taps.<br>"
+            "Example: Tap once for 'a', twice for 'b', tap and hold for left ctrl.<br><br>"
+            "Supports all key types including HoldTap (MT, LT), TT, and Macros."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("infoBox")
+        layout.addWidget(info)
+        
+        # TapDance entries
+        self.tapdance_list = QListWidget()
+        self.tapdance_list.setMinimumHeight(250)
+        layout.addWidget(QLabel("<b>TapDance Definitions:</b>"))
+        layout.addWidget(self.tapdance_list)
+        
+        # Add/Remove/Edit buttons
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("➕ Add TapDance")
+        add_btn.clicked.connect(self.add_tapdance_entry)
+        btn_layout.addWidget(add_btn)
+        
+        edit_btn = QPushButton("✏️ Edit Selected")
+        edit_btn.clicked.connect(self.edit_tapdance_entry)
+        btn_layout.addWidget(edit_btn)
+        
+        remove_btn = QPushButton("➖ Remove Selected")
+        remove_btn.clicked.connect(self.remove_tapdance_entry)
+        btn_layout.addWidget(remove_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        # Global tap time setting
+        form = QFormLayout()
+        self.tap_time_spin = QSpinBox()
+        self.tap_time_spin.setRange(100, 3000)
+        self.tap_time_spin.setValue(750)
+        self.tap_time_spin.setSuffix(" ms")
+        self.tap_time_spin.setToolTip(
+            "Default time between taps. Can be overridden per TapDance.\n"
+            "KMK default is 300ms, but 750ms is more forgiving."
+        )
+        form.addRow("Global Tap Time:", self.tap_time_spin)
+        layout.addLayout(form)
+        
+        # Usage instructions
+        usage = QLabel(
+            "<b>Usage:</b> Use these TapDance variables in your keymap.<br>"
+            "Example: If you create <code>TD_ESC_CTRL</code>, place it in your keymap grid."
+        )
+        usage.setWordWrap(True)
+        usage.setStyleSheet("color: #666; font-size: 10pt; padding: 8px;")
+        layout.addWidget(usage)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        # Store TapDance data
+        self.tapdance_data = []  # List of dicts with {name, actions, tap_time}
+    
+    def add_tapdance_entry(self):
+        """Add a new TapDance entry"""
+        self._edit_tapdance_entry()
+    
+    def edit_tapdance_entry(self):
+        """Edit selected TapDance entry"""
+        current_row = self.tapdance_list.currentRow()
+        if current_row >= 0:
+            self._edit_tapdance_entry(current_row)
+    
+    def _edit_tapdance_entry(self, edit_index=None):
+        """Internal method to add or edit a TapDance entry"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit TapDance" if edit_index is not None else "Add TapDance")
+        dialog.resize(550, 500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Variable name
+        form = QFormLayout()
+        name_edit = QLineEdit()
+        name_edit.setPlaceholderText("e.g., TD_ESC_CTRL")
+        name_edit.setToolTip("Variable name for this TapDance (recommended to start with TD_)")
+        
+        # Custom tap time
+        custom_tap_time_check = QCheckBox("Use custom tap time for this TapDance")
+        custom_tap_time_spin = QSpinBox()
+        custom_tap_time_spin.setRange(100, 5000)
+        custom_tap_time_spin.setValue(750)
+        custom_tap_time_spin.setSuffix(" ms")
+        custom_tap_time_spin.setEnabled(False)
+        custom_tap_time_check.toggled.connect(custom_tap_time_spin.setEnabled)
+        
+        # Load existing data if editing
+        if edit_index is not None:
+            existing = self.tapdance_data[edit_index]
+            name_edit.setText(existing['name'])
+            if existing.get('tap_time'):
+                custom_tap_time_check.setChecked(True)
+                custom_tap_time_spin.setValue(existing['tap_time'])
+        
+        form.addRow("Name:", name_edit)
+        form.addRow("", custom_tap_time_check)
+        form.addRow("Custom Tap Time:", custom_tap_time_spin)
+        
+        layout.addLayout(form)
+        
+        # Actions list
+        layout.addWidget(QLabel("<b>Actions (in order of tap count):</b>"))
+        actions_list = QListWidget()
+        actions_list.setMaximumHeight(200)
+        layout.addWidget(actions_list)
+        
+        # Load existing actions if editing
+        if edit_index is not None:
+            for action in existing['actions']:
+                actions_list.addItem(action)
+        
+        # Action type selector
+        action_type_group = QGroupBox("Add Action")
+        action_type_layout = QVBoxLayout()
+        
+        action_type_combo = QComboBox()
+        action_type_combo.addItems([
+            "Simple Key (e.g., KC.A, KC.ESC)",
+            "Mod Tap / Hold Tap (e.g., KC.HT(tap, hold))",
+            "Layer Tap (e.g., KC.LT(layer, key))",
+            "Toggle Layer (e.g., KC.TG(1))",
+            "Tap Toggle Layer (e.g., KC.TT(1))",
+            "Macro (e.g., KC.MACRO('text'))",
+            "Custom / Advanced"
+        ])
+        action_type_layout.addWidget(action_type_combo)
+        
+        # Input fields for different action types
+        simple_key_input = QLineEdit()
+        simple_key_input.setPlaceholderText("KC.A")
+        
+        ht_tap_input = QLineEdit()
+        ht_tap_input.setPlaceholderText("Tap key (e.g., KC.B)")
+        ht_hold_input = QLineEdit()
+        ht_hold_input.setPlaceholderText("Hold key (e.g., KC.LCTL)")
+        ht_prefer_hold = QCheckBox("Prefer hold (default: False)")
+        ht_prefer_hold.setToolTip("If True, hold action takes priority over tap")
+        
+        lt_layer_input = QSpinBox()
+        lt_layer_input.setRange(0, 15)
+        lt_key_input = QLineEdit()
+        lt_key_input.setPlaceholderText("Tap key (e.g., KC.SPC)")
+        
+        custom_input = QTextEdit()
+        custom_input.setPlaceholderText("Enter custom action (e.g., KC.MACRO('Hello'))")
+        custom_input.setMaximumHeight(60)
+        
+        # Stack widget to show/hide inputs based on action type
+        input_stack = QWidget()
+        input_layout = QVBoxLayout(input_stack)
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Simple key widget
+        simple_widget = QWidget()
+        simple_layout = QVBoxLayout(simple_widget)
+        simple_layout.addWidget(QLabel("Key:"))
+        simple_layout.addWidget(simple_key_input)
+        simple_layout.addStretch()
+        
+        # Hold Tap widget
+        ht_widget = QWidget()
+        ht_layout = QVBoxLayout(ht_widget)
+        ht_layout.addWidget(QLabel("Tap Key:"))
+        ht_layout.addWidget(ht_tap_input)
+        ht_layout.addWidget(QLabel("Hold Key:"))
+        ht_layout.addWidget(ht_hold_input)
+        ht_layout.addWidget(ht_prefer_hold)
+        ht_layout.addStretch()
+        
+        # Layer Tap widget
+        lt_widget = QWidget()
+        lt_layout = QVBoxLayout(lt_widget)
+        lt_layout.addWidget(QLabel("Layer:"))
+        lt_layout.addWidget(lt_layer_input)
+        lt_layout.addWidget(QLabel("Tap Key:"))
+        lt_layout.addWidget(lt_key_input)
+        lt_layout.addStretch()
+        
+        # Toggle layer widget
+        tg_widget = QWidget()
+        tg_layout = QVBoxLayout(tg_widget)
+        tg_layer_input = QSpinBox()
+        tg_layer_input.setRange(0, 15)
+        tg_layout.addWidget(QLabel("Layer to Toggle:"))
+        tg_layout.addWidget(tg_layer_input)
+        tg_layout.addStretch()
+        
+        # Tap Toggle layer widget
+        tt_widget = QWidget()
+        tt_layout = QVBoxLayout(tt_widget)
+        tt_layer_input = QSpinBox()
+        tt_layer_input.setRange(0, 15)
+        tt_tap_time_input = QSpinBox()
+        tt_tap_time_input.setRange(100, 5000)
+        tt_tap_time_input.setValue(3000)
+        tt_tap_time_input.setSuffix(" ms")
+        tt_layout.addWidget(QLabel("Layer:"))
+        tt_layout.addWidget(tt_layer_input)
+        tt_layout.addWidget(QLabel("Hold Time (optional):"))
+        tt_layout.addWidget(tt_tap_time_input)
+        tt_layout.addStretch()
+        
+        # Macro widget
+        macro_widget = QWidget()
+        macro_layout = QVBoxLayout(macro_widget)
+        macro_input = QLineEdit()
+        macro_input.setPlaceholderText("Text to type")
+        macro_layout.addWidget(QLabel("Macro Text:"))
+        macro_layout.addWidget(macro_input)
+        macro_layout.addStretch()
+        
+        # Custom widget
+        custom_widget = QWidget()
+        custom_layout = QVBoxLayout(custom_widget)
+        custom_layout.addWidget(QLabel("Custom Action:"))
+        custom_layout.addWidget(custom_input)
+        custom_layout.addStretch()
+        
+        # Add all widgets to input_layout (hidden by default)
+        widgets = [simple_widget, ht_widget, lt_widget, tg_widget, tt_widget, macro_widget, custom_widget]
+        for w in widgets:
+            w.setVisible(False)
+            input_layout.addWidget(w)
+        
+        simple_widget.setVisible(True)  # Show first one by default
+        
+        def on_action_type_changed(index):
+            for w in widgets:
+                w.setVisible(False)
+            widgets[index].setVisible(True)
+        
+        action_type_combo.currentIndexChanged.connect(on_action_type_changed)
+        action_type_layout.addWidget(input_stack)
+        
+        add_action_btn = QPushButton("➕ Add This Action")
+        def add_action():
+            action_idx = action_type_combo.currentIndex()
+            action_str = ""
+            
+            if action_idx == 0:  # Simple key
+                action_str = simple_key_input.text().strip()
+            elif action_idx == 1:  # Hold Tap
+                tap = ht_tap_input.text().strip()
+                hold = ht_hold_input.text().strip()
+                if tap and hold:
+                    prefer = ", prefer_hold=True" if ht_prefer_hold.isChecked() else ""
+                    action_str = f"KC.HT({tap}, {hold}{prefer})"
+            elif action_idx == 2:  # Layer Tap
+                layer = lt_layer_input.value()
+                key = lt_key_input.text().strip()
+                if key:
+                    action_str = f"KC.LT({layer}, {key})"
+            elif action_idx == 3:  # Toggle Layer
+                layer = tg_layer_input.value()
+                action_str = f"KC.TG({layer})"
+            elif action_idx == 4:  # Tap Toggle Layer
+                layer = tt_layer_input.value()
+                action_str = f"KC.TT({layer}, tap_time={tt_tap_time_input.value()})"
+            elif action_idx == 5:  # Macro
+                text = macro_input.text().strip()
+                if text:
+                    escaped = text.replace("'", "\\'")
+                    action_str = f"KC.MACRO('{escaped}')"
+            elif action_idx == 6:  # Custom
+                action_str = custom_input.toPlainText().strip()
+            
+            if action_str:
+                actions_list.addItem(action_str)
+                # Clear inputs
+                simple_key_input.clear()
+                ht_tap_input.clear()
+                ht_hold_input.clear()
+                ht_prefer_hold.setChecked(False)
+                lt_key_input.clear()
+                macro_input.clear()
+                custom_input.clear()
+        
+        add_action_btn.clicked.connect(add_action)
+        action_type_layout.addWidget(add_action_btn)
+        
+        action_type_group.setLayout(action_type_layout)
+        layout.addWidget(action_type_group)
+        
+        # Action list controls
+        action_btn_layout = QHBoxLayout()
+        move_up_btn = QPushButton("⬆ Move Up")
+        move_up_btn.clicked.connect(lambda: self._move_action(actions_list, -1))
+        action_btn_layout.addWidget(move_up_btn)
+        
+        move_down_btn = QPushButton("⬇ Move Down")
+        move_down_btn.clicked.connect(lambda: self._move_action(actions_list, 1))
+        action_btn_layout.addWidget(move_down_btn)
+        
+        remove_action_btn = QPushButton("➖ Remove")
+        remove_action_btn.clicked.connect(lambda: actions_list.takeItem(actions_list.currentRow()))
+        action_btn_layout.addWidget(remove_action_btn)
+        action_btn_layout.addStretch()
+        layout.addLayout(action_btn_layout)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            name = name_edit.text().strip()
+            if not name:
+                QMessageBox.warning(self, "Invalid Name", "Please enter a variable name")
+                return
+            
+            actions = []
+            for i in range(actions_list.count()):
+                actions.append(actions_list.item(i).text())
+            
+            if not actions:
+                QMessageBox.warning(self, "No Actions", "Please add at least one action")
+                return
+            
+            # Create or update TapDance data
+            td_data = {
+                'name': name,
+                'actions': actions,
+                'tap_time': custom_tap_time_spin.value() if custom_tap_time_check.isChecked() else None
+            }
+            
+            if edit_index is not None:
+                self.tapdance_data[edit_index] = td_data
+                self.tapdance_list.item(edit_index).setText(self._format_td_display(td_data))
+            else:
+                self.tapdance_data.append(td_data)
+                self.tapdance_list.addItem(self._format_td_display(td_data))
+    
+    def _move_action(self, list_widget, direction):
+        """Move selected action up or down"""
+        current_row = list_widget.currentRow()
+        if current_row < 0:
+            return
+        
+        new_row = current_row + direction
+        if new_row < 0 or new_row >= list_widget.count():
+            return
+        
+        item = list_widget.takeItem(current_row)
+        list_widget.insertItem(new_row, item)
+        list_widget.setCurrentRow(new_row)
+    
+    def _format_td_display(self, td_data):
+        """Format TapDance data for display"""
+        actions_str = ', '.join(td_data['actions'][:3])  # Show first 3 actions
+        if len(td_data['actions']) > 3:
+            actions_str += f", ... (+{len(td_data['actions']) - 3} more)"
+        
+        time_str = f" [tap_time={td_data['tap_time']}ms]" if td_data.get('tap_time') else ""
+        return f"{td_data['name']}: {actions_str}{time_str}"
+    
+    def remove_tapdance_entry(self):
+        """Remove selected TapDance entry"""
+        current_row = self.tapdance_list.currentRow()
+        if current_row >= 0:
+            self.tapdance_list.takeItem(current_row)
+            del self.tapdance_data[current_row]
+    
+    def get_code(self):
+        """Generate TapDance code based on KMK documentation"""
+        if not self.tapdance_data:
+            return ""
+        
+        lines = []
+        lines.append("# TapDance Configuration")
+        lines.append("# See: https://github.com/KMKfw/kmk_firmware/blob/master/docs/en/tapdance.md")
+        lines.append("from kmk.modules.tapdance import TapDance")
+        lines.append("")
+        lines.append("tapdance = TapDance()")
+        lines.append(f"tapdance.tap_time = {self.tap_time_spin.value()}  # Default tap time in milliseconds")
+        lines.append("keyboard.modules.append(tapdance)")
+        lines.append("")
+        lines.append("# TapDance Definitions:")
+        lines.append("# Each TD can contain multiple actions triggered by successive taps")
+        lines.append("# Supports: simple keys, HoldTap (MT/LT), TT, Macros, and any KC action")
+        
+        for td in self.tapdance_data:
+            lines.append("")
+            actions_str = ', '.join(td['actions'])
+            
+            # Add custom tap_time if specified
+            if td.get('tap_time'):
+                lines.append(f"{td['name']} = KC.TD({actions_str}, tap_time={td['tap_time']})")
+            else:
+                lines.append(f"{td['name']} = KC.TD({actions_str})")
+            
+            # Add comment explaining the taps
+            lines.append(f"# Tap {len(td['actions'])} time(s): {' → '.join(td['actions'])}")
+        
+        return "\n".join(lines)
+
+
+class ComboDialog(QDialog):
+    """Dialog for creating Combo configurations"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Combo Helper")
+        self.resize(600, 500)
+        
+        layout = QVBoxLayout(self)
+        
+        # Info
+        info = QLabel(
+            "<b>Combos</b><br>"
+            "Define key combinations that trigger a specific action.<br>"
+            "For example: Press Q + W simultaneously to send ESC."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("infoBox")
+        layout.addWidget(info)
+        
+        # Combo entries
+        self.combo_list = QListWidget()
+        self.combo_list.setMinimumHeight(250)
+        layout.addWidget(QLabel("Combo Definitions:"))
+        layout.addWidget(self.combo_list)
+        
+        # Add/Remove buttons
+        btn_layout = QHBoxLayout()
+        add_btn = QPushButton("➕ Add Combo")
+        add_btn.clicked.connect(self.add_combo_entry)
+        btn_layout.addWidget(add_btn)
+        
+        remove_btn = QPushButton("➖ Remove Selected")
+        remove_btn.clicked.connect(self.remove_combo_entry)
+        btn_layout.addWidget(remove_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def add_combo_entry(self):
+        """Add a new Combo entry"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Combo")
+        dialog.resize(450, 250)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Keys to press
+        form = QFormLayout()
+        keys_edit = QLineEdit()
+        keys_edit.setPlaceholderText("e.g., KC.Q, KC.W")
+        keys_edit.setToolTip("Keys that must be pressed together (comma-separated)")
+        form.addRow("Keys to Press:", keys_edit)
+        
+        # Result action
+        result_edit = QLineEdit()
+        result_edit.setPlaceholderText("e.g., KC.ESC")
+        result_edit.setToolTip("The keycode to send when the combo is triggered")
+        form.addRow("Result Action:", result_edit)
+        
+        layout.addLayout(form)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            keys = keys_edit.text().strip()
+            result = result_edit.text().strip()
+            
+            if not keys or not result:
+                QMessageBox.warning(self, "Invalid Input", "Please enter both keys and result")
+                return
+            
+            # Add to list
+            display_text = f"Chord(({keys}), {result})"
+            self.combo_list.addItem(display_text)
+    
+    def remove_combo_entry(self):
+        """Remove selected Combo entry"""
+        current_row = self.combo_list.currentRow()
+        if current_row >= 0:
+            self.combo_list.takeItem(current_row)
+    
+    def get_code(self):
+        """Generate Combo code"""
+        if self.combo_list.count() == 0:
+            return ""
+        
+        lines = []
+        lines.append("# Combos Configuration")
+        lines.append("from kmk.modules.combos import Combos, Chord, Sequence")
+        lines.append("")
+        lines.append("combos = Combos()")
+        lines.append("combos.combos = [")
+        
+        for i in range(self.combo_list.count()):
+            lines.append(f"    {self.combo_list.item(i).text()},")
+        
+        lines.append("]")
+        lines.append("keyboard.modules.append(combos)")
+        
+        return "\n".join(lines)
+
+
 class AdvancedSettingsDialog(QDialog):
     """Dialog for advanced settings: boot.py configuration and encoder divisor."""
     
@@ -2624,6 +3202,7 @@ class KMKConfigurator(QMainWindow):
         self.enable_display = True
         self.display_config_str = ""
         self.boot_config_str = ""  # boot.py configuration
+        self.custom_ext_code = ""  # Custom extension code snippets
 
         self.initialize_keymap_data()
 
@@ -2633,35 +3212,53 @@ class KMKConfigurator(QMainWindow):
         # --- UI Initialization ---
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
-
+        main_container_layout = QVBoxLayout(central_widget)
+        main_container_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Create main horizontal splitter for resizable panels
+        self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.setHandleWidth(4)
+        self.main_splitter.setChildrenCollapsible(False)  # Prevent panels from collapsing completely
 
         # --- Left Panel (File & Extensions) ---
-        # Set stretch factor to 2 for proportional resizing
-        left_layout = QVBoxLayout()
-        main_layout.addLayout(left_layout, 2)
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(5, 5, 5, 5)
+        left_layout.setSpacing(10)
 
         self.setup_file_io_ui(left_layout)
         self.setup_extensions_ui(left_layout)
         left_layout.addStretch()  # Push everything to the top
         
         # --- Center Panel (Macropad Grid) ---
-        # Set stretch factor to 4 for more space (center should be largest)
-        center_layout = QVBoxLayout()
-        main_layout.addLayout(center_layout, 4)
+        center_widget = QWidget()
+        center_layout = QVBoxLayout(center_widget)
+        center_layout.setContentsMargins(5, 5, 5, 5)
+        center_layout.setSpacing(10)
+        
         self.setup_layer_management_ui(center_layout)
         self.setup_macropad_grid_ui(center_layout)
 
-
-        # --- Right Panel (Keycode Selection, Macros) ---
-        # Set stretch factor to 2 for proportional resizing
-        right_layout = QVBoxLayout()
-        main_layout.addLayout(right_layout, 2)
+        # --- Right Panel (Keycode Selection, Macros, TapDance) ---
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(5, 5, 5, 5)
+        right_layout.setSpacing(10)
 
         self.setup_keycode_selector_ui(right_layout)
         self.setup_macro_ui(right_layout)
+        
+        # Add panels to splitter
+        self.main_splitter.addWidget(left_widget)
+        self.main_splitter.addWidget(center_widget)
+        self.main_splitter.addWidget(right_widget)
+        
+        # Set initial sizes: Left=250px, Center=500px, Right=550px (total ~1300)
+        # These are initial suggestions; user can resize
+        self.main_splitter.setSizes([250, 500, 550])
+        
+        # Add splitter to main container
+        main_container_layout.addWidget(self.main_splitter)
         
         # --- Final UI Population ---
         self.recreate_macropad_grid()
@@ -2784,6 +3381,8 @@ class KMKConfigurator(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             success = self.load_configuration(file_path=config_file, show_message=False)
             if success:
+                # Restore session state after loading config
+                self.restore_session_state()
                 return
 
         self.reset_to_defaults()
@@ -2835,11 +3434,17 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #454545; border: 1px solid #555555; color: #e0e0e0; }
             QPushButton:hover { background: #505050; }
             QPushButton:pressed { background: #3f3f3f; }
-            QPushButton#keymapButton:checked { background-color: #5a5a5a; border: 2px solid #707070; color: #ffffff; }
+            QPushButton#keymapButton:checked { 
+                background-color: #2a5a8a; 
+                border: 3px solid #4a9aff; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #454545; }
             QListWidget::item:hover { background-color: #464646; }
             QListWidget::item:selected { background-color: #505050; color: #ffffff; font-weight: 600; }
             QLabel { color: #e5e5e5; }
+            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
             QLineEdit:focus { border: 1px solid #808080; background-color: #484848; }
             QSpinBox { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
@@ -2863,11 +3468,17 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #e8e8e8; border: 1px solid #d0d0d0; color: #333333; }
             QPushButton:hover { background: #e0e0e0; }
             QPushButton:pressed { background: #d8d8d8; }
-            QPushButton#keymapButton:checked { background-color: #c0c0c0; border: 2px solid #909090; color: #000000; }
+            QPushButton#keymapButton:checked { 
+                background-color: #5a9adf; 
+                border: 3px solid #2070c0; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #e8e8e8; }
             QListWidget::item:hover { background-color: #e0e0e0; }
             QListWidget::item:selected { background-color: #d0d0d0; color: #000000; font-weight: 600; }
             QLabel { color: #222222; }
+            QLabel#infoBox { background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
             QLineEdit:focus { border: 1px solid #909090; background-color: #fafafa; }
             QSpinBox { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
@@ -2891,11 +3502,17 @@ class KMKConfigurator(QMainWindow):
             QPushButton { background: #3d3d3d; border: 1px solid #4d4d4d; color: #d5d5d5; }
             QPushButton:hover { background: #454545; }
             QPushButton:pressed { background: #353535; }
-            QPushButton#keymapButton:checked { background-color: #4a4a4a; border: 2px solid #6a6a6a; color: #ffffff; }
+            QPushButton#keymapButton:checked { 
+                background-color: #2a5a8a; 
+                border: 3px solid #4a9aff; 
+                color: #ffffff; 
+                font-weight: bold;
+            }
             QTabBar::tab:selected { background: #3d3d3d; }
             QListWidget::item:hover { background-color: #3e3e3e; }
             QListWidget::item:selected { background-color: #454545; color: #ffffff; font-weight: 600; }
             QLabel { color: #e5e5e5; }
+            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
             QLineEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
             QLineEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
             QSpinBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
@@ -2932,6 +3549,39 @@ class KMKConfigurator(QMainWindow):
             QLineEdit, QSpinBox, QComboBox { border-radius: 6px; padding: 6px; }
             QListWidget { border-radius: 8px; }
         '''
+    
+    def get_info_box_style(self, variant='info'):
+        """Get theme-aware style for info boxes
+        
+        Args:
+            variant: 'info' (blue), 'success' (green), 'warning' (orange), or 'neutral' (gray)
+        """
+        if self.current_theme == 'Dark':
+            # Dark mode - darker backgrounds with lighter text
+            styles = {
+                'info': "background-color: #1e3a5f; color: #b3d4ff; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #5f4a1e; color: #ffd699; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #3a3a3a; color: #d5d5d5; padding: 10px; border-radius: 4px;"
+            }
+        elif self.current_theme == 'Light':
+            # Light mode - light backgrounds with dark text
+            styles = {
+                'info': "background-color: #E3F2FD; color: #0d47a1; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #FFF3E0; color: #e65100; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #f5f5f5; color: #424242; padding: 10px; border-radius: 4px;"
+            }
+        else:  # Cheerful
+            # Cheerful mode - similar to light but with more vibrant colors
+            styles = {
+                'info': "background-color: #E3F2FD; color: #0d47a1; padding: 10px; border-radius: 4px;",
+                'success': "background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px;",
+                'warning': "background-color: #FFF3E0; color: #e65100; padding: 10px; border-radius: 4px;",
+                'neutral': "background-color: #f5f5f5; color: #424242; padding: 10px; border-radius: 4px;"
+            }
+        
+        return styles.get(variant, styles['neutral'])
 
     # --- Extension config persistence ---
     def save_extension_configs(self):
@@ -2943,6 +3593,7 @@ class KMKConfigurator(QMainWindow):
                 "enable_rgb": self.enable_rgb,
                 "enable_display": self.enable_display,
                 "encoder_divisor": self.encoder_divisor,
+                "custom_ext_code": self.custom_ext_code,
             }
             with open(os.path.join(CONFIG_SAVE_DIR, 'extensions.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
@@ -2969,7 +3620,11 @@ class KMKConfigurator(QMainWindow):
             
             # Save boot.py configuration
             with open(os.path.join(CONFIG_SAVE_DIR, 'boot.py'), 'w') as f:
-                boot_config = self.generate_boot_config() if hasattr(self, 'generate_boot_config') else self.boot_config_str
+                # Use generate_boot_config if the UI elements exist, otherwise use stored string
+                if hasattr(self, 'enable_boot_py'):
+                    boot_config = self.generate_boot_config()
+                else:
+                    boot_config = self.boot_config_str
                 f.write(boot_config or '')
 
             rgb_config = self._export_rgb_config()
@@ -2997,6 +3652,7 @@ class KMKConfigurator(QMainWindow):
                 self.enable_rgb = meta.get('enable_rgb', True)
                 self.enable_display = meta.get('enable_display', True)
                 self.encoder_divisor = int(meta.get('encoder_divisor', self.encoder_divisor or 4))
+                self.custom_ext_code = meta.get('custom_ext_code', "")
             # Load snippet files if present
             enc_path = os.path.join(CONFIG_SAVE_DIR, 'encoder.py')
             if os.path.exists(enc_path):
@@ -3076,7 +3732,7 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def load_ui_settings(self):
-        """Load UI settings (theme) from kmk_Config_Save/ui_settings.json."""
+        """Load UI settings (theme and session state) from kmk_Config_Save/ui_settings.json."""
         try:
             settings_path = os.path.join(CONFIG_SAVE_DIR, 'ui_settings.json')
             if os.path.exists(settings_path):
@@ -3085,6 +3741,76 @@ class KMKConfigurator(QMainWindow):
                     theme = settings.get('theme', 'Dark')
                     if theme in ['Cheerful', 'Light', 'Dark']:
                         self.current_theme = theme
+        except Exception:
+            pass
+
+    def save_session_state(self):
+        """Save current UI session state (layer, selected key, active tabs, splitter sizes)."""
+        try:
+            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            
+            # Get splitter sizes if available
+            splitter_sizes = []
+            if hasattr(self, 'main_splitter'):
+                splitter_sizes = self.main_splitter.sizes()
+            
+            session_data = {
+                'current_layer': self.current_layer,
+                'selected_key_coords': self.selected_key_coords,
+                'extension_tab_index': getattr(self.extensions_tabs, 'currentIndex', lambda: 0)(),
+                'keycode_tab_index': getattr(self.keycode_tabs, 'currentIndex', lambda: 0)(),
+                'splitter_sizes': splitter_sizes,
+            }
+            session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
+            with open(session_path, 'w') as f:
+                json.dump(session_data, f, indent=4)
+        except Exception:
+            pass
+
+    def restore_session_state(self):
+        """Restore UI session state from last session."""
+        try:
+            session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
+            if os.path.exists(session_path):
+                with open(session_path, 'r') as f:
+                    session_data = json.load(f)
+                
+                # Restore current layer
+                layer = session_data.get('current_layer', 0)
+                if 0 <= layer < len(self.keymap_data):
+                    self.current_layer = layer
+                    # Update layer tabs UI
+                    if hasattr(self, 'layer_tabs'):
+                        self.layer_tabs.setCurrentIndex(layer)
+                
+                # Restore selected key
+                coords = session_data.get('selected_key_coords')
+                if coords and isinstance(coords, list) and len(coords) == 2:
+                    row, col = coords
+                    if 0 <= row < self.rows and 0 <= col < self.cols:
+                        self.selected_key_coords = coords
+                        self.update_macropad_display()
+                
+                # Restore extension tab
+                ext_tab_idx = session_data.get('extension_tab_index', 0)
+                if hasattr(self, 'extensions_tabs'):
+                    max_idx = self.extensions_tabs.count() - 1
+                    if 0 <= ext_tab_idx <= max_idx:
+                        self.extensions_tabs.setCurrentIndex(ext_tab_idx)
+                
+                # Restore keycode tab
+                key_tab_idx = session_data.get('keycode_tab_index', 0)
+                if hasattr(self, 'keycode_tabs'):
+                    max_idx = self.keycode_tabs.count() - 1
+                    if 0 <= key_tab_idx <= max_idx:
+                        self.keycode_tabs.setCurrentIndex(key_tab_idx)
+                
+                # Restore splitter sizes
+                splitter_sizes = session_data.get('splitter_sizes')
+                if splitter_sizes and hasattr(self, 'main_splitter'):
+                    if isinstance(splitter_sizes, list) and len(splitter_sizes) == 3:
+                        self.main_splitter.setSizes(splitter_sizes)
+                        
         except Exception:
             pass
 
@@ -3318,6 +4044,69 @@ class KMKConfigurator(QMainWindow):
         
         self.extensions_tabs.addTab(extensions_tab, "🔌 Extensions")
         
+        # --- Custom Code Tab ---
+        custom_code_tab = QWidget()
+        custom_code_layout = QVBoxLayout(custom_code_tab)
+        custom_code_layout.setSpacing(12)
+        
+        custom_code_info = QLabel(
+            "<b>💻 Custom Extension Code</b><br>"
+            "Add your own Python code snippets here instead of using the UI configuration.<br>"
+            "This code will be inserted into the generated code.py file.<br><br>"
+            "<b>Use cases:</b> Custom modules, TapDance, Combos, StringSubs, etc."
+        )
+        custom_code_info.setWordWrap(True)
+        custom_code_info.setObjectName("infoBox")  # Tag for theme updates
+        custom_code_layout.addWidget(custom_code_info)
+        
+        self.custom_extension_code = QTextEdit()
+        self.custom_extension_code.setPlaceholderText(
+            "# Example: TapDance\n"
+            "# from kmk.modules.tapdance import TapDance\n"
+            "# tapdance = TapDance()\n"
+            "# tapdance.tap_time = 750\n"
+            "# keyboard.modules.append(tapdance)\n"
+            "#\n"
+            "# TD_ESC_CTRL = KC.TD(KC.ESC, KC.LCTL)\n"
+            "#\n"
+            "# Example: Combos\n"
+            "# from kmk.modules.combos import Combos, Chord\n"
+            "# combos = Combos()\n"
+            "# combos.combos = [\n"
+            "#     Chord((KC.Q, KC.W), KC.ESC),\n"
+            "# ]\n"
+            "# keyboard.modules.append(combos)\n"
+        )
+        self.custom_extension_code.setFont(QFont("Courier New", 10))
+        custom_code_layout.addWidget(self.custom_extension_code)
+        
+        # Initialize with empty string if not set
+        if not hasattr(self, 'custom_ext_code'):
+            self.custom_ext_code = ""
+        self.custom_extension_code.setPlainText(self.custom_ext_code)
+        self.custom_extension_code.textChanged.connect(self.on_custom_code_changed)
+        
+        custom_code_buttons = QHBoxLayout()
+        
+        tapdance_btn = QPushButton("⚡ Add TapDance")
+        tapdance_btn.clicked.connect(self.add_tapdance_helper)
+        tapdance_btn.setToolTip("Generate TapDance code with helper dialog")
+        custom_code_buttons.addWidget(tapdance_btn)
+        
+        combos_btn = QPushButton("🔗 Add Combo")
+        combos_btn.clicked.connect(self.add_combo_helper)
+        combos_btn.setToolTip("Generate Combo code with helper dialog")
+        custom_code_buttons.addWidget(combos_btn)
+        
+        clear_btn = QPushButton("🗑 Clear")
+        clear_btn.clicked.connect(lambda: self.custom_extension_code.clear())
+        clear_btn.setToolTip("Clear all custom code")
+        custom_code_buttons.addWidget(clear_btn)
+        custom_code_buttons.addStretch()
+        custom_code_layout.addLayout(custom_code_buttons)
+        
+        self.extensions_tabs.addTab(custom_code_tab, "💻 Custom Code")
+        
         # --- Advanced Settings Tab ---
         advanced_tab = QWidget()
         adv_scroll = QScrollArea()
@@ -3424,6 +4213,9 @@ class KMKConfigurator(QMainWindow):
         
         self.extensions_tabs.addTab(advanced_tab, "⚙ Advanced")
         
+        # Connect tab change signal to save session state
+        self.extensions_tabs.currentChanged.connect(lambda: self.save_session_state())
+        
         # Add tabs to main layout
         main_layout.addWidget(self.extensions_tabs)
         
@@ -3524,6 +4316,13 @@ class KMKConfigurator(QMainWindow):
         """Handle encoder divisor spinbox change."""
         self.encoder_divisor = value
         self.save_extension_configs()
+    
+    def on_custom_code_changed(self):
+        """Handle custom extension code changes."""
+        self.custom_ext_code = self.custom_extension_code.toPlainText()
+        self.save_extension_configs()
+        # Update TapDance list when code changes
+        self.update_tapdance_list()
     
     def generate_boot_config(self):
         """Generate boot.py code from UI settings."""
@@ -3702,6 +4501,61 @@ class KMKConfigurator(QMainWindow):
             self.save_extension_configs()
 
         self.update_macropad_display()
+    
+    def add_tapdance_helper(self):
+        """Open TapDance helper dialog"""
+        dialog = TapDanceDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            code = dialog.get_code()
+            if code:
+                # Append to custom extension code
+                current_code = self.custom_extension_code.toPlainText()
+                if current_code.strip():
+                    current_code += "\n\n"
+                self.custom_extension_code.setPlainText(current_code + code)
+                # Update TapDance keycode list
+                self.update_tapdance_list()
+    
+    def update_tapdance_list(self):
+        """Parse custom extension code to find TapDance definitions and update both selectors"""
+        if not hasattr(self, 'tapdance_keycode_list'):
+            return
+        
+        self.tapdance_keycode_list.clear()
+        if hasattr(self, 'tapdance_management_list'):
+            self.tapdance_management_list.clear()
+        
+        # Parse the custom extension code for TapDance definitions
+        custom_code = self.custom_extension_code.toPlainText() if hasattr(self, 'custom_extension_code') else ""
+        
+        # Find lines like: TD_NAME = KC.TD(...)
+        import re
+        td_pattern = r'^([A-Z_][A-Z0-9_]*)\s*=\s*KC\.TD\s*\('
+        
+        td_names = []
+        for line in custom_code.split('\n'):
+            match = re.match(td_pattern, line.strip())
+            if match:
+                td_names.append(match.group(1))
+        
+        if td_names:
+            sorted_names = sorted(td_names)
+            self.tapdance_keycode_list.addItems(sorted_names)
+            if hasattr(self, 'tapdance_management_list'):
+                self.tapdance_management_list.addItems(sorted_names)
+
+    
+    def add_combo_helper(self):
+        """Open Combo helper dialog"""
+        dialog = ComboDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            code = dialog.get_code()
+            if code:
+                # Append to custom extension code
+                current_code = self.custom_extension_code.toPlainText()
+                if current_code.strip():
+                    current_code += "\n\n"
+                self.custom_extension_code.setPlainText(current_code + code)
 
     def populate_config_file_list(self):
         """Scans kmk_Config_Save and repo root for JSON files starting with 'KMK_Config' and populates the combo box."""
@@ -3726,101 +4580,311 @@ class KMKConfigurator(QMainWindow):
         self.config_file_combo.blockSignals(False)
     
     def setup_layer_management_ui(self, parent_layout):
-        layout = QHBoxLayout()
+        """Setup layer management with improved visual design."""
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(5)
+        
+        # Header row with layer management
+        header_layout = QHBoxLayout()
         
         # Layer tabs with better styling
         layer_label = QLabel("📑 <b>Layers:</b>")
-        layer_label.setFixedWidth(60)
-        layout.addWidget(layer_label)
+        layer_label.setStyleSheet("font-size: 10pt;")
+        layer_label.setFixedWidth(70)
+        header_layout.addWidget(layer_label)
         
         self.layer_tabs = QTabWidget()
         self.layer_tabs.setUsesScrollButtons(True)
         self.layer_tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self.layer_tabs.currentChanged.connect(self.on_layer_changed)
         self.layer_tabs.setToolTip("Switch between keyboard layers - each layer can have different key mappings")
-        layout.addWidget(self.layer_tabs, 1)
+        header_layout.addWidget(self.layer_tabs, 1)
 
-        layer_button_layout = QVBoxLayout()
+        # Layer control buttons
+        layer_button_layout = QHBoxLayout()
+        layer_button_layout.setSpacing(3)
+        
         add_layer_btn = QPushButton("➕")
-        add_layer_btn.setFixedSize(35, 35)
+        add_layer_btn.setFixedSize(32, 32)
         add_layer_btn.clicked.connect(self.add_layer)
         add_layer_btn.setToolTip("Add a new layer")
         layer_button_layout.addWidget(add_layer_btn)
 
         remove_layer_btn = QPushButton("➖")
-        remove_layer_btn.setFixedSize(35, 35)
+        remove_layer_btn.setFixedSize(32, 32)
         remove_layer_btn.clicked.connect(self.remove_layer)
         remove_layer_btn.setToolTip("Remove current layer")
         layer_button_layout.addWidget(remove_layer_btn)
-        layer_button_layout.addStretch()
-        layout.addLayout(layer_button_layout)
         
-        parent_layout.addLayout(layout)
+        header_layout.addLayout(layer_button_layout)
+        
+        container_layout.addLayout(header_layout)
+        
+        # Info bar showing keyboard info
+        info_bar = QLabel("Chronos Pad • 5×4 Matrix • RGB • OLED Display")
+        info_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_bar.setStyleSheet(
+            "padding: 5px; font-size: 9pt; color: #888; "
+            "background-color: rgba(100, 100, 100, 0.1); border-radius: 3px;"
+        )
+        container_layout.addWidget(info_bar)
+        
+        parent_layout.addWidget(container)
 
 
     def setup_macropad_grid_ui(self, parent_layout):
-        self.macropad_group = QGroupBox(f"⌨ Keymap (Layer {self.current_layer})")
+        """Setup macropad grid with enhanced visual styling."""
+        self.macropad_group = QGroupBox(f"⌨ Keymap Grid (Layer {self.current_layer})")
         self.macropad_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.macropad_layout = QGridLayout()
-        self.macropad_layout.setHorizontalSpacing(10)
-        self.macropad_layout.setVerticalSpacing(10)
+        self.macropad_layout.setHorizontalSpacing(8)
+        self.macropad_layout.setVerticalSpacing(8)
+        self.macropad_layout.setContentsMargins(10, 10, 10, 10)
         self.macropad_group.setLayout(self.macropad_layout)
         parent_layout.addWidget(self.macropad_group, 1)
 
     def setup_keycode_selector_ui(self, parent_layout):
+        """Setup keycode selector with improved organization and visual hierarchy."""
         group = QGroupBox("🔤 Key Assignment")
         layout = QVBoxLayout()
+        
+        # Selected key indicator with better styling
         self.selected_key_label = QLabel("Selected Key: None")
         self.selected_key_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.selected_key_label.setStyleSheet("font-weight: bold; padding: 5px;")
+        self.selected_key_label.setStyleSheet(
+            "font-weight: bold; font-size: 11pt; padding: 8px; "
+            "border: 2px solid #555; border-radius: 4px;"
+        )
         layout.addWidget(self.selected_key_label)
+        
+        layout.addSpacing(5)
+        
+        # Keycode selector with organized tabs
         self.keycode_selector = self.create_keycode_selector()
         self.keycode_selector.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self.keycode_selector, 1)
 
-        # Add button for creating combo keys
-        assign_combo_btn = QPushButton("⌨ Assign Combo...")
+        layout.addSpacing(5)
+        
+        # Quick action buttons
+        quick_actions_layout = QHBoxLayout()
+        
+        assign_combo_btn = QPushButton("⌨ Combo")
         assign_combo_btn.clicked.connect(self.assign_combo)
         assign_combo_btn.setToolTip("Create key combinations like Ctrl+C")
-        layout.addWidget(assign_combo_btn)
+        quick_actions_layout.addWidget(assign_combo_btn)
+        
+        clear_key_btn = QPushButton("✖ Clear")
+        clear_key_btn.clicked.connect(self.clear_selected_key)
+        clear_key_btn.setToolTip("Clear the selected key (set to KC.NO)")
+        quick_actions_layout.addWidget(clear_key_btn)
+        
+        transparent_key_btn = QPushButton("🔄 Transparent")
+        transparent_key_btn.clicked.connect(self.set_key_transparent)
+        transparent_key_btn.setToolTip("Make key transparent (pass through to lower layer)")
+        quick_actions_layout.addWidget(transparent_key_btn)
+        
+        layout.addLayout(quick_actions_layout)
 
         group.setLayout(layout)
         parent_layout.addWidget(group, 1)
 
+    def clear_selected_key(self):
+        """Clear the selected key to KC.NO."""
+        if self.selected_key_coords:
+            row, col = self.selected_key_coords
+            self.keymap_data[self.current_layer][row][col] = "KC.NO"
+            self.update_macropad_display()
+        else:
+            QMessageBox.information(self, "No Key Selected", "Please select a key on the grid first.")
+    
+    def set_key_transparent(self):
+        """Set the selected key to KC.TRNS (transparent)."""
+        if self.selected_key_coords:
+            row, col = self.selected_key_coords
+            self.keymap_data[self.current_layer][row][col] = "KC.TRNS"
+            self.update_macropad_display()
+        else:
+            QMessageBox.information(self, "No Key Selected", "Please select a key on the grid first.")
+
     def setup_macro_ui(self, parent_layout):
-        group = QGroupBox("⚡ Macros")
-        layout = QVBoxLayout()
+        """Setup macro and TapDance management with tabbed interface."""
+        # Create tab widget for Macros and TapDance
+        self.advanced_keys_tabs = QTabWidget()
+        
+        # --- Macros Tab ---
+        macros_widget = QWidget()
+        macros_layout = QVBoxLayout(macros_widget)
+        macros_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Macro list
+        macros_label = QLabel("<b>Available Macros</b>")
+        macros_layout.addWidget(macros_label)
+        
         self.macro_list_widget = QListWidget()
         self.macro_list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.macro_list_widget.setToolTip("Double-click a macro to assign it to the selected key")
-        layout.addWidget(self.macro_list_widget, 1)
-        # Clicking a macro in this list assigns it to the currently-selected key
+        self.macro_list_widget.setToolTip("Click a macro to assign it to the selected key")
+        macros_layout.addWidget(self.macro_list_widget, 1)
         self.macro_list_widget.itemClicked.connect(self.on_macro_selected)
         
+        # Macro management buttons
         macro_button_layout = QHBoxLayout()
-        add_macro_btn = QPushButton("➕ Add")
+        add_macro_btn = QPushButton("➕ Create")
         add_macro_btn.clicked.connect(self.add_macro)
         add_macro_btn.setToolTip("Create a new macro")
+        
         edit_macro_btn = QPushButton("✏ Edit")
         edit_macro_btn.clicked.connect(self.edit_macro)
         edit_macro_btn.setToolTip("Edit selected macro")
-        remove_macro_btn = QPushButton("🗑 Remove")
+        
+        remove_macro_btn = QPushButton("🗑 Delete")
         remove_macro_btn.clicked.connect(self.remove_macro)
         remove_macro_btn.setToolTip("Delete selected macro")
         
         macro_button_layout.addWidget(add_macro_btn)
         macro_button_layout.addWidget(edit_macro_btn)
         macro_button_layout.addWidget(remove_macro_btn)
+        macros_layout.addLayout(macro_button_layout)
         
-        layout.addLayout(macro_button_layout)
-        group.setLayout(layout)
-        parent_layout.addWidget(group, 1)
+        self.advanced_keys_tabs.addTab(macros_widget, "⚡ Macros")
+        
+        # --- TapDance Tab ---
+        tapdance_widget = QWidget()
+        tapdance_layout = QVBoxLayout(tapdance_widget)
+        tapdance_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Info label
+        td_info = QLabel(
+            "<b>TapDance Keys</b><br>"
+            "<small>Keys that perform different actions based on tap count.<br>"
+            "Define TapDance in Extensions → Custom Code tab.</small>"
+        )
+        td_info.setWordWrap(True)
+        td_info.setStyleSheet("padding: 5px; background-color: rgba(100, 150, 255, 0.1); border-radius: 3px;")
+        tapdance_layout.addWidget(td_info)
+        
+        tapdance_layout.addSpacing(5)
+        
+        # TapDance list (populated from custom code)
+        td_list_label = QLabel("<b>Available TapDance</b>")
+        tapdance_layout.addWidget(td_list_label)
+        
+        self.tapdance_management_list = QListWidget()
+        self.tapdance_management_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.tapdance_management_list.setToolTip("Click a TapDance to assign it to the selected key")
+        self.tapdance_management_list.itemClicked.connect(self.on_tapdance_management_selected)
+        tapdance_layout.addWidget(self.tapdance_management_list, 1)
+        
+        # TapDance helper buttons
+        td_button_layout = QHBoxLayout()
+        
+        open_td_helper_btn = QPushButton("➕ Create TapDance")
+        open_td_helper_btn.clicked.connect(self.open_tapdance_helper)
+        open_td_helper_btn.setToolTip("Open TapDance builder in Custom Code tab")
+        
+        refresh_td_btn = QPushButton("🔄 Refresh")
+        refresh_td_btn.clicked.connect(self.update_tapdance_list)
+        refresh_td_btn.setToolTip("Refresh TapDance list from Custom Code")
+        
+        td_button_layout.addWidget(open_td_helper_btn)
+        td_button_layout.addWidget(refresh_td_btn)
+        tapdance_layout.addLayout(td_button_layout)
+        
+        self.advanced_keys_tabs.addTab(tapdance_widget, "🎯 TapDance")
+        
+        # Add tab widget to parent layout
+        parent_layout.addWidget(self.advanced_keys_tabs, 1)
+    
+    def on_tapdance_management_selected(self, item):
+        """Assign TapDance from management tab to selected key."""
+        if self.selected_key_coords:
+            td_name = item.text()
+            row, col = self.selected_key_coords
+            self.keymap_data[self.current_layer][row][col] = td_name
+            self.update_macropad_display()
+        else:
+            QMessageBox.information(self, "No Key Selected", "Please select a key on the grid before assigning TapDance.")
+    
+    def open_tapdance_helper(self):
+        """Open the TapDance builder in Custom Code tab."""
+        # Switch to Extensions tab
+        if hasattr(self, 'extensions_tabs'):
+            # Find Custom Code tab (index 1)
+            for i in range(self.extensions_tabs.count()):
+                if "Custom Code" in self.extensions_tabs.tabText(i):
+                    self.extensions_tabs.setCurrentIndex(i)
+                    break
+        
+        # Open TapDance dialog
+        self.add_tapdance_helper()
 
     def closeEvent(self, event):
-        """Save settings on application exit."""
+        """Save settings and session state on application exit."""
         self.save_macros()
         self.save_profiles()
+        self.save_session_state()
         event.accept()
+    
+    def keyPressEvent(self, event):
+        """
+        Handle keyboard navigation for keymap grid.
+        
+        Allows users to navigate the keymap grid using arrow keys and select
+        keys without needing to use the mouse. This improves accessibility and
+        workflow efficiency.
+        
+        Args:
+            event: QKeyEvent containing the key press information
+        
+        Navigation:
+            - Arrow Up/Down/Left/Right: Move selection in the grid
+            - Enter/Return: Focus on keycode selector for quick assignment
+            - Delete/Backspace: Clear selected key (set to KC.NO)
+        
+        Note:
+            Grid coordinates are in physical board orientation (reversed for display)
+        """
+        key = event.key()
+        
+        # Arrow key navigation
+        if key in (Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right):
+            if self.selected_key_coords is None:
+                # No key selected, start at top-left (0, 0)
+                self.on_key_selected(0, 0)
+            else:
+                row, col = self.selected_key_coords
+                
+                # Navigate based on arrow key
+                if key == Qt.Key.Key_Up:
+                    row = max(0, row - 1)
+                elif key == Qt.Key.Key_Down:
+                    row = min(self.rows - 1, row + 1)
+                elif key == Qt.Key.Key_Left:
+                    col = max(0, col - 1)
+                elif key == Qt.Key.Key_Right:
+                    col = min(self.cols - 1, col + 1)
+                
+                # Select the new key
+                self.on_key_selected(row, col)
+            
+            event.accept()
+        
+        # Delete/Backspace to clear selected key
+        elif key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.clear_selected_key()
+            event.accept()
+        
+        # Enter/Return to focus keycode selector
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if hasattr(self, 'keycode_selector'):
+                self.keycode_selector.setFocus()
+            event.accept()
+        
+        else:
+            # Pass other keys to parent
+            super().keyPressEvent(event)
 
     # --- File I/O and Profile Management ---
 
@@ -4034,19 +5098,107 @@ class KMKConfigurator(QMainWindow):
             
     # --- Key Assignment ---
     def create_keycode_selector(self):
+        """Create keycode selector with improved organization and search."""
         tab_widget = QTabWidget()
+        tab_widget.setTabPosition(QTabWidget.TabPosition.North)
+        
+        # Create tabs for each keycode category with improved styling
         for category, key_list in KEYCODES.items():
+            # Create container widget for this tab
+            tab_container = QWidget()
+            tab_layout = QVBoxLayout(tab_container)
+            tab_layout.setContentsMargins(5, 5, 5, 5)
+            tab_layout.setSpacing(5)
+            
+            # Add search filter
+            search_box = QLineEdit()
+            search_box.setPlaceholderText(f"🔍 Search {category}...")
+            search_box.setClearButtonEnabled(True)
+            tab_layout.addWidget(search_box)
+            
+            # Create list widget
             list_widget = QListWidget()
             list_widget.addItems(key_list)
             list_widget.itemClicked.connect(self.on_keycode_assigned)
-            tab_widget.addTab(list_widget, category)
+            list_widget.setSpacing(2)
+            tab_layout.addWidget(list_widget)
+            
+            # Connect search filter
+            search_box.textChanged.connect(
+                lambda text, lw=list_widget, keys=key_list: self._filter_keycode_list(lw, keys, text)
+            )
+            
+            # Add tab with icon based on category
+            icon = self._get_category_icon(category)
+            tab_widget.addTab(tab_container, f"{icon} {category}")
         
-        # Tab for macros
+        # Tab for macros (populated dynamically)
+        macro_container = QWidget()
+        macro_layout = QVBoxLayout(macro_container)
+        macro_layout.setContentsMargins(5, 5, 5, 5)
+        
+        macro_info = QLabel("<small>Click a macro to assign it to selected key</small>")
+        macro_info.setStyleSheet("color: #888; padding: 3px;")
+        macro_layout.addWidget(macro_info)
+        
         self.macro_keycode_list = QListWidget()
         self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
-        tab_widget.addTab(self.macro_keycode_list, "Macros")
+        self.macro_keycode_list.setSpacing(2)
+        macro_layout.addWidget(self.macro_keycode_list)
+        
+        tab_widget.addTab(macro_container, "⚡ Macros")
+        
+        # Tab for TapDance (populated dynamically from custom code)
+        td_container = QWidget()
+        td_layout = QVBoxLayout(td_container)
+        td_layout.setContentsMargins(5, 5, 5, 5)
+        
+        td_info = QLabel("<small>TapDance keys from Custom Code</small>")
+        td_info.setStyleSheet("color: #888; padding: 3px;")
+        td_layout.addWidget(td_info)
+        
+        self.tapdance_keycode_list = QListWidget()
+        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        self.tapdance_keycode_list.setSpacing(2)
+        td_layout.addWidget(self.tapdance_keycode_list)
+        
+        tab_widget.addTab(td_container, "🎯 TapDance")
+        
+        # Store reference for session persistence
+        self.keycode_tabs = tab_widget
+        # Connect tab change signal to save session state
+        tab_widget.currentChanged.connect(lambda: self.save_session_state())
         
         return tab_widget
+    
+    def _get_category_icon(self, category):
+        """Return an appropriate icon emoji for each category."""
+        icons = {
+            "Letters": "🔤",
+            "Numbers & Symbols": "🔢",
+            "Editing": "✏",
+            "Modifiers": "⌨",
+            "Navigation": "🧭",
+            "Function Keys": "🔧",
+            "Media & Volume": "🔊",
+            "Brightness": "💡",
+            "Numpad": "🔢",
+            "Mouse": "🖱",
+            "Layer Switching": "📚",
+            "Special": "⭐"
+        }
+        return icons.get(category, "🔸")
+    
+    def _filter_keycode_list(self, list_widget, all_keys, filter_text):
+        """Filter keycode list based on search text."""
+        list_widget.clear()
+        filter_text = filter_text.lower()
+        
+        if not filter_text:
+            list_widget.addItems(all_keys)
+        else:
+            filtered_keys = [key for key in all_keys if filter_text in key.lower()]
+            list_widget.addItems(filtered_keys)
 
     def on_keycode_assigned(self, item):
         keycode = item.text()
@@ -4853,6 +6005,11 @@ keyboard.modules.append(layer_display_sync)
                 ext_snippets += "# Display configuration - Auto-generated keymap layout:\n"
                 ext_snippets += self.generate_display_layout_code() + "\n\n"
         
+        # Add custom extension code if present
+        if self.custom_ext_code and self.custom_ext_code.strip():
+            ext_snippets += "# Custom Extension Code:\n"
+            ext_snippets += self.custom_ext_code.strip() + "\n\n"
+        
         # Provide sensible default templates for enabled modules (placed before user snippets)
         # Only add defaults if user hasn't provided their own config
         default_snippets = ""
@@ -5055,7 +6212,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             print("Save cancelled by user")
 
     def save_configuration_to_path(self, file_path):
-        """Save complete configuration including all layers, RGB colors, macros, and extension settings"""
+        """Save complete configuration including all layers, RGB colors, and extension settings
+        Note: Macros are stored globally and not in individual config files."""
         config_data = {
             "version": "2.0",  # New version format
             "hardware": {
@@ -5069,7 +6227,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "layers": self.keymap_data,
                 "current_layer": self.current_layer,
             },
-            "macros": self.macros,
+            # Macros are no longer saved per-config - they are global
             "rgb": {
                 "enabled": self.enable_rgb,
                 "matrix": self._export_rgb_config(),
@@ -5268,7 +6426,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         # still exists in the new grid.
 
     def recreate_macropad_grid(self):
-        """Clears and rebuilds the macropad grid buttons based on current dimensions."""
+        """Clears and rebuilds the macropad grid buttons with enhanced visual design."""
         self.clear_macropad_grid()
         # Iterate in reverse (180° rotation) to match physical board orientation
         for r in range(self.rows - 1, -1, -1):
@@ -5276,10 +6434,15 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 button = QPushButton()
                 button.setObjectName("keymapButton")
                 button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                button.setMinimumSize(80, 80)  # Minimum size for better visibility
                 button.setCheckable(True)
                 button.clicked.connect(partial(self.on_key_selected, r, c))
                 # allow double-click detection via the main window's eventFilter
                 button.installEventFilter(self)
+                
+                # Add coordinate label for easier identification
+                button.setProperty("coords", f"({r},{c})")
+                
                 try:
                     self._install_hover_effect(button)
                 except Exception:
@@ -5342,6 +6505,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             for button in self.macropad_buttons.values():
                 button.setChecked(False)
             self.update_macropad_display()
+            # Save session state when layer changes
+            self.save_session_state()
 
     def update_layer_tabs(self):
         """Clears and rebuilds the layer tabs from the keymap data."""
@@ -5383,9 +6548,12 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             current_button = self.macropad_buttons.get(clicked_coords)
             if current_button:
                 current_button.setChecked(True)
+        
+        # Save session state when key selection changes
+        self.save_session_state()
 
     def update_macropad_display(self):
-        """Updates the text on all grid buttons to reflect the current layer's keymap."""
+        """Updates the text on all grid buttons to reflect the current layer's keymap with enhanced formatting."""
         if self.current_layer >= len(self.keymap_data): return
         
         layer_data = self.keymap_data[self.current_layer]
@@ -5399,14 +6567,28 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 button = self.macropad_buttons.get((r, c))
                 if button:
                     key_text = layer_data[r][c]
-                    # Format macro keys for better readability
+                    
+                    # Format different key types for better readability
                     macro_match = re.match(r"MACRO\((\w+)\)", key_text)
                     if macro_match:
-                        display_text = f"M({macro_match.group(1)})"
+                        display_text = f"⚡ {macro_match.group(1)}"
+                    elif key_text.startswith("TD_"):
+                        # TapDance keys
+                        display_text = f"🎯 {key_text[3:]}"
+                    elif "MO(" in key_text or "TO(" in key_text or "TG(" in key_text or "DF(" in key_text:
+                        # Layer switching keys
+                        display_text = f"📚 {key_text.replace('KC.', '')}"
+                    elif key_text == "KC.NO":
+                        display_text = "✖"
+                    elif key_text == "KC.TRNS":
+                        display_text = "🔄 TRNS"
                     else:
-                        # Shorten standard keycodes for display
+                        # Standard keycodes - remove KC. prefix
                         display_text = key_text.replace("KC.", "")
-                    button.setText(display_text)
+                    
+                    # Add coordinate label below for easier identification
+                    full_text = f"{display_text}\n({r},{c})"
+                    button.setText(full_text)
                     
                     # Apply RGB color if assigned to this key
                     color = layer_colors.get(str(idx)) or key_colors.get(str(idx))
@@ -5425,12 +6607,12 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         except:
                             text_color = '#FFFFFF'
                         
-                        button.setStyleSheet(f'background-color: {color}; color: {text_color}; font-weight: bold;')
+                        button.setStyleSheet(f'background-color: {color}; color: {text_color}; font-weight: bold; font-size: 9pt;')
                     else:
                         # Clear any previous color styling but keep the default button style
-                        button.setStyleSheet('')
+                        button.setStyleSheet('font-size: 9pt;')
                 idx += 1
-        self.macropad_group.setTitle(f"Keymap (Layer {self.current_layer})")
+        self.macropad_group.setTitle(f"⌨ Keymap Grid (Layer {self.current_layer})")
 
 
 if __name__ == "__main__":

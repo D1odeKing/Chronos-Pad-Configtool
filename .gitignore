@@ -4,6 +4,20 @@ ai-Context/
 # Auto-downloaded dependencies - these will be downloaded automatically
 libraries/
 
+# User configuration data (private) - keep folder but ignore all contents except .gitkeep
+kmk_Config_Save/*
+!kmk_Config_Save/.gitkeep
+data/kmk_Config_Save/*
+!data/kmk_Config_Save/.gitkeep
+macros.json
+*.json.backup
+
+# Test and temporary files
+code.py
+test_*.py
+test_*.txt
+*_test.py
+
 # PyInstaller build artifacts
 build/
 dist/

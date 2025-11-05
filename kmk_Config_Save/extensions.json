@@ -1,7 +1,0 @@
-{
-  "enable_encoder": true,
-  "enable_analogin": true,
-  "enable_rgb": true,
-  "enable_display": true,
-  "encoder_divisor": 2
-}
