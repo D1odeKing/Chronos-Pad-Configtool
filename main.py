@@ -35,7 +35,8 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
-    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter
+    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter,
+    QListWidgetItem
 )
 from PyQt6.QtWidgets import QTextEdit
 from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
@@ -5695,40 +5696,53 @@ class KMKConfigurator(QMainWindow):
             
     # --- Key Assignment ---
     def create_keycode_selector(self):
-        """Create keycode selector with improved organization and search."""
+        """Create keycode selector with global search across all categories."""
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(5, 5, 5, 5)
+        container_layout.setSpacing(6)
+
+        # Global search bar across every keycode category
+        self.keycode_search_box = QLineEdit()
+        self.keycode_search_box.setPlaceholderText("🔍 Search all keycodes…")
+        self.keycode_search_box.setClearButtonEnabled(True)
+        container_layout.addWidget(self.keycode_search_box)
+
+        # Results list shown only when global search is active
+        self.keycode_search_results = QListWidget()
+        self.keycode_search_results.setSpacing(2)
+        self.keycode_search_results.hide()
+        self.keycode_search_results.itemClicked.connect(self._on_search_result_selected)
+        container_layout.addWidget(self.keycode_search_results)
+
+        # Tab widget with per-category lists
         tab_widget = QTabWidget()
         tab_widget.setTabPosition(QTabWidget.TabPosition.North)
-        
+        container_layout.addWidget(tab_widget)
+
+        # Store flattened key list for global search
+        self._all_keycodes_flat: list[tuple[str, str]] = []
+
         # Create tabs for each keycode category with improved styling
         for category, key_list in KEYCODES.items():
-            # Create container widget for this tab
             tab_container = QWidget()
             tab_layout = QVBoxLayout(tab_container)
             tab_layout.setContentsMargins(5, 5, 5, 5)
             tab_layout.setSpacing(5)
-            
-            # Add search filter
-            search_box = QLineEdit()
-            search_box.setPlaceholderText(f"🔍 Search {category}...")
-            search_box.setClearButtonEnabled(True)
-            tab_layout.addWidget(search_box)
-            
-            # Create list widget
+
             list_widget = QListWidget()
             list_widget.addItems(key_list)
             list_widget.itemClicked.connect(self.on_keycode_assigned)
             list_widget.setSpacing(2)
             tab_layout.addWidget(list_widget)
-            
-            # Connect search filter
-            search_box.textChanged.connect(
-                lambda text, lw=list_widget, keys=key_list: self._filter_keycode_list(lw, keys, text)
-            )
-            
-            # Add tab with icon based on category
+
             icon = self._get_category_icon(category)
             tab_widget.addTab(tab_container, f"{icon} {category}")
-        
+
+            # Extend the global search dataset with category context
+            for keycode in key_list:
+                self._all_keycodes_flat.append((category, keycode))
+
         # Tab for macros (populated dynamically)
         macro_container = QWidget()
         macro_layout = QVBoxLayout(macro_container)
@@ -5763,10 +5777,11 @@ class KMKConfigurator(QMainWindow):
         
         # Store reference for session persistence
         self.keycode_tabs = tab_widget
+        self.keycode_search_box.textChanged.connect(self._filter_all_keycodes)
         # Connect tab change signal to save session state
         tab_widget.currentChanged.connect(lambda: self.save_session_state())
         
-        return tab_widget
+        return container
     
     def _get_category_icon(self, category):
         """Return an appropriate icon emoji for each category."""
@@ -5786,16 +5801,43 @@ class KMKConfigurator(QMainWindow):
         }
         return icons.get(category, "🔸")
     
-    def _filter_keycode_list(self, list_widget, all_keys, filter_text):
-        """Filter keycode list based on search text."""
-        list_widget.clear()
-        filter_text = filter_text.lower()
-        
-        if not filter_text:
-            list_widget.addItems(all_keys)
-        else:
-            filtered_keys = [key for key in all_keys if filter_text in key.lower()]
-            list_widget.addItems(filtered_keys)
+    def _filter_all_keycodes(self, filter_text: str) -> None:
+        """
+        Filter and display keycodes across every category.
+
+        Args:
+            filter_text: User-entered search text (case-insensitive).
+        """
+        if not hasattr(self, "_all_keycodes_flat"):
+            return
+
+        search_value = (filter_text or "").strip().lower()
+
+        self.keycode_search_results.clear()
+        if not search_value:
+            self.keycode_search_results.hide()
+            if self.keycode_tabs is not None:
+                self.keycode_tabs.show()
+            return
+
+        for category, keycode in self._all_keycodes_flat:
+            if search_value in keycode.lower():
+                item_text = f"{category} • {keycode}"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, keycode)
+                self.keycode_search_results.addItem(item)
+
+        self.keycode_tabs.hide()
+        self.keycode_search_results.show()
+
+    def _on_search_result_selected(self, item: QListWidgetItem) -> None:
+        """Assign keycode chosen from the global search result list."""
+        keycode = item.data(Qt.ItemDataRole.UserRole)
+        if keycode:
+            proxy_item = QListWidgetItem(keycode)
+            self.on_keycode_assigned(proxy_item)
+            # Clear search to return to tab view
+            self.keycode_search_box.clear()
 
     def on_keycode_assigned(self, item):
         keycode = item.text()
