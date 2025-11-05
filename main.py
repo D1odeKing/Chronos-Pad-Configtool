@@ -4862,7 +4862,7 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def save_session_state(self):
-        """Save current UI session state (layer, selected key, active tabs, splitter sizes)."""
+        """Save current UI session state (layer, selected key, active tabs, splitter sizes, category)."""
         try:
             os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
             
@@ -4875,7 +4875,8 @@ class KMKConfigurator(QMainWindow):
                 'current_layer': self.current_layer,
                 'selected_key_coords': self.selected_key_coords,
                 'extension_tab_index': getattr(self.extensions_tabs, 'currentIndex', lambda: 0)(),
-                'keycode_tab_index': getattr(self.keycode_tabs, 'currentIndex', lambda: 0)(),
+                'keycode_current_category': getattr(self, 'current_category', None),
+                'keycode_search_query': getattr(self.keycode_search_box, 'text', lambda: '')() if hasattr(self, 'keycode_search_box') else '',
                 'splitter_sizes': splitter_sizes,
             }
             session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
@@ -4915,12 +4916,16 @@ class KMKConfigurator(QMainWindow):
                     if 0 <= ext_tab_idx <= max_idx:
                         self.extensions_tabs.setCurrentIndex(ext_tab_idx)
                 
-                # Restore keycode tab
-                key_tab_idx = session_data.get('keycode_tab_index', 0)
-                if hasattr(self, 'keycode_tabs'):
-                    max_idx = self.keycode_tabs.count() - 1
-                    if 0 <= key_tab_idx <= max_idx:
-                        self.keycode_tabs.setCurrentIndex(key_tab_idx)
+                # Restore keycode category (new sidebar approach)
+                category = session_data.get('keycode_current_category')
+                if category and hasattr(self, 'select_category'):
+                    if category in KEYCODES:
+                        self.select_category(category)
+                
+                # Restore search query (optional)
+                search_query = session_data.get('keycode_search_query', '')
+                if search_query and hasattr(self, 'keycode_search_box'):
+                    self.keycode_search_box.setText(search_query)
                 
                 # Restore splitter sizes
                 splitter_sizes = session_data.get('splitter_sizes')
@@ -6534,164 +6539,266 @@ class KMKConfigurator(QMainWindow):
     # --- Key Assignment ---
     def create_keycode_selector(self):
         """
-        Create modern keycode selector with category pills and search.
+        Create modern keycode selector with sidebar + content layout.
         
         Features:
-        - Horizontal scrollable category pills for quick navigation
-        - Global search across all keycode categories
-        - Tab-based organization with icons
-        - Dynamic macro and TapDance lists
-        - Persistent tab selection in session state
+        - Left sidebar with vertical category list
+        - Right content area with keycode list
+        - Global search across all categories
+        - Separate Macros/TapDance section below
+        - Quick action buttons (Combo, Clear, Transparent)
+        - Keyboard navigation support
         
         Layout:
-        1. Global search bar
-        2. Horizontal category pill buttons (scrollable)
-        3. Tab widget with keycode lists
-        4. Search results list (shown when searching)
+        1. Search bar at top
+        2. Horizontal splitter: [Category Sidebar | Keycode Content]
+        3. Quick action buttons below keycode list
+        4. Macros/TapDance tabbed section at bottom
         
         Returns:
             QWidget container with complete keycode selector UI
         """
         container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(5, 5, 5, 5)
-        container_layout.setSpacing(6)
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
 
-        # Global search bar across every keycode category
+        # Global search bar
         self.keycode_search_box = QLineEdit()
-        self.keycode_search_box.setPlaceholderText("🔍 Search all keycodes…")
+        self.keycode_search_box.setPlaceholderText("🔍 Search all keycodes...")
         self.keycode_search_box.setClearButtonEnabled(True)
-        container_layout.addWidget(self.keycode_search_box)
-        
-        # Category pills (horizontal scrollable buttons)
-        pills_scroll = QScrollArea()
-        pills_scroll.setWidgetResizable(True)
-        pills_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        pills_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        pills_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        pills_scroll.setMaximumHeight(50)
-        
-        pills_widget = QWidget()
-        pills_layout = QHBoxLayout(pills_widget)
-        pills_layout.setContentsMargins(0, 0, 0, 0)
-        pills_layout.setSpacing(8)
-        
-        # Store pill buttons for activation state
-        self.category_pills = []
-        
-        # Create pill button for each category
-        category_list = list(KEYCODES.keys())
-        for idx, category in enumerate(category_list):
-            pill_btn = QPushButton(f"{self._get_category_icon(category)} {category}")
-            pill_btn.setObjectName("categoryPill")
-            pill_btn.setCheckable(True)
-            pill_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            pill_btn.setToolTip(f"Show {category} keycodes")
-            pill_btn.clicked.connect(lambda checked, i=idx: self._on_category_pill_clicked(i))
-            pills_layout.addWidget(pill_btn)
-            self.category_pills.append(pill_btn)
-        
-        # Add special category pills for Macros and TapDance
-        macro_pill = QPushButton("⚡ Macros")
-        macro_pill.setObjectName("categoryPill")
-        macro_pill.setCheckable(True)
-        macro_pill.setCursor(Qt.CursorShape.PointingHandCursor)
-        macro_pill.setToolTip("Show available macros")
-        macro_pill.clicked.connect(lambda: self._on_category_pill_clicked(len(category_list)))
-        pills_layout.addWidget(macro_pill)
-        self.category_pills.append(macro_pill)
-        
-        td_pill = QPushButton("🎯 TapDance")
-        td_pill.setObjectName("categoryPill")
-        td_pill.setCheckable(True)
-        td_pill.setCursor(Qt.CursorShape.PointingHandCursor)
-        td_pill.setToolTip("Show TapDance keys from custom code")
-        td_pill.clicked.connect(lambda: self._on_category_pill_clicked(len(category_list) + 1))
-        pills_layout.addWidget(td_pill)
-        self.category_pills.append(td_pill)
-        
-        pills_layout.addStretch()
-        pills_scroll.setWidget(pills_widget)
-        container_layout.addWidget(pills_scroll)
+        self.keycode_search_box.textChanged.connect(self._filter_all_keycodes)
+        main_layout.addWidget(self.keycode_search_box)
 
-        # Results list shown only when global search is active
-        self.keycode_search_results = QListWidget()
-        self.keycode_search_results.setSpacing(2)
-        self.keycode_search_results.hide()
-        self.keycode_search_results.itemClicked.connect(self._on_search_result_selected)
-        container_layout.addWidget(self.keycode_search_results)
-
-        # Tab widget with per-category lists
-        tab_widget = QTabWidget()
-        tab_widget.setTabPosition(QTabWidget.TabPosition.North)
-        container_layout.addWidget(tab_widget)
-
-        # Store flattened key list for global search
-        self._all_keycodes_flat: list[tuple[str, str]] = []
-
-        # Create tabs for each keycode category with improved styling
-        for category, key_list in KEYCODES.items():
-            tab_container = QWidget()
-            tab_layout = QVBoxLayout(tab_container)
-            tab_layout.setContentsMargins(5, 5, 5, 5)
-            tab_layout.setSpacing(5)
-
-            list_widget = QListWidget()
-            list_widget.addItems(key_list)
-            list_widget.itemClicked.connect(self.on_keycode_assigned)
-            list_widget.setSpacing(2)
-            tab_layout.addWidget(list_widget)
-
+        # Horizontal splitter: Category Sidebar | Keycode Content
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # LEFT: Category Sidebar
+        sidebar_widget = QWidget()
+        sidebar_layout = QVBoxLayout(sidebar_widget)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(4)
+        
+        # Store category buttons for state management
+        self.category_buttons = {}
+        self.category_list = list(KEYCODES.keys())
+        
+        # Create category button for each keycode category
+        for category in self.category_list:
             icon = self._get_category_icon(category)
-            tab_widget.addTab(tab_container, f"{icon} {category}")
-
-            # Extend the global search dataset with category context
-            for keycode in key_list:
-                self._all_keycodes_flat.append((category, keycode))
-
-        # Tab for macros (populated dynamically)
-        macro_container = QWidget()
-        macro_layout = QVBoxLayout(macro_container)
-        macro_layout.setContentsMargins(5, 5, 5, 5)
+            count = len(KEYCODES[category])
+            btn = QPushButton(f"{icon} {category} ({count})")
+            btn.setObjectName("categoryButton")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"Show {category} keycodes")
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, cat=category: self.select_category(cat))
+            sidebar_layout.addWidget(btn)
+            self.category_buttons[category] = btn
         
-        macro_info = QLabel("<small>Click a macro to assign it to selected key</small>")
-        macro_info.setStyleSheet("color: #888; padding: 3px;")
-        macro_layout.addWidget(macro_info)
+        sidebar_layout.addStretch()
+        
+        # RIGHT: Keycode Content Area
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
+        
+        # Keycode list
+        self.keycode_list = QListWidget()
+        self.keycode_list.setSpacing(2)
+        self.keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        self.keycode_list.itemDoubleClicked.connect(self.on_keycode_assigned)
+        content_layout.addWidget(self.keycode_list)
+        
+        # Quick action buttons
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(8)
+        
+        combo_btn = QPushButton("⌨ Combo")
+        combo_btn.setToolTip("Create a key combination")
+        combo_btn.clicked.connect(self.assign_combo)
+        actions_layout.addWidget(combo_btn)
+        
+        clear_btn = QPushButton("✖ Clear")
+        clear_btn.setToolTip("Set key to KC.NO (no action)")
+        clear_btn.clicked.connect(lambda: self.set_key_value("KC.NO"))
+        actions_layout.addWidget(clear_btn)
+        
+        transparent_btn = QPushButton("🔄 Transparent")
+        transparent_btn.setToolTip("Set key to KC.TRNS (pass-through to lower layer)")
+        transparent_btn.clicked.connect(lambda: self.set_key_value("KC.TRNS"))
+        actions_layout.addWidget(transparent_btn)
+        
+        actions_layout.addStretch()
+        content_layout.addLayout(actions_layout)
+        
+        # Add sidebar and content to splitter
+        splitter.addWidget(sidebar_widget)
+        splitter.addWidget(content_widget)
+        splitter.setSizes([150, 400])
+        splitter.setStretchFactor(0, 0)  # Sidebar fixed-ish
+        splitter.setStretchFactor(1, 1)  # Content grows
+        
+        main_layout.addWidget(splitter, 1)  # Stretch factor 1
+        
+        # BOTTOM: Macros and TapDance Section
+        macro_td_tabs = QTabWidget()
+        macro_td_tabs.setMaximumHeight(250)
+        
+        # Macros Tab
+        macros_widget = QWidget()
+        macros_layout = QVBoxLayout(macros_widget)
+        macros_layout.setContentsMargins(5, 5, 5, 5)
+        macros_layout.setSpacing(8)
+        
+        macro_info = QLabel("<small>⚡ Click a macro to assign it to the selected key</small>")
+        macro_info.setObjectName("infoBox")
+        macros_layout.addWidget(macro_info)
         
         self.macro_keycode_list = QListWidget()
-        self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
         self.macro_keycode_list.setSpacing(2)
-        macro_layout.addWidget(self.macro_keycode_list)
+        self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        macros_layout.addWidget(self.macro_keycode_list)
         
-        tab_widget.addTab(macro_container, "⚡ Macros")
+        # Macro action buttons
+        macro_actions = QHBoxLayout()
+        macro_actions.setSpacing(8)
         
-        # Tab for TapDance (populated dynamically from custom code)
-        td_container = QWidget()
-        td_layout = QVBoxLayout(td_container)
-        td_layout.setContentsMargins(5, 5, 5, 5)
+        create_macro_btn = QPushButton("➕ Create")
+        create_macro_btn.clicked.connect(self.add_macro)
+        macro_actions.addWidget(create_macro_btn)
         
-        td_info = QLabel("<small>TapDance keys from Custom Code</small>")
-        td_info.setStyleSheet("color: #888; padding: 3px;")
-        td_layout.addWidget(td_info)
+        edit_macro_btn = QPushButton("✎ Edit")
+        edit_macro_btn.clicked.connect(self.edit_macro)
+        macro_actions.addWidget(edit_macro_btn)
+        
+        delete_macro_btn = QPushButton("🗑 Delete")
+        delete_macro_btn.clicked.connect(self.remove_macro)
+        macro_actions.addWidget(delete_macro_btn)
+        
+        macro_actions.addStretch()
+        macros_layout.addLayout(macro_actions)
+        
+        macro_td_tabs.addTab(macros_widget, "⚡ Macros")
+        
+        # TapDance Tab
+        tapdance_widget = QWidget()
+        tapdance_layout = QVBoxLayout(tapdance_widget)
+        tapdance_layout.setContentsMargins(5, 5, 5, 5)
+        tapdance_layout.setSpacing(8)
+        
+        td_info = QLabel("<small>🎯 TapDance keys defined in Custom Code extension</small>")
+        td_info.setObjectName("infoBox")
+        tapdance_layout.addWidget(td_info)
         
         self.tapdance_keycode_list = QListWidget()
-        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
         self.tapdance_keycode_list.setSpacing(2)
-        td_layout.addWidget(self.tapdance_keycode_list)
+        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        tapdance_layout.addWidget(self.tapdance_keycode_list)
         
-        tab_widget.addTab(td_container, "🎯 TapDance")
+        # TapDance action buttons
+        td_actions = QHBoxLayout()
+        td_actions.setSpacing(8)
         
-        # Store reference for session persistence
-        self.keycode_tabs = tab_widget
-        self.keycode_search_box.textChanged.connect(self._filter_all_keycodes)
-        # Connect tab change signal to save session state and sync pills
-        tab_widget.currentChanged.connect(self._on_tab_changed)
+        refresh_td_btn = QPushButton("🔄 Refresh")
+        refresh_td_btn.setToolTip("Scan custom code for TapDance definitions")
+        refresh_td_btn.clicked.connect(self.update_tapdance_list)
+        td_actions.addWidget(refresh_td_btn)
         
-        # Set first pill as active by default
-        if self.category_pills:
-            self.category_pills[0].setChecked(True)
+        td_actions.addStretch()
+        tapdance_layout.addLayout(td_actions)
+        
+        macro_td_tabs.addTab(tapdance_widget, "🎯 TapDance")
+        
+        main_layout.addWidget(macro_td_tabs)
+        
+        # Initialize state
+        self.current_category = None
+        self._all_keycodes_flat = []
+        
+        # Build flat keycode list for search
+        for category, key_list in KEYCODES.items():
+            for keycode in key_list:
+                self._all_keycodes_flat.append((category, keycode))
+        
+        # Select first category by default
+        if self.category_list:
+            self.select_category(self.category_list[0])
         
         return container
+    
+    def select_category(self, category_name: str) -> None:
+        """
+        Switch to selected category and populate keycode list.
+        
+        Updates sidebar button states and displays keycodes for the selected category.
+        Saves the selection to session state for persistence across app restarts.
+        
+        Args:
+            category_name: Name of the category to display (e.g., "Letters", "Modifiers")
+        """
+        # Update button states (only one active at a time)
+        for name, btn in self.category_buttons.items():
+            if name == category_name:
+                btn.setChecked(True)
+                self._apply_active_button_style(btn)
+            else:
+                btn.setChecked(False)
+                self._apply_inactive_button_style(btn)
+        
+        # Populate keycode list with selected category's keycodes
+        self.keycode_list.clear()
+        if category_name in KEYCODES:
+            keycodes = KEYCODES[category_name]
+            self.keycode_list.addItems(keycodes)
+        
+        # Update current category tracking
+        self.current_category = category_name
+        
+        # Save to session state
+        self.save_session_state()
+    
+    def _apply_active_button_style(self, button: QPushButton) -> None:
+        """
+        Apply active (selected) styling to a category button.
+        
+        Args:
+            button: The QPushButton to style as active
+        """
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #4a9aff;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 10px 12px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #60a5fa;
+            }
+        """)
+    
+    def _apply_inactive_button_style(self, button: QPushButton) -> None:
+        """
+        Apply inactive (unselected) styling to a category button.
+        
+        Args:
+            button: The QPushButton to style as inactive
+        """
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #374151;
+                color: #e5e7eb;
+                border-radius: 6px;
+                padding: 10px 12px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #4b5563;
+            }
+        """)
     
     def _get_category_icon(self, category):
         """Return an appropriate icon emoji for each category."""
@@ -6713,32 +6820,54 @@ class KMKConfigurator(QMainWindow):
     
     def _filter_all_keycodes(self, filter_text: str) -> None:
         """
-        Filter and display keycodes across every category.
-
+        Search across all categories and display results grouped by category.
+        
+        When search is active, results are organized with category headers.
+        When search is cleared, returns to showing the current category.
+        
         Args:
-            filter_text: User-entered search text (case-insensitive).
+            filter_text: User-entered search text (case-insensitive)
         """
         if not hasattr(self, "_all_keycodes_flat"):
             return
 
         search_value = (filter_text or "").strip().lower()
 
-        self.keycode_search_results.clear()
+        # If search is empty, show current category
         if not search_value:
-            self.keycode_search_results.hide()
-            if self.keycode_tabs is not None:
-                self.keycode_tabs.show()
+            if hasattr(self, 'current_category') and self.current_category:
+                self.select_category(self.current_category)
+            elif hasattr(self, 'category_list') and self.category_list:
+                self.select_category(self.category_list[0])
             return
+
+        # Search across all categories
+        self.keycode_list.clear()
+        found_any = False
+        current_category_shown = None
 
         for category, keycode in self._all_keycodes_flat:
             if search_value in keycode.lower():
-                item_text = f"{category} • {keycode}"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.ItemDataRole.UserRole, keycode)
-                self.keycode_search_results.addItem(item)
+                found_any = True
+                
+                # Add category header if this is first result from this category
+                if category != current_category_shown:
+                    header_item = QListWidgetItem(f"━━━ {category} ━━━")
+                    header_item.setForeground(QColor("#9ca3af"))
+                    header_item.setBackground(QColor("#1f2937"))
+                    header_item.setFlags(header_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                    self.keycode_list.addItem(header_item)
+                    current_category_shown = category
+                
+                # Add matching keycode
+                item = QListWidgetItem(keycode)
+                self.keycode_list.addItem(item)
 
-        self.keycode_tabs.hide()
-        self.keycode_search_results.show()
+        if not found_any:
+            no_results = QListWidgetItem("No matching keycodes found")
+            no_results.setForeground(QColor("#9ca3af"))
+            no_results.setFlags(no_results.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            self.keycode_list.addItem(no_results)
 
     def _on_search_result_selected(self, item: QListWidgetItem) -> None:
         """Assign keycode chosen from the global search result list."""
@@ -6787,6 +6916,24 @@ class KMKConfigurator(QMainWindow):
         
         # Save session state
         self.save_session_state()
+    
+    def _get_category_icon(self, category):
+        """Return an appropriate icon emoji for each category."""
+        icons = {
+            "Letters": "🔤",
+            "Numbers & Symbols": "🔢",
+            "Editing": "✏",
+            "Modifiers": "⌨",
+            "Navigation": "🧭",
+            "Function Keys": "🔧",
+            "Media & Volume": "🔊",
+            "Brightness": "💡",
+            "Numpad": "🔢",
+            "Mouse": "🖱",
+            "Layer Switching": "📚",
+            "Special": "⭐"
+        }
+        return icons.get(category, "🔸")
 
     def on_keycode_assigned(self, item):
         keycode = item.text()
@@ -6828,12 +6975,25 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
 
     def edit_macro(self):
-        selected_items = self.macro_list_widget.selectedItems()
+        """
+        Edit an existing macro.
+        
+        Opens the macro editor dialog pre-populated with the selected macro's
+        data. If the macro name changes, updates all keymap references.
+        Prompts user to select a macro from the list if none is selected.
+        """
+        selected_items = self.macro_keycode_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "No Macro Selected", "Please select a macro to edit.")
+            QMessageBox.warning(self, "No Macro Selected", "Please select a macro from the list to edit.")
             return
         
-        name = selected_items[0].text()
+        # Extract macro name from "MACRO(name)" format
+        item_text = selected_items[0].text()
+        if item_text.startswith("MACRO(") and item_text.endswith(")"):
+            name = item_text[6:-1]  # Strip "MACRO(" and ")"
+        else:
+            name = item_text
+        
         sequence = self.macros.get(name, [])
         
         dialog = MacroEditorDialog(macro_name=name, macro_sequence=sequence, parent=self)
@@ -6863,10 +7023,24 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
 
     def remove_macro(self):
-        selected_items = self.macro_list_widget.selectedItems()
-        if not selected_items: return
+        """
+        Remove a macro from the configuration.
         
-        name = selected_items[0].text()
+        Prompts for confirmation before deletion. Replaces all keymap
+        occurrences of the deleted macro with the default key (KC.NO).
+        """
+        selected_items = self.macro_keycode_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Macro Selected", "Please select a macro from the list to delete.")
+            return
+        
+        # Extract macro name from "MACRO(name)" format
+        item_text = selected_items[0].text()
+        if item_text.startswith("MACRO(") and item_text.endswith(")"):
+            name = item_text[6:-1]  # Strip "MACRO(" and ")"
+        else:
+            name = item_text
+        
         reply = QMessageBox.question(self, "Remove Macro", f"Are you sure you want to remove the '{name}' macro?")
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -6884,15 +7058,24 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
             
     def update_macro_list(self):
-        self.macro_list_widget.clear()
-        self.macro_list_widget.addItems(sorted(self.macros.keys()))
+        """
+        Refresh the macro list displays with current macro data.
         
-        self.macro_keycode_list.clear()
-        macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
-        self.macro_keycode_list.addItems(macro_keys)
-
-        # Allow double-clicking a macro name in the left list to edit it
-        self.macro_list_widget.itemDoubleClicked.connect(lambda item: self.edit_macro_by_name(item.text()))
+        Updates both the left panel macro list (if exists) and the
+        keycode selector macro tab with formatted macro entries.
+        """
+        # Update left panel list if it exists
+        if hasattr(self, 'macro_list_widget'):
+            self.macro_list_widget.clear()
+            self.macro_list_widget.addItems(sorted(self.macros.keys()))
+            # Allow double-clicking a macro name in the left list to edit it
+            self.macro_list_widget.itemDoubleClicked.connect(lambda item: self.edit_macro_by_name(item.text()))
+        
+        # Update keycode selector macro tab
+        if hasattr(self, 'macro_keycode_list'):
+            self.macro_keycode_list.clear()
+            macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
+            self.macro_keycode_list.addItems(macro_keys)
 
     def edit_macro_by_name(self, name):
         # Open MacroEditorDialog for the macro with given name
