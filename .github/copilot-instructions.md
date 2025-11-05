@@ -56,6 +56,124 @@ def function_name(param1: type, param2: type) -> return_type:
   - **Center**: Layer tabs, keymap grid (5×4 buttons with coordinates and icons), info bar
   - **Right**: Keycode selector with search, Macro/TapDance tabbed management, quick actions
 
+## Modern UI Vision (Next Generation)
+The application should evolve toward a modern, streamlined design with the following characteristics:
+
+### Visual Design Principles
+- **Clean Material Design**: Rounded corners (8px), subtle shadows, smooth transitions
+- **Card-Based Layout**: Group related controls into visually distinct cards with subtle borders
+- **Better Visual Hierarchy**: Use size, color, and spacing to guide user attention
+- **Dark Mode First**: Design around the dark theme; light themes should feel like variants
+- **Accessibility**: High contrast ratios, clear focus indicators, readable typography
+
+### Left Panel (File Management & Extensions)
+**Current State**: Stacked sections with basic buttons
+**Vision**:
+- **Collapsible Cards**: File management, Quick Profiles, Extensions as collapsible sections
+- **Better File Workflow**: 
+  - File selector dropdown with preview of selected config
+  - Recent files quick-access button
+  - "New Configuration" template selector
+- **Extensions Redesign**:
+  - Icon + Label + Toggle switch (instead of checkbox) for each extension
+  - Inline quick-config buttons that open dialogs with minimal friction
+  - Visual indicators showing enabled/disabled state (blue = enabled, gray = disabled)
+- **Profile Management**:
+  - Profile cards showing config name, key count, last modified date
+  - Drag-to-reorder support (future enhancement)
+  - Favorite/star button for quick access
+
+### Center Panel (Keymap Grid)
+**Current State**: 5×4 buttons with coordinates and visual feedback
+**Vision**:
+- **Grid Enhancement**:
+  - Larger buttons (100x100px) with better spacing (12px)
+  - Show layer indicator in top-left corner of each button
+  - Highlight key under mouse hover with subtle glow effect
+  - Selected key: bright blue border (3px) + blue glow shadow
+- **Layer Management**:
+  - Horizontal tabs with layer preview icons
+  - Show key count per layer as small badge
+  - Quick layer duplication/deletion icons
+  - Right-click context menu: Duplicate Layer, Delete, Rename, Clear All Keys
+- **Grid Actions Bar**:
+  - Above grid: Quick actions (Clear Layer, Copy Layer, Paste Layer, Reset to Default)
+  - Context-sensitive help showing current selection info
+  - Coordinates display: "Selected: (Row 2, Col 3) | KC.A"
+
+### Right Panel (Key Assignment)
+**Current State**: Keycode tabs + Macros/TapDance tabs below
+**Vision**:
+- **Top Section - Key Assignment Card**:
+  - Large, prominent display of selected key
+  - Show current assignment (icon + text + description)
+  - Clear visual feedback: "No Key Selected" vs actual key
+  - Quick action buttons in a button group: [⌨ Combo] [✖ Clear] [🔄 Transparent]
+  
+- **Keycode Selector Redesign**:
+  - Search bar with autocomplete and category filter
+  - Horizontal category pills (scrollable): Letters | Numbers | Editing | Modifiers | etc.
+  - Grid view of keycodes (3 columns) instead of list
+  - Each keycode shows icon + name + visual category badge
+  - Hover shows tooltip with full keycode name
+  
+- **Macro/TapDance Section**:
+  - Split into two sections side-by-side (50/50 width)
+  - **Macros Section**:
+    - List of available macros with mini indicator (⚡ icon)
+    - Add/Edit/Delete buttons in a floating action menu
+    - Click macro to assign to selected key
+  - **TapDance Section**:
+    - List of available TapDance keys with indicator (🎯 icon)
+    - Button to open TapDance builder
+    - Refresh button to sync with custom code
+
+### Overall Layout Improvements
+- **Floating Action Buttons**: Context-sensitive FABs for common actions
+- **Tooltips**: Every control has helpful tooltips explaining its purpose
+- **Keyboard Shortcuts**: Visual cues showing keyboard shortcuts (e.g., "↑↓←→ Navigate | ⌫ Clear")
+- **Consistent Spacing**: 
+  - 4px for small gaps
+  - 8px for medium gaps  
+  - 16px for large gaps between major sections
+- **Typography**:
+  - Headers: Bold, 12pt, tracking +0.5%
+  - Labels: Regular, 10pt
+  - Values/Keycodes: Monospace, 11pt
+- **Color Usage**:
+  - Blue (#4a9aff): Active/selected/interactive states
+  - Green (#4ade80): Success/enabled states
+  - Orange (#fb923c): Warnings/alerts
+  - Red (#ef4444): Destructive actions
+  - Gray (#6b7280): Disabled/secondary states
+
+### Navigation & Workflow
+- **Keyboard-First**: All major functions accessible via keyboard
+- **Mouse-Friendly**: Drag-and-drop support for future enhancements
+- **Context Menus**: Right-click on grid, macros, layers for contextual actions
+- **Breadcrumb Navigation**: Show current layer/section context
+- **Undo/Redo**: Visual indicators showing undo/redo stack
+
+### Implementation Priority
+1. **Phase 1 (Visual Polish)**:
+   - Update button styles with rounded corners and better hover states
+   - Add card-based styling to grouped controls
+   - Improve spacing and alignment throughout
+   - Enhanced focus indicators for accessibility
+
+2. **Phase 2 (Structural Improvements)**:
+   - Redesign keycode selector with grid view
+   - Split Macros/TapDance into side-by-side layout
+   - Add floating action menus
+   - Implement context menus
+
+3. **Phase 3 (Advanced Features)**:
+   - Drag-and-drop for layer reordering
+   - Grid right-click context menu
+   - Undo/Redo system
+   - Advanced search and filtering
+
+
 ## Keycode Organization
 - **Categories** Letters, Numbers & Symbols, Editing, Modifiers, Navigation, Function Keys, Media & Volume, Brightness, Numpad, Mouse, Layer Switching, Special
 - **Search** Each keycode tab has a search filter for quick lookup
