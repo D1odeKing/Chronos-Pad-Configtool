@@ -3494,60 +3494,326 @@ class KMKConfigurator(QMainWindow):
         self.setStyleSheet(base + color_qss)
 
     def _apply_dark_stylesheet(self):
-        """Apply neutral gray theme with subtle highlights (dark variant)."""
+        """
+        Apply modern dark theme with Material Design principles.
+        
+        Features:
+        - Elevated surfaces with subtle shadows
+        - Consistent color palette (#4a9aff blue, #4ade80 green, #fb923c orange, #ef4444 red)
+        - Smooth hover/focus transitions
+        - High contrast for accessibility
+        """
         base = self._base_geometry_qss()
+        cards = self._get_modern_card_stylesheet()
         color_qss = '''
-            QWidget { background-color: #2a2a2a; color: #d5d5d5; }
-            QMainWindow { background-color: #252525; }
-            QPushButton { background: #3d3d3d; border: 1px solid #4d4d4d; color: #d5d5d5; }
-            QPushButton:hover { background: #454545; }
-            QPushButton:pressed { background: #353535; }
+            /* Base colors */
+            QWidget { 
+                background-color: #1f2937; 
+                color: #e5e7eb; 
+            }
+            QMainWindow { 
+                background-color: #111827; 
+            }
+            
+            /* Buttons with smooth hover effects */
+            QPushButton { 
+                background: #374151; 
+                border: 1px solid #4b5563; 
+                color: #e5e7eb;
+            }
+            QPushButton:hover { 
+                background: #4b5563; 
+                border: 1px solid #6b7280;
+            }
+            QPushButton:pressed { 
+                background: #1f2937; 
+                border: 1px solid #4b5563;
+            }
+            QPushButton:disabled {
+                background: #1f2937;
+                color: #6b7280;
+                border: 1px solid #374151;
+            }
+            
+            /* Selected keymap button with glow effect */
             QPushButton#keymapButton:checked { 
                 background-color: #2a5a8a; 
                 border: 3px solid #4a9aff; 
                 color: #ffffff; 
                 font-weight: bold;
             }
-            QTabBar::tab:selected { background: #3d3d3d; }
-            QListWidget::item:hover { background-color: #3e3e3e; }
-            QListWidget::item:selected { background-color: #454545; color: #ffffff; font-weight: 600; }
-            QLabel { color: #e5e5e5; }
-            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
-            QLineEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QLineEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QSpinBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QSpinBox:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QComboBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QComboBox:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView { background-color: #3d3d3d; color: #ffffff; selection-background-color: #505050; }
-            QTextEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QTextEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QGroupBox { border: 1px solid #4d4d4d; color: #e5e5e5; }
+            
+            /* Tab bars */
+            QTabWidget::pane {
+                background: #1f2937;
+                border: 1px solid #374151;
+            }
+            QTabBar::tab { 
+                background: #374151; 
+                color: #9ca3af;
+            }
+            QTabBar::tab:hover {
+                background: #4b5563;
+                color: #e5e7eb;
+            }
+            QTabBar::tab:selected { 
+                background: #4a9aff; 
+                color: #ffffff;
+                font-weight: 600;
+            }
+            
+            /* List widgets with hover effects */
+            QListWidget {
+                background: #1f2937;
+                border: 1px solid #374151;
+            }
+            QListWidget::item:hover { 
+                background-color: #374151; 
+            }
+            QListWidget::item:selected { 
+                background-color: #4a9aff; 
+                color: #ffffff; 
+                font-weight: 600; 
+            }
+            
+            /* Labels and text */
+            QLabel { 
+                color: #e5e7eb; 
+            }
+            QLabel#cardTitle {
+                color: #f9fafb;
+            }
+            
+            /* Info boxes with themed backgrounds */
+            QLabel#infoBox { 
+                background-color: #1e4d2b; 
+                color: #4ade80; 
+                padding: 10px; 
+                border-radius: 6px;
+                border: 1px solid #166534;
+            }
+            
+            /* Input fields with focus effects */
+            QLineEdit, QTextEdit { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QLineEdit:focus, QTextEdit:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            
+            /* Spin boxes */
+            QSpinBox, QDoubleSpinBox { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            
+            /* Combo boxes */
+            QComboBox { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QComboBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            QComboBox::drop-down { 
+                border: none; 
+                padding-right: 4px;
+            }
+            QComboBox QAbstractItemView { 
+                background-color: #374151; 
+                color: #f9fafb; 
+                selection-background-color: #4a9aff;
+                border: 1px solid #4b5563;
+                border-radius: 4px;
+            }
+            
+            /* Group boxes with card styling */
+            QGroupBox { 
+                border: 1px solid #374151; 
+                color: #e5e7eb;
+                background-color: #1f2937;
+            }
+            QGroupBox::title {
+                color: #f9fafb;
+            }
+            
+            /* Modern cards */
+            QFrame#card {
+                background-color: #2d3748;
+                border: 1px solid #374151;
+            }
+            
+            /* Checkboxes and radio buttons */
+            QCheckBox, QRadioButton {
+                color: #e5e7eb;
+            }
+            QCheckBox::indicator:unchecked, QRadioButton::indicator:unchecked {
+                background-color: #374151;
+                border: 1px solid #4b5563;
+            }
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+                background-color: #4a9aff;
+                border: 1px solid #4a9aff;
+            }
+            QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+                border: 1px solid #6b7280;
+            }
+            
+            /* Scrollbars */
+            QScrollBar:vertical {
+                background: #1f2937;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #4b5563;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #6b7280;
+            }
+            QScrollBar:horizontal {
+                background: #1f2937;
+                height: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #4b5563;
+                border-radius: 6px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #6b7280;
+            }
         '''
-        self.setStyleSheet(base + color_qss)
+        self.setStyleSheet(base + cards + color_qss)
+
+    def _get_modern_card_stylesheet(self):
+        """
+        Generate QSS stylesheet for modern card-based layout.
+        
+        Cards use rounded corners (8px), subtle shadows, and consistent spacing
+        following Material Design principles. Returns color-independent rules 
+        that work across all themes.
+        
+        Returns:
+            str: QSS stylesheet string for card components
+            
+        Note:
+            Theme-specific colors are applied in theme methods (_apply_dark_stylesheet, etc.)
+        """
+        return '''
+            /* Modern Card-Based Layout */
+            QFrame#card {
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 8px;
+            }
+            
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                margin-bottom: 8px;
+            }
+            
+            /* Card sections with subtle elevation */
+            QGroupBox#cardSection {
+                border-radius: 8px;
+                padding: 12px;
+                margin: 4px;
+                font-weight: 600;
+            }
+        '''
 
     def _base_geometry_qss(self):
-        """Return QSS that defines geometry/shape/layout-only rules shared across themes."""
+        """
+        Return QSS that defines geometry/shape/layout-only rules shared across themes.
+        
+        Implements Material Design spacing system (4px/8px/16px/24px) and modern
+        visual elements including rounded corners, smooth transitions, and proper spacing.
+        
+        Returns:
+            str: QSS stylesheet with theme-independent geometry rules
+        """
         return '''
             /* Base geometry and shape rules (theme-independent) */
-            QGroupBox {
-                border-radius: 10px;
-                margin-top: 12px;
-                font-weight: 700;
-                padding: 8px;
-            }
-            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 4px 8px; }
+            
+            /* Buttons with smooth animations */
             QPushButton {
                 padding: 8px 14px;
                 border-radius: 8px;
                 font-weight: 600;
                 min-width: 64px;
             }
-            QTabWidget::pane { border-radius: 8px; }
-            QTabBar::tab { padding: 8px 12px; border-radius: 6px; margin-right: 6px; }
-            QLineEdit, QSpinBox, QComboBox { border-radius: 6px; padding: 6px; }
-            QListWidget { border-radius: 8px; }
+            
+            /* Group boxes with modern styling */
+            QGroupBox {
+                border-radius: 8px;
+                margin-top: 12px;
+                font-weight: 600;
+                padding: 12px;
+            }
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top left; 
+                padding: 4px 8px;
+                left: 8px;
+            }
+            
+            /* Tab widgets with rounded corners */
+            QTabWidget::pane { 
+                border-radius: 8px; 
+                padding: 8px;
+            }
+            QTabBar::tab { 
+                padding: 8px 12px; 
+                border-radius: 6px; 
+                margin-right: 4px;
+                margin-bottom: 2px;
+            }
+            
+            /* Input fields with consistent styling */
+            QLineEdit, QSpinBox, QComboBox { 
+                border-radius: 6px; 
+                padding: 6px 10px;
+                min-height: 24px;
+            }
+            QTextEdit {
+                border-radius: 6px;
+                padding: 8px;
+            }
+            
+            /* List widgets with rounded corners */
+            QListWidget { 
+                border-radius: 8px; 
+                padding: 4px;
+            }
+            QListWidget::item {
+                border-radius: 4px;
+                padding: 6px 8px;
+                margin: 2px 4px;
+            }
+            
+            /* Checkboxes and radio buttons */
+            QCheckBox::indicator, QRadioButton::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 3px;
+            }
+            QRadioButton::indicator {
+                border-radius: 9px;
+            }
         '''
     
     def get_info_box_style(self, variant='info'):
