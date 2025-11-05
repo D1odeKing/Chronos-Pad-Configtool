@@ -1,5 +1,9 @@
 # Installation Guide
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from David (D1odeKing).
+
+---
+
 ## Quick Start
 
 Choose your preferred installation method:

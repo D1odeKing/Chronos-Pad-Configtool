@@ -1,5 +1,9 @@
 # Building Your Own Executable
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from David (D1odeKing).
+
+---
+
 This guide shows you how to create a standalone Windows executable from the source code.
 
 ---

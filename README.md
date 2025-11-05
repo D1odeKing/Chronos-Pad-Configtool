@@ -7,8 +7,11 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![CircuitPython](https://img.shields.io/badge/CircuitPython-10.0.3-blueviolet.svg)
 ![KMK Firmware](https://img.shields.io/badge/KMK-GPL--3.0-orange.svg)
+![AI Generated](https://img.shields.io/badge/AI-Generated%20Code-blueviolet.svg)
 
-> **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
+> **🤖 AI-Generated Code Notice**: This project's codebase was primarily written by **GitHub Copilot AI** with project direction, testing, and bug detection by **David (D1odeKing)**. See [Attribution](docs/ATTRIBUTION.md) for details.
+
+> **⚠️ Hardware Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
 
 ---
 
@@ -16,14 +19,23 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 
 Complete documentation is organized in the [`docs/`](docs/) folder for easy navigation:
 
+### Getting Started
 | Document | Purpose |
 |----------|---------|
-| **[Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
-| **[CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 10.0.3 on Pico 2 |
-| **[Usage Guide](docs/USAGE.md)** | How to use the configurator |
-| **[Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
-| **[Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
-| **[Build Exe Guide](docs/BUILD_EXE.md)** | Creating your own executable |
+| **[📋 Documentation Index](docs/README.md)** | Complete documentation overview |
+| **[🤖 AI Attribution](docs/ATTRIBUTION.md)** | AI-generated code notice & credits |
+| **[📥 Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
+| **[⚡ CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 10.0.3 on Pico 2 |
+| **[📖 Usage Guide](docs/USAGE.md)** | How to use the configurator |
+
+### Advanced Topics
+| Document | Purpose |
+|----------|---------|
+| **[🔌 Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
+| **[🖥 Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
+| **[🎨 Layer RGB Guide](docs/LAYER_RGB_SWITCHING.md)** | Layer-aware RGB lighting |
+| **[🏗 Architecture Guide](docs/ARCHITECTURE.md)** | Codebase structure & design |
+| **[📦 Build Exe Guide](docs/BUILD_EXE.md)** | Creating your own executable |
 
 ---
 

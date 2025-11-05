@@ -1,5 +1,9 @@
 # OLED Display Guide
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from David (D1odeKing).
+
+---
+
 Complete guide to the OLED display feature and layer-aware visualization.
 
 ---
