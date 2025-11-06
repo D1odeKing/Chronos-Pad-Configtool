@@ -5713,14 +5713,7 @@ class KMKConfigurator(QMainWindow):
                 self.update_tapdance_list()
     
     def update_tapdance_list(self):
-        """Parse custom extension code to find TapDance definitions and update both selectors"""
-        if not hasattr(self, 'tapdance_keycode_list'):
-            return
-        
-        self.tapdance_keycode_list.clear()
-        if hasattr(self, 'tapdance_management_list'):
-            self.tapdance_management_list.clear()
-        
+        """Parse custom extension code to find TapDance definitions and update the list"""
         # Parse the custom extension code for TapDance definitions
         custom_code = self.custom_extension_code.toPlainText() if hasattr(self, 'custom_extension_code') else ""
         
@@ -5734,11 +5727,22 @@ class KMKConfigurator(QMainWindow):
             if match:
                 td_names.append(match.group(1))
         
-        if td_names:
-            sorted_names = sorted(td_names)
-            self.tapdance_keycode_list.addItems(sorted_names)
-            if hasattr(self, 'tapdance_management_list'):
-                self.tapdance_management_list.addItems(sorted_names)
+        # Update keycode list if TapDance category is active
+        if hasattr(self, 'current_category') and self.current_category == "TapDance":
+            self.keycode_list.clear()
+            if td_names:
+                sorted_names = sorted(td_names)
+                self.keycode_list.addItems(sorted_names)
+        
+        # Update tapdance button count
+        if hasattr(self, 'category_buttons') and "TapDance" in self.category_buttons:
+            self.category_buttons["TapDance"].setText(f"🎯 TapDance\n({len(td_names)})")
+        
+        # Also update management list if it exists (for left panel)
+        if hasattr(self, 'tapdance_management_list'):
+            self.tapdance_management_list.clear()
+            if td_names:
+                self.tapdance_management_list.addItems(sorted(td_names))
 
     
     def add_combo_helper(self):
@@ -6606,6 +6610,37 @@ class KMKConfigurator(QMainWindow):
             sidebar_layout.addWidget(btn)
             self.category_buttons[category] = btn
         
+        # Add Macros button to sidebar
+        macro_count = len(self.macros) if hasattr(self, 'macros') else 0
+        macros_btn = QPushButton(f"⚡ Macros\n({macro_count})")
+        macros_btn.setObjectName("categoryButton")
+        macros_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        macros_btn.setToolTip("Show available macros")
+        macros_btn.setCheckable(True)
+        macros_btn.setMinimumHeight(44)
+        macros_btn.setMaximumHeight(48)
+        macros_btn.setMinimumWidth(135)
+        macros_btn.setMaximumWidth(180)
+        macros_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        macros_btn.clicked.connect(lambda: self.select_category("Macros"))
+        sidebar_layout.addWidget(macros_btn)
+        self.category_buttons["Macros"] = macros_btn
+        
+        # Add TapDance button to sidebar
+        tapdance_btn = QPushButton(f"🎯 TapDance\n(0)")
+        tapdance_btn.setObjectName("categoryButton")
+        tapdance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        tapdance_btn.setToolTip("Show TapDance keys from custom code")
+        tapdance_btn.setCheckable(True)
+        tapdance_btn.setMinimumHeight(44)
+        tapdance_btn.setMaximumHeight(48)
+        tapdance_btn.setMinimumWidth(135)
+        tapdance_btn.setMaximumWidth(180)
+        tapdance_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        tapdance_btn.clicked.connect(lambda: self.select_category("TapDance"))
+        sidebar_layout.addWidget(tapdance_btn)
+        self.category_buttons["TapDance"] = tapdance_btn
+        
         # Add stretch at bottom to push buttons to top in fullscreen
         sidebar_layout.addStretch(1)
         
@@ -6625,27 +6660,12 @@ class KMKConfigurator(QMainWindow):
         self.keycode_list.itemDoubleClicked.connect(self.on_keycode_assigned)
         content_layout.addWidget(self.keycode_list, 1)  # Stretch factor to grow
         
-        # Quick action buttons
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
-        
-        combo_btn = QPushButton("⌨ Combo")
-        combo_btn.setToolTip("Create a key combination")
-        combo_btn.clicked.connect(self.assign_combo)
-        actions_layout.addWidget(combo_btn)
-        
-        clear_btn = QPushButton("✖ Clear")
-        clear_btn.setToolTip("Set key to KC.NO (no action)")
-        clear_btn.clicked.connect(lambda: self.set_key_value("KC.NO"))
-        actions_layout.addWidget(clear_btn)
-        
-        transparent_btn = QPushButton("🔄 Transparent")
-        transparent_btn.setToolTip("Set key to KC.TRNS (pass-through to lower layer)")
-        transparent_btn.clicked.connect(lambda: self.set_key_value("KC.TRNS"))
-        actions_layout.addWidget(transparent_btn)
-        
-        actions_layout.addStretch()
-        content_layout.addLayout(actions_layout)
+        # Container for action buttons (will change based on category)
+        self.action_buttons_container = QWidget()
+        self.action_buttons_layout = QHBoxLayout(self.action_buttons_container)
+        self.action_buttons_layout.setSpacing(8)
+        self.action_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.addWidget(self.action_buttons_container)
         
         # Add sidebar and content to splitter
         splitter.addWidget(sidebar_widget)
@@ -6654,80 +6674,11 @@ class KMKConfigurator(QMainWindow):
         splitter.setStretchFactor(0, 0)  # Sidebar fixed-ish
         splitter.setStretchFactor(1, 1)  # Content grows
         
-        main_layout.addWidget(splitter, 3)  # Stretch factor 3 (more room for keycodes)
+        main_layout.addWidget(splitter, 1)  # Full height for splitter
         
-        # BOTTOM: Macros and TapDance Section
-        macro_td_tabs = QTabWidget()
-        macro_td_tabs.setMinimumHeight(180)
-        macro_td_tabs.setMaximumHeight(300)
-        macro_td_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        
-        # Macros Tab
-        macros_widget = QWidget()
-        macros_layout = QVBoxLayout(macros_widget)
-        macros_layout.setContentsMargins(5, 5, 5, 5)
-        macros_layout.setSpacing(8)
-        
-        macro_info = QLabel("<small>⚡ Click a macro to assign it to the selected key</small>")
-        macro_info.setObjectName("infoBox")
-        macros_layout.addWidget(macro_info)
-        
-        self.macro_keycode_list = QListWidget()
-        self.macro_keycode_list.setSpacing(2)
-        self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
-        macros_layout.addWidget(self.macro_keycode_list)
-        
-        # Macro action buttons
-        macro_actions = QHBoxLayout()
-        macro_actions.setSpacing(8)
-        
-        create_macro_btn = QPushButton("➕ Create")
-        create_macro_btn.clicked.connect(self.add_macro)
-        macro_actions.addWidget(create_macro_btn)
-        
-        edit_macro_btn = QPushButton("✎ Edit")
-        edit_macro_btn.clicked.connect(self.edit_macro)
-        macro_actions.addWidget(edit_macro_btn)
-        
-        delete_macro_btn = QPushButton("🗑 Delete")
-        delete_macro_btn.clicked.connect(self.remove_macro)
-        macro_actions.addWidget(delete_macro_btn)
-        
-        macro_actions.addStretch()
-        macros_layout.addLayout(macro_actions)
-        
-        macro_td_tabs.addTab(macros_widget, "⚡ Macros")
-        
-        # TapDance Tab
-        tapdance_widget = QWidget()
-        tapdance_layout = QVBoxLayout(tapdance_widget)
-        tapdance_layout.setContentsMargins(5, 5, 5, 5)
-        tapdance_layout.setSpacing(8)
-        
-        td_info = QLabel("<small>🎯 TapDance keys defined in Custom Code extension</small>")
-        td_info.setObjectName("infoBox")
-        tapdance_layout.addWidget(td_info)
-        
-        self.tapdance_keycode_list = QListWidget()
-        self.tapdance_keycode_list.setSpacing(2)
-        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
-        tapdance_layout.addWidget(self.tapdance_keycode_list)
-        
-        # TapDance action buttons
-        td_actions = QHBoxLayout()
-        td_actions.setSpacing(8)
-        
-        refresh_td_btn = QPushButton("🔄 Refresh")
-        refresh_td_btn.setToolTip("Scan custom code for TapDance definitions")
-        refresh_td_btn.clicked.connect(self.update_tapdance_list)
-        td_actions.addWidget(refresh_td_btn)
-        
-        td_actions.addStretch()
-        tapdance_layout.addLayout(td_actions)
-        
-        macro_td_tabs.addTab(tapdance_widget, "🎯 TapDance")
-        
-        main_layout.addWidget(macro_td_tabs)
+        # Store references to macro and tapdance lists for compatibility
+        self.macro_keycode_list = self.keycode_list
+        self.tapdance_keycode_list = self.keycode_list
         
         # Initialize state
         self.current_category = None
@@ -6749,10 +6700,11 @@ class KMKConfigurator(QMainWindow):
         Switch to selected category and populate keycode list.
         
         Updates sidebar button states and displays keycodes for the selected category.
+        Handles special categories (Macros, TapDance) with appropriate action buttons.
         Saves the selection to session state for persistence across app restarts.
         
         Args:
-            category_name: Name of the category to display (e.g., "Letters", "Modifiers")
+            category_name: Name of the category to display (e.g., "Letters", "Modifiers", "Macros", "TapDance")
         """
         # Update button states (only one active at a time)
         for name, btn in self.category_buttons.items():
@@ -6763,11 +6715,72 @@ class KMKConfigurator(QMainWindow):
                 btn.setChecked(False)
                 self._apply_inactive_button_style(btn)
         
-        # Populate keycode list with selected category's keycodes
+        # Clear action buttons
+        while self.action_buttons_layout.count():
+            child = self.action_buttons_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Populate keycode list based on category
         self.keycode_list.clear()
-        if category_name in KEYCODES:
+        
+        if category_name == "Macros":
+            # Show macros
+            macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
+            self.keycode_list.addItems(macro_keys)
+            
+            # Add macro action buttons
+            create_btn = QPushButton("➕ Create")
+            create_btn.clicked.connect(self.add_macro)
+            create_btn.setToolTip("Create a new macro")
+            self.action_buttons_layout.addWidget(create_btn)
+            
+            edit_btn = QPushButton("✎ Edit")
+            edit_btn.clicked.connect(self.edit_macro)
+            edit_btn.setToolTip("Edit selected macro")
+            self.action_buttons_layout.addWidget(edit_btn)
+            
+            delete_btn = QPushButton("🗑 Delete")
+            delete_btn.clicked.connect(self.remove_macro)
+            delete_btn.setToolTip("Delete selected macro")
+            self.action_buttons_layout.addWidget(delete_btn)
+            
+            self.action_buttons_layout.addStretch()
+            
+        elif category_name == "TapDance":
+            # Show tapdance keys (will be populated by update_tapdance_list)
+            self.update_tapdance_list()
+            
+            # Add tapdance action buttons
+            refresh_btn = QPushButton("🔄 Refresh")
+            refresh_btn.clicked.connect(self.update_tapdance_list)
+            refresh_btn.setToolTip("Refresh TapDance list from custom code")
+            self.action_buttons_layout.addWidget(refresh_btn)
+            
+            self.action_buttons_layout.addStretch()
+            
+        elif category_name in KEYCODES:
+            # Regular keycode category
             keycodes = KEYCODES[category_name]
             self.keycode_list.addItems(keycodes)
+            
+            # Add standard keycode action buttons
+            combo_btn = QPushButton("⌨ Combo")
+            combo_btn.setToolTip("Create a key combination")
+            combo_btn.clicked.connect(self.assign_combo)
+            self.action_buttons_layout.addWidget(combo_btn)
+            
+            clear_btn = QPushButton("✖ Clear")
+            clear_btn.setToolTip("Set key to KC.NO (no action)")
+            clear_btn.clicked.connect(lambda: self.set_key_value("KC.NO"))
+            self.action_buttons_layout.addWidget(clear_btn)
+            
+            transparent_btn = QPushButton("🔄 Transparent")
+            transparent_btn.setToolTip("Set key to KC.TRNS (pass-through to lower layer)")
+            transparent_btn.clicked.connect(lambda: self.set_key_value("KC.TRNS"))
+            self.action_buttons_layout.addWidget(transparent_btn)
+            
+            self.action_buttons_layout.addStretch()
         
         # Update current category tracking
         self.current_category = category_name
@@ -7079,8 +7092,8 @@ class KMKConfigurator(QMainWindow):
         """
         Refresh the macro list displays with current macro data.
         
-        Updates both the left panel macro list (if exists) and the
-        keycode selector macro tab with formatted macro entries.
+        Updates the keycode list if Macros category is active, updates
+        the Macros button count, and updates left panel list if it exists.
         """
         # Update left panel list if it exists
         if hasattr(self, 'macro_list_widget'):
@@ -7089,11 +7102,15 @@ class KMKConfigurator(QMainWindow):
             # Allow double-clicking a macro name in the left list to edit it
             self.macro_list_widget.itemDoubleClicked.connect(lambda item: self.edit_macro_by_name(item.text()))
         
-        # Update keycode selector macro tab
-        if hasattr(self, 'macro_keycode_list'):
-            self.macro_keycode_list.clear()
+        # Update keycode list if Macros category is active
+        if hasattr(self, 'current_category') and self.current_category == "Macros":
+            self.keycode_list.clear()
             macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
-            self.macro_keycode_list.addItems(macro_keys)
+            self.keycode_list.addItems(macro_keys)
+        
+        # Update Macros button count
+        if hasattr(self, 'category_buttons') and "Macros" in self.category_buttons:
+            self.category_buttons["Macros"].setText(f"⚡ Macros\n({len(self.macros)})")
 
     def edit_macro_by_name(self, name):
         # Open MacroEditorDialog for the macro with given name
