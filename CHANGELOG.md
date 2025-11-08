@@ -5,6 +5,44 @@ All notable changes to the Chronos Pad Configuration Tool are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-beta] - 2025-11-08
+
+### Release Notes
+This is the first official beta release of the Chronos Pad Configuration Tool! 🎉
+
+**Status**: Feature-complete beta release ready for community testing and feedback.
+
+### What's Included
+- Full KMK firmware configurator for 5×4 macropad layout
+- Layer support with visual keymap editor
+- Extension support: Rotary Encoder, RGB Matrix, OLED Display, Analog Input
+- Macro system with recording and editing
+- TapDance and Combo support
+- Boot.py configuration with USB settings
+- Profile system for quick configurations
+- Theme support (Dark, Light, Cheerful)
+- Configuration save/load system
+- Automatic dependency management
+
+### Tested Features
+- ✅ Key assignment and layer management
+- ✅ Rotary encoder configuration
+- ✅ RGB matrix configuration with per-key colors
+- ✅ OLED display with layer visualization
+- ✅ Analog slider input mapping
+- ✅ Macro recording and playback
+- ✅ Profile loading and saving
+- ✅ Code generation and export to CIRCUITPY
+
+### Known Issues
+- None currently reported - please file issues on GitHub!
+
+### For Testers
+Please report any bugs, crashes, or unexpected behavior via GitHub Issues:
+https://github.com/D1odeKing/Chronos-Pad-Configtool/issues
+
+---
+
 ## [1.2.0] - 2025-11-08
 
 ### Added
