@@ -6,8 +6,11 @@ Creates a clean distribution structure:
 dist/
   ChronosPadConfigurator/
     ChronosPadConfigurator.exe  (single bundled exe)
-    data/                       (profiles and configs)
+    kmk_Config_Save/            (user configuration saves)
     libraries/                  (downloaded dependencies)
+    profiles.json               (quick-load presets)
+    settings.json               (app preferences)
+    macros.json                 (global macros)
     README.txt                  (usage instructions)
 """
 import subprocess
@@ -53,15 +56,11 @@ try:
     print("\n📁 Creating organized distribution structure...")
     
     dist_root = Path("dist/ChronosPadConfigurator")
-    data_folder = dist_root / "data"
     libraries_folder = dist_root / "libraries"
+    config_save_folder = dist_root / "kmk_Config_Save"
     
-    # Create folders
-    data_folder.mkdir(parents=True, exist_ok=True)
+    # Create folders at root level (no data subfolder)
     libraries_folder.mkdir(parents=True, exist_ok=True)
-    
-    # Create kmk_Config_Save subfolder in data
-    config_save_folder = data_folder / "kmk_Config_Save"
     config_save_folder.mkdir(parents=True, exist_ok=True)
     
     # Move the exe into the ChronosPadConfigurator folder
@@ -72,10 +71,10 @@ try:
         shutil.move(str(exe_source), str(exe_dest))
         print(f"  ✓ Moved ChronosPadConfigurator.exe to ChronosPadConfigurator/")
     
-    # Copy profiles.json to data folder
+    # Copy profiles.json to root folder
     if os.path.exists('profiles.json'):
-        shutil.copy2('profiles.json', data_folder / 'profiles.json')
-        print(f"  ✓ Copied profiles.json to data/")
+        shutil.copy2('profiles.json', dist_root / 'profiles.json')
+        print(f"  ✓ Copied profiles.json to root/")
     
     # Create a .gitkeep in kmk_Config_Save to preserve folder structure
     (config_save_folder / ".gitkeep").touch()
@@ -90,13 +89,12 @@ FOLDER STRUCTURE:
 -----------------
 ChronosPadConfigurator/
 ├── ChronosPadConfigurator.exe  (Main application - double-click to run)
-├── data/                        (Your configurations and settings)
-│   ├── kmk_Config_Save/        (Auto-saved extension configs)
-│   ├── settings.json           (App preferences - auto-created)
-│   ├── macros.json             (Global macros - auto-created)
-│   └── profiles.json           (Quick-load presets)
-└── libraries/                   (Auto-downloaded dependencies)
-    ├── kmk_firmware-main/      (Downloaded on first run)
+├── kmk_Config_Save/            (Your saved configurations)
+├── settings.json               (App preferences - auto-created)
+├── macros.json                 (Global macros - auto-created)
+├── profiles.json               (Quick-load presets)
+└── libraries/                  (Auto-downloaded dependencies)
+    ├── kmk_firmware-main/     (Downloaded on first run)
     └── adafruit-circuitpython-bundle-.../  (Downloaded on first run)
 
 FIRST RUN:
@@ -112,20 +110,20 @@ HOW IT WORKS:
 The executable is FULLY PORTABLE:
 - All paths are relative to ChronosPadConfigurator.exe location
 - Copy the entire ChronosPadConfigurator/ folder anywhere (USB drive, desktop, etc.)
-- The app will always find its data/ and libraries/ folders
+- The app will always find its kmk_Config_Save/ and libraries/ folders
 - Your configs stay with the app - no installation needed!
 
 USAGE:
 ------
-- All your saved configurations are stored in data/kmk_Config_Save/
-- App settings (theme, version, RGB colors) are in data/settings.json
-- Macros are shared across configs in data/macros.json
+- All your saved configurations are stored in kmk_Config_Save/
+- App settings (theme, version, RGB colors) are in settings.json
+- Macros are shared across configs in macros.json
 - The libraries/ folder contains KMK firmware (auto-managed)
 - You can safely delete libraries/ to force a fresh download
 
 SAVED CONFIGURATIONS:
 ---------------------
-When you save a config file, it goes to: data/kmk_Config_Save/YourConfigName.json
+When you save a config file, it goes to: kmk_Config_Save/YourConfigName.json
 This includes:
 - Keymap layout for all layers
 - Extension configurations (encoder, RGB, display, analog input)
@@ -141,14 +139,14 @@ REQUIREMENTS:
 TROUBLESHOOTING:
 ----------------
 If the app can't find libraries:
-1. Make sure data/ and libraries/ folders are in the same directory as the .exe
+1. Make sure kmk_Config_Save/ and libraries/ folders are in the same directory as the .exe
 2. Delete libraries/ folder and restart the app to re-download
 3. Check that you're not running from a compressed/zipped folder
 
 If settings aren't saving:
-1. Make sure the data/ folder exists next to the .exe
-2. Check that you have write permissions in the folder
-3. Try running as administrator (right-click .exe → Run as administrator)
+1. Make sure you have write permissions in the folder
+2. Try running as administrator (right-click .exe → Run as administrator)
+3. Check that settings.json, macros.json, and profiles.json can be created
 
 SUPPORT:
 --------
@@ -177,7 +175,7 @@ Enjoy your Chronos Pad! 🎹
     print("=" * 60)
     print(f"\n📦 Distribution folder: dist\\ChronosPadConfigurator\\")
     print(f"📄 Executable: dist\\ChronosPadConfigurator\\ChronosPadConfigurator.exe")
-    print(f"📁 Data folder: dist\\ChronosPadConfigurator\\data\\")
+    print(f"� Config folder: dist\\ChronosPadConfigurator\\kmk_Config_Save\\")
     print(f"📚 Libraries folder: dist\\ChronosPadConfigurator\\libraries\\")
     print(f"\n💡 The exe is fully portable - copy the entire folder anywhere!")
     print(f"🚀 The app will auto-download dependencies on first run.\n")

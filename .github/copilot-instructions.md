@@ -212,8 +212,9 @@ The application should evolve toward a modern, streamlined design with the follo
 
 ## Persistence Layer
 - **Config Directory** `kmk_Config_Save/` holds user state: `config.json` (full snapshot), extension snippets (`encoder.py`, `analogin.py`, `display.py`), `rgb_matrix.json`, `session.json`
-- **Global Macros** `data/macros.json` stores macros shared across all configurations
+- **Global Macros** `macros.json` stores macros shared across all configurations at root level
 - **Profiles** `profiles.json` is bundled via `ChronosPadConfigurator.spec` and loaded in `setup_hardware_profile_ui`; keep backward compatibility when expanding its schema
+- **Settings File** `settings.json` stores app preferences (theme, CircuitPython version, RGB colors) at root level
 - **Always update helper files** when changing serialization logic to maintain data integrity
 
 ## Dependency Management

@@ -36,11 +36,11 @@ from PyQt6.QtWidgets import (
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
     QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter,
-    QListWidgetItem, QMenu
+    QListWidgetItem, QMenu, QStyledItemDelegate, QStyle
 )
 from PyQt6.QtWidgets import QTextEdit
-from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal, QPoint
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal, QPoint, QRect
+from PyQt6.QtGui import QFont, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
 
@@ -59,31 +59,21 @@ def get_application_path():
 # Set base directory for all file operations
 BASE_DIR = get_application_path()
 
-# Create organized folder structure for portable exe
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# Folder structure - all at root level for simplicity
 LIBRARIES_DIR = os.path.join(BASE_DIR, "libraries")
+CONFIG_SAVE_DIR = os.path.join(BASE_DIR, "kmk_Config_Save")
 
 # Create folders if they don't exist
-os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(LIBRARIES_DIR, exist_ok=True)
+os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
 
 # --- Default Values ---
 DEFAULT_KEY = "KC.NO"
 
-# Store configs in data/ subfolder for organized structure
-CONFIG_SAVE_DIR = os.path.join(DATA_DIR, "kmk_Config_Save")
-os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)  # Ensure config folder exists
-
-# Try to load profiles.json from data/ first, fallback to BASE_DIR for backward compatibility
-PROFILE_FILE_NEW = os.path.join(DATA_DIR, "profiles.json")
-PROFILE_FILE_OLD = os.path.join(BASE_DIR, "profiles.json")
-PROFILE_FILE = PROFILE_FILE_NEW if os.path.exists(PROFILE_FILE_NEW) else PROFILE_FILE_OLD
-
-# Global macros file (shared across all configs)
-MACRO_FILE = os.path.join(DATA_DIR, "macros.json")
-
-# Settings file (app preferences like CircuitPython version)
-SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+# Configuration files - all at root level
+PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
+MACRO_FILE = os.path.join(BASE_DIR, "macros.json")
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
@@ -216,7 +206,7 @@ def save_settings(settings):
         settings: Dictionary of settings to save
     """
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
+        # SETTINGS_FILE is at BASE_DIR, no subfolder needed
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(settings, f, indent=2)
     except Exception as e:
@@ -556,6 +546,84 @@ KEYCODES = {
     "Special": [
         "KC.NO", "KC.TRNS", "KC.RESET"
     ]
+}
+
+# Keycode display labels - shows actual symbol or descriptive name
+# Format: "keycode": "label"
+KEYCODE_LABELS = {
+    # Letters - show the actual letter
+    "KC.A": "A", "KC.B": "B", "KC.C": "C", "KC.D": "D", "KC.E": "E",
+    "KC.F": "F", "KC.G": "G", "KC.H": "H", "KC.I": "I", "KC.J": "J",
+    "KC.K": "K", "KC.L": "L", "KC.M": "M", "KC.N": "N", "KC.O": "O",
+    "KC.P": "P", "KC.Q": "Q", "KC.R": "R", "KC.S": "S", "KC.T": "T",
+    "KC.U": "U", "KC.V": "V", "KC.W": "W", "KC.X": "X", "KC.Y": "Y", "KC.Z": "Z",
+    
+    # Numbers - show the actual number
+    "KC.N1": "1", "KC.N2": "2", "KC.N3": "3", "KC.N4": "4", "KC.N5": "5",
+    "KC.N6": "6", "KC.N7": "7", "KC.N8": "8", "KC.N9": "9", "KC.N0": "0",
+    
+    # Symbols - show the actual symbol
+    "KC.MINS": "-", "KC.EQL": "=", "KC.LBRC": "[", "KC.RBRC": "]",
+    "KC.BSLS": "\\", "KC.SCLN": ";", "KC.QUOT": "'", "KC.GRV": "`",
+    "KC.COMM": ",", "KC.DOT": ".", "KC.SLSH": "/",
+    
+    # Editing keys
+    "KC.ENT": "↵ Enter", "KC.ESC": "Esc", "KC.BSPC": "⌫ Backspace",
+    "KC.TAB": "⇥ Tab", "KC.SPC": "Space", "KC.DEL": "Del", "KC.INS": "Insert",
+    "KC.CAPS": "Caps Lock", "KC.PSCR": "Print Scrn", "KC.SLCK": "Scroll Lock",
+    "KC.PAUS": "Pause", "KC.APP": "Menu",
+    
+    # Modifiers
+    "KC.LCTL": "L Ctrl", "KC.LSFT": "L Shift", "KC.LALT": "L Alt", "KC.LGUI": "L Win/Cmd",
+    "KC.RCTL": "R Ctrl", "KC.RSFT": "R Shift", "KC.RALT": "R Alt", "KC.RGUI": "R Win/Cmd",
+    
+    # Navigation - use arrows
+    "KC.UP": "↑ Up", "KC.DOWN": "↓ Down", "KC.LEFT": "← Left", "KC.RGHT": "→ Right",
+    "KC.HOME": "Home", "KC.END": "End", "KC.PGUP": "PgUp", "KC.PGDN": "PgDn",
+    
+    # Function keys
+    "KC.F1": "F1", "KC.F2": "F2", "KC.F3": "F3", "KC.F4": "F4",
+    "KC.F5": "F5", "KC.F6": "F6", "KC.F7": "F7", "KC.F8": "F8",
+    "KC.F9": "F9", "KC.F10": "F10", "KC.F11": "F11", "KC.F12": "F12",
+    "KC.F13": "F13", "KC.F14": "F14", "KC.F15": "F15", "KC.F16": "F16",
+    "KC.F17": "F17", "KC.F18": "F18", "KC.F19": "F19", "KC.F20": "F20",
+    "KC.F21": "F21", "KC.F22": "F22", "KC.F23": "F23", "KC.F24": "F24",
+    
+    # Media & Volume
+    "KC.MUTE": "🔇 Mute", "KC.VOLU": "🔊 Vol+", "KC.VOLD": "🔉 Vol-",
+    "KC.MNXT": "⏭ Next", "KC.MPRV": "⏮ Prev", "KC.MSTP": "⏹ Stop",
+    "KC.MPLY": "⏯ Play/Pause", "KC.MFFD": "⏩ FFwd", "KC.MRWD": "⏪ RWnd",
+    "KC.EJCT": "⏏ Eject",
+    
+    # Brightness
+    "KC.BRIU": "🔆 Bright+", "KC.BRID": "🔅 Bright-",
+    
+    # Numpad
+    "KC.KP_0": "Num 0", "KC.KP_1": "Num 1", "KC.KP_2": "Num 2",
+    "KC.KP_3": "Num 3", "KC.KP_4": "Num 4", "KC.KP_5": "Num 5",
+    "KC.KP_6": "Num 6", "KC.KP_7": "Num 7", "KC.KP_8": "Num 8", "KC.KP_9": "Num 9",
+    "KC.KP_SLASH": "Num /", "KC.KP_ASTERISK": "Num *", "KC.KP_MINUS": "Num -",
+    "KC.KP_PLUS": "Num +", "KC.KP_ENTER": "Num ↵", "KC.KP_DOT": "Num .",
+    "KC.KP_EQUAL": "Num =", "KC.KP_COMMA": "Num ,", "KC.NUMLOCK": "Num Lock",
+    
+    # Mouse
+    "KC.MS_UP": "🖱↑ M Up", "KC.MS_DOWN": "🖱↓ M Down",
+    "KC.MS_LEFT": "🖱← M Left", "KC.MS_RIGHT": "🖱→ M Right",
+    "KC.MW_UP": "🖱⇡ Wheel Up", "KC.MW_DOWN": "🖱⇣ Wheel Dn",
+    "KC.MB_L": "🖱L Click", "KC.MB_R": "🖱R Click", "KC.MB_M": "🖱M Click",
+    
+    # Layer Switching
+    "KC.MO(1)": "Hold L1", "KC.MO(2)": "Hold L2", "KC.MO(3)": "Hold L3",
+    "KC.MO(4)": "Hold L4", "KC.MO(5)": "Hold L5",
+    "KC.TO(0)": "To L0", "KC.TO(1)": "To L1", "KC.TO(2)": "To L2",
+    "KC.TO(3)": "To L3", "KC.TO(4)": "To L4", "KC.TO(5)": "To L5",
+    "KC.TG(1)": "Toggle L1", "KC.TG(2)": "Toggle L2", "KC.TG(3)": "Toggle L3",
+    "KC.TG(4)": "Toggle L4", "KC.TG(5)": "Toggle L5",
+    "KC.DF(0)": "Default L0", "KC.DF(1)": "Default L1", "KC.DF(2)": "Default L2",
+    "KC.DF(3)": "Default L3", "KC.DF(4)": "Default L4", "KC.DF(5)": "Default L5",
+    
+    # Special
+    "KC.NO": "⊘ No Key", "KC.TRNS": "▽ Trans", "KC.RESET": "⚠ Reset",
 }
 
 
@@ -3727,6 +3795,51 @@ class ToastNotification(QWidget):
 # --- Main Application Window ---
 class KMKConfigurator(QMainWindow):
     """The main application window for configuring KMK-based macropads."""
+
+    class KeycodeListItemDelegate(QStyledItemDelegate):
+        """Custom delegate to render keycode entries with right-aligned labels."""
+
+        def __init__(self, parent_list: QListWidget):
+            super().__init__(parent_list)
+            base_font = parent_list.font()
+            self._key_font = QFont(base_font)
+            self._label_font = QFont(base_font)
+
+        def paint(self, painter: QPainter, option, index):
+            if not (index.flags() & Qt.ItemFlag.ItemIsSelectable):
+                super().paint(painter, option, index)
+                return
+
+            painter.save()
+            self.initStyleOption(option, index)
+            text_value = option.text
+            option.text = ""
+            style = option.widget.style() if option.widget else QApplication.style()
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
+
+            rect = option.rect.adjusted(12, 0, -12, 0)
+            label = index.data(Qt.ItemDataRole.UserRole + 1) or ""
+
+            if option.state & QStyle.StateFlag.State_Selected:
+                pen_color = option.palette.highlightedText().color()
+            else:
+                pen_color = option.palette.text().color()
+
+            painter.setPen(pen_color)
+            painter.setFont(self._key_font)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text_value)
+
+            if label:
+                painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, label)
+
+            painter.restore()
+
+        def sizeHint(self, option, index):
+            base_hint = super().sizeHint(option, index)
+            if base_hint.height() < 28:
+                base_hint.setHeight(28)
+            return base_hint
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("KMK Macropad Configurator - Chronos Pad")
@@ -3970,7 +4083,7 @@ class KMKConfigurator(QMainWindow):
         
         # Note about changing later
         note_label = QLabel(
-            "<small><i>Note: You can change this later by deleting the 'data/settings.json' file.</i></small>"
+            "<small><i>Note: You can change this later by deleting the 'settings.json' file.</i></small>"
         )
         note_label.setWordWrap(True)
         layout.addWidget(note_label)
@@ -4150,6 +4263,7 @@ class KMKConfigurator(QMainWindow):
         self.encoder_config_str = DEFAULT_ENCODER_CONFIG
         self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG
         self.display_config_str = ""
+        self.boot_config_str = ""
         
         # Update display
         self.update_layer_tabs()
@@ -4157,6 +4271,7 @@ class KMKConfigurator(QMainWindow):
         self.update_macro_list()
         self.sync_extension_checkboxes()
         self.update_extension_button_states()
+        self.refresh_boot_config_ui()
         try:
             self.save_extension_configs()
         except Exception:
@@ -5176,14 +5291,9 @@ class KMKConfigurator(QMainWindow):
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
                 f.write(self.display_config_str or '')
             
-            # Save boot.py configuration
+            # Save boot.py configuration - use the stored boot_config_str directly
             with open(os.path.join(CONFIG_SAVE_DIR, 'boot.py'), 'w') as f:
-                # Use generate_boot_config if the UI elements exist, otherwise use stored string
-                if hasattr(self, 'enable_boot_py'):
-                    boot_config = self.generate_boot_config()
-                else:
-                    boot_config = self.boot_config_str
-                f.write(boot_config or '')
+                f.write(self.boot_config_str or '')
 
             rgb_config = self._export_rgb_config()
             with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
@@ -5224,6 +5334,10 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(disp_path):
                 with open(disp_path, 'r') as f:
                     self.display_config_str = f.read()
+            boot_path = os.path.join(CONFIG_SAVE_DIR, 'boot.py')
+            if os.path.exists(boot_path):
+                with open(boot_path, 'r') as f:
+                    self.boot_config_str = f.read()
             rgb_path = os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json')
             if os.path.exists(rgb_path):
                 with open(rgb_path, 'r') as f:
@@ -5799,6 +5913,7 @@ class KMKConfigurator(QMainWindow):
             "You won't be able to edit files without special recovery steps!"
         )
         self.disable_storage_checkbox.toggled.connect(self.on_readonly_toggle)
+        self.disable_storage_checkbox.toggled.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.disable_storage_checkbox)
         
         self.disable_usb_hid_checkbox = QCheckBox("Disable USB keyboard/mouse (advanced)")
@@ -5806,6 +5921,7 @@ class KMKConfigurator(QMainWindow):
             "Only disable this if you know what you're doing.\n"
             "Your device won't function as a keyboard!"
         )
+        self.disable_usb_hid_checkbox.toggled.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.disable_usb_hid_checkbox)
         
         rename_layout = QHBoxLayout()
@@ -5816,6 +5932,8 @@ class KMKConfigurator(QMainWindow):
         rename_layout.addWidget(self.rename_drive_checkbox)
         rename_layout.addWidget(self.drive_name_edit)
         rename_layout.addStretch()
+        self.rename_drive_checkbox.toggled.connect(self.on_rename_drive_toggled)
+        self.drive_name_edit.textChanged.connect(self.on_boot_setting_changed)
         boot_options_layout.addLayout(rename_layout)
         
         boot_options_layout.addWidget(QLabel("Custom boot.py code:"))
@@ -5826,6 +5944,7 @@ class KMKConfigurator(QMainWindow):
             "# storage.remount('/', readonly=False)"
         )
         self.boot_code_editor.setMaximumHeight(120)
+        self.boot_code_editor.textChanged.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.boot_code_editor)
         
         boot_layout.addWidget(self.boot_options_widget)
@@ -5850,7 +5969,7 @@ class KMKConfigurator(QMainWindow):
         
         # Update button states based on checkbox states
         self.update_extension_button_states()
-        self.on_boot_toggle()  # Initialize boot options visibility
+        self.refresh_boot_config_ui()
 
         group.setLayout(main_layout)
         parent_layout.addWidget(group)
@@ -5913,12 +6032,7 @@ class KMKConfigurator(QMainWindow):
         enabled = self.enable_boot_py.isChecked()
         if hasattr(self, 'boot_options_widget'):
             self.boot_options_widget.setEnabled(enabled)
-        
-        # Update boot config string
-        if not enabled:
-            self.boot_config_str = ""
-        else:
-            self.boot_config_str = self.generate_boot_config()
+        self.on_boot_setting_changed()
     
     def on_readonly_toggle(self, checked):
         """Show warning when user tries to enable read-only mode."""
@@ -5940,6 +6054,89 @@ class KMKConfigurator(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 # User cancelled - uncheck the box
                 self.disable_storage_checkbox.setChecked(False)
+
+    def on_boot_setting_changed(self, *_args) -> None:
+        """Regenerate boot.py configuration whenever a related option changes."""
+        if not hasattr(self, 'enable_boot_py'):
+            return
+
+        if self.enable_boot_py.isChecked():
+            self.boot_config_str = self.generate_boot_config()
+        else:
+            self.boot_config_str = ""
+
+        try:
+            self.save_extension_configs()
+        except Exception:
+            # Avoid blocking UI if disk write fails
+            pass
+
+    def on_rename_drive_toggled(self, checked: bool) -> None:
+        """Enable or disable the drive name input and refresh config."""
+        if hasattr(self, 'drive_name_edit'):
+            self.drive_name_edit.setEnabled(checked)
+        self.on_boot_setting_changed()
+
+    def refresh_boot_config_ui(self) -> None:
+        """Synchronize boot configuration controls with the stored script."""
+        if not hasattr(self, 'enable_boot_py'):
+            return
+
+        boot_enabled = bool(self.boot_config_str and self.boot_config_str.strip())
+
+        self.enable_boot_py.blockSignals(True)
+        self.enable_boot_py.setChecked(boot_enabled)
+        self.enable_boot_py.blockSignals(False)
+
+        if hasattr(self, 'boot_options_widget'):
+            self.boot_options_widget.setEnabled(boot_enabled)
+
+        disable_storage = "storage.disable_usb_drive()" in (self.boot_config_str or "")
+        self.disable_storage_checkbox.blockSignals(True)
+        self.disable_storage_checkbox.setChecked(disable_storage)
+        self.disable_storage_checkbox.blockSignals(False)
+
+        disable_usb = "usb_hid.disable()" in (self.boot_config_str or "")
+        self.disable_usb_hid_checkbox.blockSignals(True)
+        self.disable_usb_hid_checkbox.setChecked(disable_usb)
+        self.disable_usb_hid_checkbox.blockSignals(False)
+
+        rename_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*"([^"]+)"', self.boot_config_str or "")
+        rename_enabled = bool(rename_match)
+        self.rename_drive_checkbox.blockSignals(True)
+        self.rename_drive_checkbox.setChecked(rename_enabled)
+        self.rename_drive_checkbox.blockSignals(False)
+
+        self.drive_name_edit.blockSignals(True)
+        self.drive_name_edit.setEnabled(rename_enabled)
+        if rename_match:
+            self.drive_name_edit.setText(rename_match.group(1)[:11])
+        self.drive_name_edit.blockSignals(False)
+
+        custom_code = self._extract_custom_boot_code(self.boot_config_str or "")
+        self.boot_code_editor.blockSignals(True)
+        self.boot_code_editor.setPlainText(custom_code)
+        self.boot_code_editor.blockSignals(False)
+
+    def _extract_custom_boot_code(self, boot_config: str) -> str:
+        """Extract user-provided custom code segment from a boot.py script."""
+        if not boot_config:
+            return ""
+
+        marker = "# Custom configuration:"
+        if marker in boot_config:
+            return boot_config.split(marker, 1)[1].strip()
+
+        toggle_tokens = (
+            "storage.disable_usb_drive()",
+            "usb_hid.disable()",
+            'storage.getmount("/").label',
+        )
+
+        if any(token in boot_config for token in toggle_tokens):
+            return ""
+
+        return boot_config.strip()
     
     def on_encoder_divisor_changed(self, value):
         """Handle encoder divisor spinbox change."""
@@ -6029,6 +6226,7 @@ class KMKConfigurator(QMainWindow):
             
             # Update boot.py config
             self.boot_config_str = dialog.get_boot_config()
+            self.refresh_boot_config_ui()
             
             # Save settings
             self.save_extension_configs()
@@ -6203,25 +6401,33 @@ class KMKConfigurator(QMainWindow):
                 self.custom_extension_code.setPlainText(current_code + code)
 
     def populate_config_file_list(self):
-        """Scans kmk_Config_Save and repo root for JSON files starting with 'KMK_Config' and populates the combo box."""
-        paths = []
-        save_dir = CONFIG_SAVE_DIR
-        if os.path.isdir(save_dir):
-            for f in os.listdir(save_dir):
-                if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                    full = os.path.join(save_dir, f)
-                    paths.append(full)
+        """Populate config selector with saved JSON configs from kmk_Config_Save and project root."""
 
-        for f in os.listdir(BASE_DIR):
-            if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                full = os.path.join(BASE_DIR, f)
-                if full not in paths:
-                    paths.append(full)
+        def _collect(folder: str) -> list[str]:
+            results: list[str] = []
+            if not os.path.isdir(folder):
+                return results
+            for name in os.listdir(folder):
+                lower = name.lower()
+                if lower.startswith('config') and lower.endswith('.json'):
+                    full_path = os.path.join(folder, name)
+                    if os.path.isfile(full_path):
+                        results.append(full_path)
+            return results
+
+        paths = _collect(CONFIG_SAVE_DIR)
+        # Include project-root configs if present (maintains backward compatibility)
+        for path in _collect(BASE_DIR):
+            if path not in paths:
+                paths.append(path)
+
+        paths.sort(key=lambda p: (os.path.dirname(p).lower(), os.path.basename(p).lower()))
 
         self.config_file_combo.blockSignals(True)
         self.config_file_combo.clear()
         display_names = [os.path.relpath(p, BASE_DIR) for p in paths]
         self.config_file_combo.addItems(display_names)
+        self.config_file_combo.setEnabled(bool(display_names))
         self.config_file_combo.blockSignals(False)
     
     def setup_layer_management_ui(self, parent_layout):
@@ -6780,7 +6986,7 @@ class KMKConfigurator(QMainWindow):
 
     def save_macros(self):
         try:
-            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            # MACRO_FILE is at BASE_DIR root, no subfolder needed
             with open(MACRO_FILE, 'w') as f:
                 json.dump(self.macros, f, indent=4)
         except Exception as e:
@@ -6796,10 +7002,29 @@ class KMKConfigurator(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Could not parse macros file ({MACRO_FILE}):\n{e}")
                 self.macros = {}
         else:
-            # Ensure the save directory exists for future saves
-            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            # MACRO_FILE is at BASE_DIR root, no subfolder needed
             self.macros = {}
         self.update_macro_list()
+
+    def get_macros_used_in_keymap(self):
+        """Scan the current keymap and return macros that are actually used.
+        
+        Returns:
+            dict: Dictionary of {macro_name: actions} for macros used in keymap
+        """
+        used_macros = {}
+        
+        # Scan all layers for macro references
+        for layer in self.keymap_data:
+            for row in layer:
+                for key in row:
+                    if isinstance(key, str) and key.startswith("MACRO(") and key.endswith(")"):
+                        # Extract macro name from MACRO(name) format
+                        macro_name = key[6:-1]  # Strip "MACRO(" and ")"
+                        if macro_name in self.macros:
+                            used_macros[macro_name] = self.macros[macro_name]
+        
+        return used_macros
 
     def _sanitize_macros(self, raw_macros):
         sanitized = {}
@@ -6969,6 +7194,7 @@ class KMKConfigurator(QMainWindow):
                 # Load boot.py configuration
                 if "boot_config" in profile:
                     self.boot_config_str = profile.get("boot_config", "")
+                    self.refresh_boot_config_ui()
 
                 self.update_layer_tabs()
                 try:
@@ -7113,6 +7339,8 @@ class KMKConfigurator(QMainWindow):
         self.keycode_list.setSpacing(2)
         self.keycode_list.setMinimumHeight(300)
         self.keycode_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.keycode_delegate = self.KeycodeListItemDelegate(self.keycode_list)
+        self.keycode_list.setItemDelegate(self.keycode_delegate)
         self.keycode_list.itemClicked.connect(self.on_keycode_assigned)
         self.keycode_list.itemDoubleClicked.connect(self.on_keycode_assigned)
         content_layout.addWidget(self.keycode_list, 1)  # Stretch factor to grow
@@ -7151,6 +7379,16 @@ class KMKConfigurator(QMainWindow):
             self.select_category(self.category_list[0])
         
         return container
+
+    def _add_keycode_list_item(self, keycode: str) -> None:
+        """Insert a keycode row with metadata for custom delegate rendering."""
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.DisplayRole, keycode)
+        item.setData(Qt.ItemDataRole.UserRole, keycode)
+        label = KEYCODE_LABELS.get(keycode, "")
+        if label:
+            item.setData(Qt.ItemDataRole.UserRole + 1, label)
+        self.keycode_list.addItem(item)
     
     def select_category(self, category_name: str) -> None:
         """
@@ -7219,7 +7457,10 @@ class KMKConfigurator(QMainWindow):
         elif category_name in KEYCODES:
             # Regular keycode category
             keycodes = KEYCODES[category_name]
-            self.keycode_list.addItems(keycodes)
+            
+            # Add keycodes with right-aligned labels (fixed position from right)
+            for keycode in keycodes:
+                self._add_keycode_list_item(keycode)
             
             # Add standard keycode action buttons
             combo_btn = QPushButton("⌨ Combo")
@@ -7335,7 +7576,11 @@ class KMKConfigurator(QMainWindow):
         current_category_shown = None
 
         for category, keycode in self._all_keycodes_flat:
-            if search_value in keycode.lower():
+            # Get label for search matching
+            label = KEYCODE_LABELS.get(keycode, "")
+            search_text = f"{keycode} {label}".lower()
+            
+            if search_value in search_text:
                 found_any = True
                 
                 # Add category header if this is first result from this category
@@ -7347,9 +7592,8 @@ class KMKConfigurator(QMainWindow):
                     self.keycode_list.addItem(header_item)
                     current_category_shown = category
                 
-                # Add matching keycode
-                item = QListWidgetItem(keycode)
-                self.keycode_list.addItem(item)
+                # Add matching keycode with right-aligned label (fixed position from right)
+                self._add_keycode_list_item(keycode)
 
         if not found_any:
             no_results = QListWidgetItem("No matching keycodes found")
@@ -7424,7 +7668,11 @@ class KMKConfigurator(QMainWindow):
         return icons.get(category, "🔸")
 
     def on_keycode_assigned(self, item):
-        keycode = item.text()
+        # Extract actual keycode from UserRole data, fall back to text for macros/tapdance
+        keycode = item.data(Qt.ItemDataRole.UserRole)
+        if not keycode:
+            keycode = item.text()  # For macros/tapdance which don't have UserRole data
+        
         if self.selected_key_coords:
             row, col = self.selected_key_coords
             self.keymap_data[self.current_layer][row][col] = keycode
@@ -8587,11 +8835,11 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 QMessageBox.critical(self, "Error", f"Could not save code.py file:\n{e}")
 
     def save_configuration_dialog(self):
-        save_dir = "kmk_Config_Save"
-        os.makedirs(save_dir, exist_ok=True)
+        # Ensure config save directory exists
+        os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
         
-        # Set the initial directory to kmk_Config_Save
-        initial_path = os.path.join(save_dir, "config.json")
+        # Set the initial directory to CONFIG_SAVE_DIR
+        initial_path = os.path.join(CONFIG_SAVE_DIR, "config.json")
         
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -8606,6 +8854,13 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             
             try:
                 self.save_configuration_to_path(file_path)
+                # Refresh config list to include the newly saved file
+                if hasattr(self, 'config_file_combo'):
+                    self.populate_config_file_list()
+                    rel_path = os.path.relpath(file_path, BASE_DIR)
+                    idx = self.config_file_combo.findText(rel_path)
+                    if idx >= 0:
+                        self.config_file_combo.setCurrentIndex(idx)
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{e}\n\nTraceback:\n{traceback.format_exc()}")
@@ -8614,8 +8869,11 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             print("Save cancelled by user")
 
     def save_configuration_to_path(self, file_path):
-        """Save complete configuration including all layers, RGB colors, and extension settings
-        Note: Macros are stored globally and not in individual config files."""
+        """Save complete configuration including all layers, RGB colors, extension settings, and used macros.
+        
+        Note: Only macros that are actually used in the keymap are saved with the config.
+        All macros remain in the global macros.json file as well.
+        """
         config_data = {
             "version": "2.0",  # New version format
             "hardware": {
@@ -8629,7 +8887,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "layers": self.keymap_data,
                 "current_layer": self.current_layer,
             },
-            # Macros are no longer saved per-config - they are global
+            "macros": self.get_macros_used_in_keymap(),  # Save macros used in this config
             "rgb": {
                 "enabled": self.enable_rgb,
                 "matrix": self._export_rgb_config(),
@@ -8643,6 +8901,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "analogin": {
                     "enabled": self.enable_analogin,
                     "config_str": self.analogin_config_str,
+                    "settings": load_settings().get('analog_input', {}),  # Save analog input settings
                 },
                 "display": {
                     "enabled": self.enable_display,
@@ -8673,7 +8932,14 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         selected_path = candidate
 
         if not selected_path:
-            selected_path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON Files (*.json)")
+            # Open file dialog starting in kmk_Config_Save folder
+            start_dir = CONFIG_SAVE_DIR if os.path.exists(CONFIG_SAVE_DIR) else BASE_DIR
+            selected_path, _ = QFileDialog.getOpenFileName(
+                self, 
+                "Load Configuration", 
+                start_dir,  # Start in config save directory
+                "JSON Files (*.json)"
+            )
             if not selected_path:
                 return False
 
@@ -8751,6 +9017,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 
                 # Load boot.py configuration
                 self.boot_config_str = config_data.get("boot_config", "")
+                self.refresh_boot_config_ui()
                 
             else:
                 # Old format (v1.0) - backward compatibility
