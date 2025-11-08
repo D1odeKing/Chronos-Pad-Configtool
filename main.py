@@ -81,19 +81,29 @@ PROFILE_FILE = PROFILE_FILE_NEW if os.path.exists(PROFILE_FILE_NEW) else PROFILE
 # Global macros file (shared across all configs)
 MACRO_FILE = os.path.join(DATA_DIR, "macros.json")
 
+# Settings file (app preferences like CircuitPython version)
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
+
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
-CIRCUITPYTHON_BUNDLE_URL = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/latest/download/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
+# CircuitPython bundle URLs - version selected by user on first startup
+CIRCUITPYTHON_BUNDLE_9X = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/{date}/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
+CIRCUITPYTHON_BUNDLE_10X = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/{date}/adafruit-circuitpython-bundle-10.x-mpy-{date}.zip"
 
 class DependencyDownloader(QThread):
-    """Downloads KMK firmware and CircuitPython libraries automatically"""
+    """Downloads KMK firmware and CircuitPython libraries automatically
+    
+    Args:
+        cp_version: CircuitPython version to download (9 or 10)
+    """
     progress = pyqtSignal(str, int)  # message, percentage
     finished = pyqtSignal(bool)  # success
     
-    def __init__(self):
+    def __init__(self, cp_version=9):
         super().__init__()
         # Use organized libraries folder
         self.libraries_dir = LIBRARIES_DIR
+        self.cp_version = cp_version  # Store user's version choice
         
     def run(self):
         """Download all required dependencies"""
@@ -102,7 +112,7 @@ class DependencyDownloader(QThread):
             
             # Check if already downloaded
             kmk_path = os.path.join(self.libraries_dir, "kmk_firmware-main")
-            bundle_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+            bundle_path = os.path.join(self.libraries_dir, f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy")
             
             if os.path.exists(kmk_path) and os.path.exists(bundle_path):
                 self.progress.emit("Dependencies already installed", 100)
@@ -141,14 +151,20 @@ class DependencyDownloader(QThread):
         os.remove(zip_path)
     
     def download_and_extract_bundle(self):
-        """Download and extract CircuitPython bundle"""
+        """Download and extract CircuitPython bundle for selected version"""
+        # Select URL based on version
+        if self.cp_version == 10:
+            url_template = CIRCUITPYTHON_BUNDLE_10X
+        else:
+            url_template = CIRCUITPYTHON_BUNDLE_9X
+        
         # Get latest bundle URL (try a few recent dates)
         import datetime
         today = datetime.date.today()
         
         for days_back in range(7):  # Try last 7 days
             date = (today - datetime.timedelta(days=days_back)).strftime("%Y%m%d")
-            url = CIRCUITPYTHON_BUNDLE_URL.format(date=date)
+            url = url_template.format(date=date)
             
             try:
                 zip_path = os.path.join(self.libraries_dir, "circuitpython_bundle.zip")
@@ -158,12 +174,12 @@ class DependencyDownloader(QThread):
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(self.libraries_dir)
                 
-                # Rename to consistent name
+                # Rename to consistent name (version-specific)
                 extracted_dirs = [d for d in os.listdir(self.libraries_dir) 
-                                if d.startswith("adafruit-circuitpython-bundle-9.x-mpy-")]
+                                if d.startswith(f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy-")]
                 if extracted_dirs:
                     old_path = os.path.join(self.libraries_dir, extracted_dirs[0])
-                    new_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+                    new_path = os.path.join(self.libraries_dir, f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy")
                     if os.path.exists(new_path):
                         shutil.rmtree(new_path)
                     os.rename(old_path, new_path)
@@ -175,7 +191,36 @@ class DependencyDownloader(QThread):
             except Exception:
                 continue
         else:
-            raise Exception("Could not download CircuitPython bundle from recent dates")
+            raise Exception(f"Could not download CircuitPython {self.cp_version}.x bundle from recent dates")
+
+# --- Settings Management ---
+def load_settings():
+    """Load application settings from settings.json
+    
+    Returns:
+        dict: Settings dictionary with keys like 'cp_version'
+    """
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_settings(settings):
+    """Save application settings to settings.json
+    
+    Args:
+        settings: Dictionary of settings to save
+    """
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save settings: {e}")
+
 # --- Hardware Configuration (Fixed) ---
 # Raspberry Pi Pico 5x4 Custom Configuration
 FIXED_ROWS = 5
@@ -3592,21 +3637,45 @@ class KMKConfigurator(QMainWindow):
             return
         libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
-        bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
         
-        if os.path.exists(kmk_path) and os.path.exists(bundle_path):
-            return  # Dependencies already exist
+        # Check if KMK exists
+        if os.path.exists(kmk_path):
+            # Check if CircuitPython bundle exists (either version)
+            bundle_9x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+            bundle_10x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-10.x-mpy")
+            if os.path.exists(bundle_9x) or os.path.exists(bundle_10x):
+                return  # Both dependencies exist
+        
+        # Load settings to check if user already selected version
+        settings = load_settings()
+        cp_version = settings.get('cp_version')
+        
+        # If version not selected, show selection dialog
+        if not cp_version:
+            cp_version = self.show_cp_version_dialog()
+            if not cp_version:
+                QMessageBox.warning(
+                    self,
+                    "Dependencies Required",
+                    "CircuitPython bundle version selection is required.\n"
+                    "Please restart and select a version."
+                )
+                return
+            
+            # Save selected version
+            settings['cp_version'] = cp_version
+            save_settings(settings)
         
         # Show download dialog
         reply = QMessageBox.question(
             self, 
             "Download Dependencies",
-            "This tool requires KMK firmware and CircuitPython libraries.\n"
-            "Would you like to download them automatically?\n\n"
-            "This will download:\n"
-            "• KMK Firmware (GPL-3.0 license)\n"
-            "• Adafruit CircuitPython Bundle (MIT license)\n\n"
-            "Files will be downloaded to the 'libraries' folder.",
+            f"This tool requires KMK firmware and CircuitPython libraries.\n"
+            f"Would you like to download them automatically?\n\n"
+            f"This will download:\n"
+            f"• KMK Firmware (GPL-3.0 license)\n"
+            f"• Adafruit CircuitPython Bundle {cp_version}.x (MIT license)\n\n"
+            f"Files will be downloaded to the 'libraries' folder.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
@@ -3626,11 +3695,156 @@ class KMKConfigurator(QMainWindow):
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.show()
         
-        # Start download thread
-        self.downloader = DependencyDownloader()
+        # Start download thread with selected version
+        self.downloader = DependencyDownloader(cp_version=cp_version)
         self.downloader.progress.connect(self.on_download_progress)
         self.downloader.finished.connect(self.on_download_finished)
         self.downloader.start()
+    
+    def show_cp_version_dialog(self):
+        """Show dialog to select CircuitPython bundle version
+        
+        Returns:
+            int: Selected version (9 or 10), or None if cancelled
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select CircuitPython Version")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Title and description
+        title_label = QLabel("<h3>CircuitPython Bundle Version</h3>")
+        layout.addWidget(title_label)
+        
+        desc_label = QLabel(
+            "Please select which CircuitPython bundle version to download.\n"
+            "This should match the CircuitPython version installed on your device.\n\n"
+            "• CircuitPython 9.x: For CircuitPython 9.0 and newer (up to 9.x)\n"
+            "• CircuitPython 10.x: For CircuitPython 10.0 and newer\n\n"
+            "If you're unsure, CircuitPython 9.x is recommended for most Pico boards."
+        )
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Version selection buttons
+        button_layout = QHBoxLayout()
+        
+        version_9_btn = QPushButton("CircuitPython 9.x")
+        version_9_btn.setMinimumHeight(60)
+        version_9_btn.clicked.connect(lambda: dialog.done(9))
+        button_layout.addWidget(version_9_btn)
+        
+        version_10_btn = QPushButton("CircuitPython 10.x")
+        version_10_btn.setMinimumHeight(60)
+        version_10_btn.clicked.connect(lambda: dialog.done(10))
+        button_layout.addWidget(version_10_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Note about changing later
+        note_label = QLabel(
+            "<small><i>Note: You can change this later by deleting the 'data/settings.json' file.</i></small>"
+        )
+        note_label.setWordWrap(True)
+        layout.addWidget(note_label)
+        
+        result = dialog.exec()
+        return result if result in (9, 10) else None
+    
+    def show_macro_import_dialog(self, new_macros):
+        """Show dialog to import new macros from config file
+        
+        Args:
+            new_macros: Dictionary of {macro_name: actions} for macros not in global store
+            
+        Returns:
+            dict: Selected macros to import, or empty dict if none selected
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Import Macros")
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Title and description
+        title_label = QLabel(f"<h3>New Macros Found ({len(new_macros)})</h3>")
+        layout.addWidget(title_label)
+        
+        desc_label = QLabel(
+            "This configuration file contains macros that are not in your global macro store.\n"
+            "Select which macros you want to import. Imported macros will be available\n"
+            "across all configurations."
+        )
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Scrollable list of macros with checkboxes
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        # Store checkboxes for later retrieval
+        macro_checkboxes = {}
+        
+        for macro_name, actions in new_macros.items():
+            checkbox = QCheckBox(macro_name)
+            checkbox.setChecked(True)  # Default to checked
+            
+            # Add description of macro actions
+            action_count = len(actions)
+            action_preview = f"  ({action_count} action{'s' if action_count != 1 else ''})"
+            if actions:
+                first_action = actions[0]
+                if isinstance(first_action, (list, tuple)) and len(first_action) >= 2:
+                    action_type = first_action[0]
+                    action_preview += f" - starts with {action_type}"
+            
+            checkbox.setText(f"{macro_name}{action_preview}")
+            checkbox.setToolTip(f"Macro: {macro_name}\nActions: {action_count}")
+            
+            scroll_layout.addWidget(checkbox)
+            macro_checkboxes[macro_name] = checkbox
+        
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+        
+        # Button box with Select All / Deselect All / Import / Cancel
+        button_layout = QHBoxLayout()
+        
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in macro_checkboxes.values()])
+        button_layout.addWidget(select_all_btn)
+        
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.clicked.connect(lambda: [cb.setChecked(False) for cb in macro_checkboxes.values()])
+        button_layout.addWidget(deselect_all_btn)
+        
+        button_layout.addStretch()
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        button_layout.addWidget(buttons)
+        
+        layout.addLayout(button_layout)
+        
+        # Show dialog and collect results
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Return only checked macros
+            selected_macros = {
+                name: new_macros[name]
+                for name, checkbox in macro_checkboxes.items()
+                if checkbox.isChecked()
+            }
+            return selected_macros
+        
+        return {}
     
     def on_download_progress(self, message, percentage):
         """Handle download progress updates"""
@@ -8096,16 +8310,30 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 self.keymap_data = keymap_section.get("layers", [])
                 current_layer = keymap_section.get("current_layer", 0)
                 
-                # Load macros (merge into global store)
+                # Load macros (check for new macros and offer to import)
                 config_macros = self._sanitize_macros(config_data.get("macros", {}))
                 if config_macros:
-                    merged_macros = dict(self.macros)
-                    merged_macros.update(config_macros)
-                    self.macros = merged_macros
-                    try:
-                        self.save_macros()
-                    except Exception:
-                        pass
+                    # Find macros that are NEW (not already in global store)
+                    new_macros = {name: actions for name, actions in config_macros.items() 
+                                 if name not in self.macros}
+                    
+                    if new_macros:
+                        # Ask user if they want to import new macros
+                        imported_macros = self.show_macro_import_dialog(new_macros)
+                        if imported_macros:
+                            # Merge imported macros into global store
+                            self.macros.update(imported_macros)
+                            try:
+                                self.save_macros()
+                            except Exception:
+                                pass
+                    
+                    # Also merge any existing macros (in case config uses them)
+                    existing_config_macros = {name: actions for name, actions in config_macros.items() 
+                                            if name in self.macros}
+                    if existing_config_macros:
+                        # Silently include existing macros without asking
+                        pass  # They're already in self.macros
                 
                 # Load RGB settings
                 rgb_section = config_data.get("rgb", {})
