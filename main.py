@@ -2104,18 +2104,18 @@ class PerKeyColorDialog(QDialog):
         settings = load_settings()
         saved_colors = settings.get('rgb_category_colors', {})
         
-        # Default colors - brighter and more distinctive
+        # Default colors - vibrant and highly distinctive (no overlap with granular colors)
         default_colors = {
-            "macro": "#FF3366",      # Bright Pink/Red
-            "basic": "#00D9FF",      # Cyan
-            "modifiers": "#00FF88",  # Bright Green
-            "navigation": "#FFD700", # Gold
-            "function": "#9D7CFF",   # Purple
-            "media": "#FF6B35",      # Orange
-            "mouse": "#FF69B4",      # Hot Pink
-            "layers": "#7FFF00",     # Chartreuse
-            "wasd": "#FF1493",       # Deep Pink
-            "arrows": "#1E90FF",     # Dodger Blue
+            "macro": "#FF0066",      # Electric Pink
+            "basic": "#00FFFF",      # Aqua/Cyan
+            "modifiers": "#00FF00",  # Pure Green
+            "navigation": "#FFCC00", # Amber
+            "function": "#9933FF",   # Vivid Purple
+            "media": "#FF5500",      # Bright Orange
+            "mouse": "#FF66CC",      # Bright Pink
+            "layers": "#66FF00",     # Bright Lime
+            "wasd": "#FF0099",       # Magenta Pink
+            "arrows": "#0099FF",     # Bright Blue
         }
         
         # Merge saved colors with defaults
@@ -2167,19 +2167,20 @@ class PerKeyColorDialog(QDialog):
 
         presets_layout.addWidget(preset_group)
 
+        # Fine-Grained Presets - More vibrant and distinct colors
         self.granular_colors = {
-            "numbers": "#FFA500",
-            "letters": "#87CEEB",
-            "space": "#90EE90",
-            "enter": "#FFB6C1",
-            "backspace": "#FF6347",
-            "tab": "#DDA0DD",
-            "shift": "#F0E68C",
-            "ctrl": "#98FB98",
-            "alt": "#FFDAB9",
-            "keypad_nums": "#FF8C42",
-            "keypad_nav": "#FFC947",
-            "keypad_ops": "#C7A27C",
+            "numbers": "#FF6B00",      # Vivid Orange
+            "letters": "#00BFFF",      # Deep Sky Blue
+            "space": "#00FF7F",        # Spring Green
+            "enter": "#FF1493",        # Deep Pink
+            "backspace": "#FF4500",    # Orange Red
+            "tab": "#DA70D6",          # Orchid
+            "shift": "#FFD700",        # Gold
+            "ctrl": "#32CD32",         # Lime Green
+            "alt": "#FF69B4",          # Hot Pink
+            "keypad_nums": "#FF8C00",  # Dark Orange
+            "keypad_nav": "#9370DB",   # Medium Purple
+            "keypad_ops": "#20B2AA",   # Light Sea Green
         }
 
         granular_labels = {
@@ -2215,6 +2216,14 @@ class PerKeyColorDialog(QDialog):
             apply_btn.clicked.connect(lambda _, k=gran_key: self.apply_granular_color(k))
             granular_grid.addWidget(apply_btn, row, 2)
             row += 1
+        
+        # Add Apply All button for granular presets
+        granular_grid.addWidget(QLabel(""), row, 0)  # Spacer
+        
+        apply_all_granular_btn = QPushButton("Apply All Fine-Grained")
+        apply_all_granular_btn.setStyleSheet("font-weight: bold; padding: 8px;")
+        apply_all_granular_btn.clicked.connect(self.apply_all_granular)
+        granular_grid.addWidget(apply_all_granular_btn, row + 1, 0, 1, 3)
 
         presets_layout.addWidget(granular_group)
         presets_layout.addStretch()
@@ -2604,6 +2613,23 @@ class PerKeyColorDialog(QDialog):
                 idx += 1
 
         self.refresh_key_buttons()
+
+    def apply_all_granular(self):
+        """Apply all fine-grained preset colors at once"""
+        granular_types = [
+            'numbers', 'letters', 'space', 'enter', 'backspace', 
+            'tab', 'shift', 'ctrl', 'alt', 
+            'keypad_nums', 'keypad_nav', 'keypad_ops'
+        ]
+        
+        for gran_type in granular_types:
+            self.apply_granular_color(gran_type)
+        
+        QMessageBox.information(
+            self, 
+            "Apply All Complete",
+            f"Applied all {len(granular_types)} fine-grained color presets to matching keys!"
+        )
 
     def _get_layer_data(self):
         parent = self.parent_ref
