@@ -1,5 +1,9 @@
 # CircuitPython Setup Guide
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from D10D3K1NG.
+
+---
+
 ## ⚠️ Important Version Requirement
 
 This tool **requires CircuitPython 10.0.3** to be installed on your **Raspberry Pi Pico 2 (RP2350)**.

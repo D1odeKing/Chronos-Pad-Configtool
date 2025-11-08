@@ -35,11 +35,12 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QGroupBox, QGridLayout, QSpinBox, QListWidget,
     QTabWidget, QSizePolicy, QLineEdit, QFileDialog, QMessageBox,
     QComboBox, QDialog, QDialogButtonBox, QCheckBox, QInputDialog, QColorDialog,
-    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter
+    QFormLayout, QDoubleSpinBox, QProgressDialog, QScrollArea, QFrame, QSplitter,
+    QListWidgetItem, QMenu, QStyledItemDelegate, QStyle
 )
 from PyQt6.QtWidgets import QTextEdit
-from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, QEvent, QPropertyAnimation, QEasingCurve, QObject, QThread, pyqtSignal, QPoint, QRect
+from PyQt6.QtGui import QFont, QColor, QPainter
 from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 from functools import partial
 
@@ -58,41 +59,42 @@ def get_application_path():
 # Set base directory for all file operations
 BASE_DIR = get_application_path()
 
-# Create organized folder structure for portable exe
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# Folder structure - all at root level for simplicity
 LIBRARIES_DIR = os.path.join(BASE_DIR, "libraries")
+CONFIG_SAVE_DIR = os.path.join(BASE_DIR, "kmk_Config_Save")
 
 # Create folders if they don't exist
-os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(LIBRARIES_DIR, exist_ok=True)
+os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
 
 # --- Default Values ---
 DEFAULT_KEY = "KC.NO"
 
-# Store configs in data/ subfolder for organized structure
-CONFIG_SAVE_DIR = os.path.join(DATA_DIR, "kmk_Config_Save")
-
-# Try to load profiles.json from data/ first, fallback to BASE_DIR for backward compatibility
-PROFILE_FILE_NEW = os.path.join(DATA_DIR, "profiles.json")
-PROFILE_FILE_OLD = os.path.join(BASE_DIR, "profiles.json")
-PROFILE_FILE = PROFILE_FILE_NEW if os.path.exists(PROFILE_FILE_NEW) else PROFILE_FILE_OLD
-
-# Global macros file (shared across all configs)
-MACRO_FILE = os.path.join(DATA_DIR, "macros.json")
+# Configuration files - all at root level
+PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
+MACRO_FILE = os.path.join(BASE_DIR, "macros.json")
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
-CIRCUITPYTHON_BUNDLE_URL = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/latest/download/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
+# CircuitPython bundle URLs - version selected by user on first startup
+CIRCUITPYTHON_BUNDLE_9X = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/{date}/adafruit-circuitpython-bundle-9.x-mpy-{date}.zip"
+CIRCUITPYTHON_BUNDLE_10X = "https://github.com/adafruit/Adafruit_CircuitPython_Bundle/releases/download/{date}/adafruit-circuitpython-bundle-10.x-mpy-{date}.zip"
 
 class DependencyDownloader(QThread):
-    """Downloads KMK firmware and CircuitPython libraries automatically"""
+    """Downloads KMK firmware and CircuitPython libraries automatically
+    
+    Args:
+        cp_version: CircuitPython version to download (9 or 10)
+    """
     progress = pyqtSignal(str, int)  # message, percentage
     finished = pyqtSignal(bool)  # success
     
-    def __init__(self):
+    def __init__(self, cp_version=9):
         super().__init__()
         # Use organized libraries folder
         self.libraries_dir = LIBRARIES_DIR
+        self.cp_version = cp_version  # Store user's version choice
         
     def run(self):
         """Download all required dependencies"""
@@ -101,7 +103,7 @@ class DependencyDownloader(QThread):
             
             # Check if already downloaded
             kmk_path = os.path.join(self.libraries_dir, "kmk_firmware-main")
-            bundle_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+            bundle_path = os.path.join(self.libraries_dir, f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy")
             
             if os.path.exists(kmk_path) and os.path.exists(bundle_path):
                 self.progress.emit("Dependencies already installed", 100)
@@ -140,14 +142,20 @@ class DependencyDownloader(QThread):
         os.remove(zip_path)
     
     def download_and_extract_bundle(self):
-        """Download and extract CircuitPython bundle"""
+        """Download and extract CircuitPython bundle for selected version"""
+        # Select URL based on version
+        if self.cp_version == 10:
+            url_template = CIRCUITPYTHON_BUNDLE_10X
+        else:
+            url_template = CIRCUITPYTHON_BUNDLE_9X
+        
         # Get latest bundle URL (try a few recent dates)
         import datetime
         today = datetime.date.today()
         
         for days_back in range(7):  # Try last 7 days
             date = (today - datetime.timedelta(days=days_back)).strftime("%Y%m%d")
-            url = CIRCUITPYTHON_BUNDLE_URL.format(date=date)
+            url = url_template.format(date=date)
             
             try:
                 zip_path = os.path.join(self.libraries_dir, "circuitpython_bundle.zip")
@@ -157,12 +165,12 @@ class DependencyDownloader(QThread):
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(self.libraries_dir)
                 
-                # Rename to consistent name
+                # Rename to consistent name (version-specific)
                 extracted_dirs = [d for d in os.listdir(self.libraries_dir) 
-                                if d.startswith("adafruit-circuitpython-bundle-9.x-mpy-")]
+                                if d.startswith(f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy-")]
                 if extracted_dirs:
                     old_path = os.path.join(self.libraries_dir, extracted_dirs[0])
-                    new_path = os.path.join(self.libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+                    new_path = os.path.join(self.libraries_dir, f"adafruit-circuitpython-bundle-{self.cp_version}.x-mpy")
                     if os.path.exists(new_path):
                         shutil.rmtree(new_path)
                     os.rename(old_path, new_path)
@@ -174,7 +182,36 @@ class DependencyDownloader(QThread):
             except Exception:
                 continue
         else:
-            raise Exception("Could not download CircuitPython bundle from recent dates")
+            raise Exception(f"Could not download CircuitPython {self.cp_version}.x bundle from recent dates")
+
+# --- Settings Management ---
+def load_settings():
+    """Load application settings from settings.json
+    
+    Returns:
+        dict: Settings dictionary with keys like 'cp_version'
+    """
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_settings(settings):
+    """Save application settings to settings.json
+    
+    Args:
+        settings: Dictionary of settings to save
+    """
+    try:
+        # SETTINGS_FILE is at BASE_DIR, no subfolder needed
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save settings: {e}")
+
 # --- Hardware Configuration (Fixed) ---
 # Raspberry Pi Pico 5x4 Custom Configuration
 FIXED_ROWS = 5
@@ -509,6 +546,84 @@ KEYCODES = {
     "Special": [
         "KC.NO", "KC.TRNS", "KC.RESET"
     ]
+}
+
+# Keycode display labels - shows actual symbol or descriptive name
+# Format: "keycode": "label"
+KEYCODE_LABELS = {
+    # Letters - show the actual letter
+    "KC.A": "A", "KC.B": "B", "KC.C": "C", "KC.D": "D", "KC.E": "E",
+    "KC.F": "F", "KC.G": "G", "KC.H": "H", "KC.I": "I", "KC.J": "J",
+    "KC.K": "K", "KC.L": "L", "KC.M": "M", "KC.N": "N", "KC.O": "O",
+    "KC.P": "P", "KC.Q": "Q", "KC.R": "R", "KC.S": "S", "KC.T": "T",
+    "KC.U": "U", "KC.V": "V", "KC.W": "W", "KC.X": "X", "KC.Y": "Y", "KC.Z": "Z",
+    
+    # Numbers - show the actual number
+    "KC.N1": "1", "KC.N2": "2", "KC.N3": "3", "KC.N4": "4", "KC.N5": "5",
+    "KC.N6": "6", "KC.N7": "7", "KC.N8": "8", "KC.N9": "9", "KC.N0": "0",
+    
+    # Symbols - show the actual symbol
+    "KC.MINS": "-", "KC.EQL": "=", "KC.LBRC": "[", "KC.RBRC": "]",
+    "KC.BSLS": "\\", "KC.SCLN": ";", "KC.QUOT": "'", "KC.GRV": "`",
+    "KC.COMM": ",", "KC.DOT": ".", "KC.SLSH": "/",
+    
+    # Editing keys
+    "KC.ENT": "↵ Enter", "KC.ESC": "Esc", "KC.BSPC": "⌫ Backspace",
+    "KC.TAB": "⇥ Tab", "KC.SPC": "Space", "KC.DEL": "Del", "KC.INS": "Insert",
+    "KC.CAPS": "Caps Lock", "KC.PSCR": "Print Scrn", "KC.SLCK": "Scroll Lock",
+    "KC.PAUS": "Pause", "KC.APP": "Menu",
+    
+    # Modifiers
+    "KC.LCTL": "L Ctrl", "KC.LSFT": "L Shift", "KC.LALT": "L Alt", "KC.LGUI": "L Win/Cmd",
+    "KC.RCTL": "R Ctrl", "KC.RSFT": "R Shift", "KC.RALT": "R Alt", "KC.RGUI": "R Win/Cmd",
+    
+    # Navigation - use arrows
+    "KC.UP": "↑ Up", "KC.DOWN": "↓ Down", "KC.LEFT": "← Left", "KC.RGHT": "→ Right",
+    "KC.HOME": "Home", "KC.END": "End", "KC.PGUP": "PgUp", "KC.PGDN": "PgDn",
+    
+    # Function keys
+    "KC.F1": "F1", "KC.F2": "F2", "KC.F3": "F3", "KC.F4": "F4",
+    "KC.F5": "F5", "KC.F6": "F6", "KC.F7": "F7", "KC.F8": "F8",
+    "KC.F9": "F9", "KC.F10": "F10", "KC.F11": "F11", "KC.F12": "F12",
+    "KC.F13": "F13", "KC.F14": "F14", "KC.F15": "F15", "KC.F16": "F16",
+    "KC.F17": "F17", "KC.F18": "F18", "KC.F19": "F19", "KC.F20": "F20",
+    "KC.F21": "F21", "KC.F22": "F22", "KC.F23": "F23", "KC.F24": "F24",
+    
+    # Media & Volume
+    "KC.MUTE": "🔇 Mute", "KC.VOLU": "🔊 Vol+", "KC.VOLD": "🔉 Vol-",
+    "KC.MNXT": "⏭ Next", "KC.MPRV": "⏮ Prev", "KC.MSTP": "⏹ Stop",
+    "KC.MPLY": "⏯ Play/Pause", "KC.MFFD": "⏩ FFwd", "KC.MRWD": "⏪ RWnd",
+    "KC.EJCT": "⏏ Eject",
+    
+    # Brightness
+    "KC.BRIU": "🔆 Bright+", "KC.BRID": "🔅 Bright-",
+    
+    # Numpad
+    "KC.KP_0": "Num 0", "KC.KP_1": "Num 1", "KC.KP_2": "Num 2",
+    "KC.KP_3": "Num 3", "KC.KP_4": "Num 4", "KC.KP_5": "Num 5",
+    "KC.KP_6": "Num 6", "KC.KP_7": "Num 7", "KC.KP_8": "Num 8", "KC.KP_9": "Num 9",
+    "KC.KP_SLASH": "Num /", "KC.KP_ASTERISK": "Num *", "KC.KP_MINUS": "Num -",
+    "KC.KP_PLUS": "Num +", "KC.KP_ENTER": "Num ↵", "KC.KP_DOT": "Num .",
+    "KC.KP_EQUAL": "Num =", "KC.KP_COMMA": "Num ,", "KC.NUMLOCK": "Num Lock",
+    
+    # Mouse
+    "KC.MS_UP": "🖱↑ M Up", "KC.MS_DOWN": "🖱↓ M Down",
+    "KC.MS_LEFT": "🖱← M Left", "KC.MS_RIGHT": "🖱→ M Right",
+    "KC.MW_UP": "🖱⇡ Wheel Up", "KC.MW_DOWN": "🖱⇣ Wheel Dn",
+    "KC.MB_L": "🖱L Click", "KC.MB_R": "🖱R Click", "KC.MB_M": "🖱M Click",
+    
+    # Layer Switching
+    "KC.MO(1)": "Hold L1", "KC.MO(2)": "Hold L2", "KC.MO(3)": "Hold L3",
+    "KC.MO(4)": "Hold L4", "KC.MO(5)": "Hold L5",
+    "KC.TO(0)": "To L0", "KC.TO(1)": "To L1", "KC.TO(2)": "To L2",
+    "KC.TO(3)": "To L3", "KC.TO(4)": "To L4", "KC.TO(5)": "To L5",
+    "KC.TG(1)": "Toggle L1", "KC.TG(2)": "Toggle L2", "KC.TG(3)": "Toggle L3",
+    "KC.TG(4)": "Toggle L4", "KC.TG(5)": "Toggle L5",
+    "KC.DF(0)": "Default L0", "KC.DF(1)": "Default L1", "KC.DF(2)": "Default L2",
+    "KC.DF(3)": "Default L3", "KC.DF(4)": "Default L4", "KC.DF(5)": "Default L5",
+    
+    # Special
+    "KC.NO": "⊘ No Key", "KC.TRNS": "▽ Trans", "KC.RESET": "⚠ Reset",
 }
 
 
@@ -1442,6 +1557,10 @@ class AnalogInConfigDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Analog Slider Configuration (GP28)")
         self.resize(550, 500)
+        
+        # Load saved settings from settings.json
+        settings = load_settings()
+        analog_settings = settings.get('analog_input', {})
 
         main_layout = QVBoxLayout(self)
         
@@ -1460,13 +1579,17 @@ class AnalogInConfigDialog(QDialog):
         mode_group = QGroupBox("Slider Function")
         mode_layout = QVBoxLayout()
         
+        # Load saved mode (default to volume)
+        saved_mode = analog_settings.get('mode', 'volume')
+        
         self.mode_volume = QCheckBox("Volume Control")
-        self.mode_volume.setChecked(True)
+        self.mode_volume.setChecked(saved_mode == 'volume')
         self.mode_volume.setToolTip("Use slider to control system volume (up/down)")
         self.mode_volume.toggled.connect(self.on_mode_changed)
         mode_layout.addWidget(self.mode_volume)
         
         self.mode_brightness = QCheckBox("LED Brightness Control")
+        self.mode_brightness.setChecked(saved_mode == 'brightness')
         self.mode_brightness.setToolTip("Use slider to control RGB LED brightness (0-100%)")
         self.mode_brightness.toggled.connect(self.on_mode_changed)
         mode_layout.addWidget(self.mode_brightness)
@@ -1483,7 +1606,7 @@ class AnalogInConfigDialog(QDialog):
         self.poll_interval_spin = QDoubleSpinBox()
         self.poll_interval_spin.setRange(0.01, 1.0)
         self.poll_interval_spin.setSingleStep(0.01)
-        self.poll_interval_spin.setValue(0.05)
+        self.poll_interval_spin.setValue(analog_settings.get('poll_interval', 0.05))
         self.poll_interval_spin.setSuffix(" sec")
         self.poll_interval_spin.setToolTip("How often to check the slider position (seconds)")
         form_layout.addRow("Poll Interval:", self.poll_interval_spin)
@@ -1492,7 +1615,7 @@ class AnalogInConfigDialog(QDialog):
         self.threshold_spin = QSpinBox()
         self.threshold_spin.setRange(100, 10000)
         self.threshold_spin.setSingleStep(100)
-        self.threshold_spin.setValue(2000)
+        self.threshold_spin.setValue(analog_settings.get('threshold', 2000))
         self.threshold_spin.setToolTip("Minimum slider movement to trigger change (0-65535 range)")
         form_layout.addRow("Sensitivity Threshold:", self.threshold_spin)
         
@@ -1500,9 +1623,12 @@ class AnalogInConfigDialog(QDialog):
         self.step_size_label = QLabel("Volume Step Size:")
         self.step_size_spin = QSpinBox()
         self.step_size_spin.setRange(1, 5)
-        self.step_size_spin.setValue(1)
+        self.step_size_spin.setValue(analog_settings.get('step_size', 1))
         self.step_size_spin.setToolTip("Number of volume steps per slider movement")
         form_layout.addRow(self.step_size_label, self.step_size_spin)
+        
+        # Load RGB max brightness from settings for consistency
+        rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
         
         # Min/Max brightness (only for brightness mode)
         self.min_brightness_label = QLabel("Min Brightness:")
@@ -1510,7 +1636,7 @@ class AnalogInConfigDialog(QDialog):
         self.min_brightness_spin.setRange(0.0, 1.0)
         self.min_brightness_spin.setSingleStep(0.05)
         self.min_brightness_spin.setDecimals(2)
-        self.min_brightness_spin.setValue(0.0)
+        self.min_brightness_spin.setValue(analog_settings.get('min_brightness', 0.0))
         self.min_brightness_spin.setToolTip("Minimum brightness when slider is at bottom (0.0-1.0)")
         form_layout.addRow(self.min_brightness_label, self.min_brightness_spin)
         
@@ -1519,8 +1645,8 @@ class AnalogInConfigDialog(QDialog):
         self.max_brightness_spin.setRange(0.0, 1.0)
         self.max_brightness_spin.setSingleStep(0.05)
         self.max_brightness_spin.setDecimals(2)
-        self.max_brightness_spin.setValue(0.3)
-        self.max_brightness_spin.setToolTip("Maximum brightness when slider is at top (0.0-1.0)")
+        self.max_brightness_spin.setValue(min(analog_settings.get('max_brightness', 0.3), rgb_max_brightness))
+        self.max_brightness_spin.setToolTip(f"Maximum brightness when slider is at top (0.0-1.0)\nEnforced max from settings: {rgb_max_brightness}")
         form_layout.addRow(self.max_brightness_label, self.max_brightness_spin)
         
         main_layout.addLayout(form_layout)
@@ -1572,13 +1698,24 @@ class AnalogInConfigDialog(QDialog):
 
     def get_config(self):
         """Generate the slider configuration code"""
+        # Save settings to settings.json for persistence
+        settings = load_settings()
+        is_volume_mode = self.mode_volume.isChecked()
+        
+        settings['analog_input'] = {
+            'mode': 'volume' if is_volume_mode else 'brightness',
+            'poll_interval': self.poll_interval_spin.value(),
+            'threshold': self.threshold_spin.value(),
+            'step_size': self.step_size_spin.value(),
+            'min_brightness': self.min_brightness_spin.value(),
+            'max_brightness': self.max_brightness_spin.value(),
+        }
+        save_settings(settings)
+        
         # If custom code is provided, use it
         custom_code = self.custom_code_editor.toPlainText().strip()
         if custom_code:
             return custom_code
-        
-        # Check which mode is selected
-        is_volume_mode = self.mode_volume.isChecked()
         
         # Get form values
         poll_interval = self.poll_interval_spin.value()
@@ -1586,6 +1723,10 @@ class AnalogInConfigDialog(QDialog):
         step_size = self.step_size_spin.value()
         min_brightness = self.min_brightness_spin.value()
         max_brightness = self.max_brightness_spin.value()
+        
+        # Enforce RGB max brightness globally
+        rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
+        max_brightness = min(max_brightness, rgb_max_brightness)
         
         if is_volume_mode:
             # Generate volume control code
@@ -1781,6 +1922,10 @@ class PegRgbConfigDialog(QDialog):
         layout = QVBoxLayout(self)
         cfg = config or build_default_rgb_matrix_config()
         self._base_config = cfg
+        
+        # Load RGB max brightness from settings
+        settings = load_settings()
+        self.rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
 
         form = QFormLayout()
 
@@ -1791,7 +1936,11 @@ class PegRgbConfigDialog(QDialog):
         self.brightness_spin.setRange(0.0, 1.0)
         self.brightness_spin.setSingleStep(0.05)
         self.brightness_spin.setDecimals(2)
-        self.brightness_spin.setValue(float(cfg.get("brightness_limit", 0.5)))
+        # Enforce max brightness from settings
+        current_brightness = float(cfg.get("brightness_limit", 0.5))
+        self.brightness_spin.setValue(min(current_brightness, self.rgb_max_brightness))
+        self.brightness_spin.setMaximum(self.rgb_max_brightness)
+        self.brightness_spin.setToolTip(f"Brightness limit (0.0-1.0)\nGlobal max enforced: {self.rgb_max_brightness}")
         form.addRow("Brightness limit:", self.brightness_spin)
 
         self.underglow_spin = QSpinBox()
@@ -1872,7 +2021,9 @@ class PegRgbConfigDialog(QDialog):
         result["key_colors"] = dict(self._base_config.get("key_colors", {}))
         result["underglow_colors"] = dict(self._base_config.get("underglow_colors", {}))
         result["pixel_pin"] = self.pixel_pin_edit.text().strip() or FIXED_RGB_PIN
-        result["brightness_limit"] = float(self.brightness_spin.value())
+        # Enforce global max brightness
+        brightness_value = float(self.brightness_spin.value())
+        result["brightness_limit"] = min(brightness_value, self.rgb_max_brightness)
         result["num_underglow"] = int(self.underglow_spin.value())
         order = self.rgb_order_combo.currentText()
         if order not in RGB_ORDER_TUPLES:
@@ -2017,17 +2168,26 @@ class PerKeyColorDialog(QDialog):
         presets_widget = QWidget()
         presets_layout = QVBoxLayout(presets_widget)
 
-        self.category_colors = {
-            "macro": "#FF6B6B",
-            "basic": "#4ECDC4",
-            "modifiers": "#A8E6CF",
-            "navigation": "#FFD93D",
-            "function": "#95E1D3",
-            "media": "#F38181",
-            "mouse": "#AA96DA",
-            "layers": "#FCBAD3",
-            "misc": "#B4B4B4",
+        # Load saved category colors from settings, or use defaults
+        settings = load_settings()
+        saved_colors = settings.get('rgb_category_colors', {})
+        
+        # Default colors - vibrant and highly distinctive (no overlap with granular colors)
+        default_colors = {
+            "macro": "#FF0066",      # Electric Pink
+            "basic": "#00FFFF",      # Aqua/Cyan
+            "modifiers": "#00FF00",  # Pure Green
+            "navigation": "#FFCC00", # Amber
+            "function": "#9933FF",   # Vivid Purple
+            "media": "#FF5500",      # Bright Orange
+            "mouse": "#FF66CC",      # Bright Pink
+            "layers": "#66FF00",     # Bright Lime
+            "wasd": "#FF0099",       # Magenta Pink
+            "arrows": "#0099FF",     # Bright Blue
         }
+        
+        # Merge saved colors with defaults
+        self.category_colors = {**default_colors, **saved_colors}
 
         category_labels = {
             "macro": "Macros",
@@ -2038,14 +2198,15 @@ class PerKeyColorDialog(QDialog):
             "media": "Media",
             "mouse": "Mouse",
             "layers": "Layers",
-            "misc": "Misc",
+            "wasd": "WASD Keys",
+            "arrows": "Arrow Keys",
         }
 
         preset_group = QGroupBox("Keycode Category Presets")
         preset_grid = QGridLayout(preset_group)
         row = 0
         for cat_key, cat_label in category_labels.items():
-            preset_grid.addWidget(QLabel(f"{cat_label}:") , row, 0)
+            preset_grid.addWidget(QLabel(f"{cat_label}:"), row, 0)
 
             color_btn = QPushButton()
             color_btn.setFixedSize(25, 25)
@@ -2059,22 +2220,35 @@ class PerKeyColorDialog(QDialog):
             apply_btn.clicked.connect(lambda _, k=cat_key: self.apply_category_color(k))
             preset_grid.addWidget(apply_btn, row, 2)
             row += 1
+        
+        # Add Apply All and Reset buttons at the bottom
+        preset_grid.addWidget(QLabel(""), row, 0)  # Spacer
+        
+        apply_all_btn = QPushButton("Apply All Categories")
+        apply_all_btn.setStyleSheet("font-weight: bold; padding: 8px;")
+        apply_all_btn.clicked.connect(self.apply_all_categories)
+        preset_grid.addWidget(apply_all_btn, row + 1, 0, 1, 3)
+        
+        reset_btn = QPushButton("Reset to Default Colors")
+        reset_btn.clicked.connect(self.reset_category_colors)
+        preset_grid.addWidget(reset_btn, row + 2, 0, 1, 3)
 
         presets_layout.addWidget(preset_group)
 
+        # Fine-Grained Presets - More vibrant and distinct colors
         self.granular_colors = {
-            "numbers": "#FFA500",
-            "letters": "#87CEEB",
-            "space": "#90EE90",
-            "enter": "#FFB6C1",
-            "backspace": "#FF6347",
-            "tab": "#DDA0DD",
-            "shift": "#F0E68C",
-            "ctrl": "#98FB98",
-            "alt": "#FFDAB9",
-            "keypad_nums": "#FF8C42",
-            "keypad_nav": "#FFC947",
-            "keypad_ops": "#C7A27C",
+            "numbers": "#FF6B00",      # Vivid Orange
+            "letters": "#00BFFF",      # Deep Sky Blue
+            "space": "#00FF7F",        # Spring Green
+            "enter": "#FF1493",        # Deep Pink
+            "backspace": "#FF4500",    # Orange Red
+            "tab": "#DA70D6",          # Orchid
+            "shift": "#FFD700",        # Gold
+            "ctrl": "#32CD32",         # Lime Green
+            "alt": "#FF69B4",          # Hot Pink
+            "keypad_nums": "#FF8C00",  # Dark Orange
+            "keypad_nav": "#9370DB",   # Medium Purple
+            "keypad_ops": "#20B2AA",   # Light Sea Green
         }
 
         granular_labels = {
@@ -2110,6 +2284,14 @@ class PerKeyColorDialog(QDialog):
             apply_btn.clicked.connect(lambda _, k=gran_key: self.apply_granular_color(k))
             granular_grid.addWidget(apply_btn, row, 2)
             row += 1
+        
+        # Add Apply All button for granular presets
+        granular_grid.addWidget(QLabel(""), row, 0)  # Spacer
+        
+        apply_all_granular_btn = QPushButton("Apply All Fine-Grained")
+        apply_all_granular_btn.setStyleSheet("font-weight: bold; padding: 8px;")
+        apply_all_granular_btn.clicked.connect(self.apply_all_granular)
+        granular_grid.addWidget(apply_all_granular_btn, row + 1, 0, 1, 3)
 
         presets_layout.addWidget(granular_group)
         presets_layout.addStretch()
@@ -2277,24 +2459,156 @@ class PerKeyColorDialog(QDialog):
             btn = getattr(self, f"{category}_color_btn", None)
             if btn:
                 btn.setStyleSheet(f"background-color: {hexc};")
+            # Save to settings for persistence
+            self.save_category_colors()
 
     def apply_category_color(self, category):
-        _, layer_data = self._get_layer_data()
-        if layer_data is None:
-            QMessageBox.warning(self, "Error", "Cannot access keymap data")
-            return
-
+        """Apply category color to all matching keys on the grid.
+        
+        Args:
+            category: Category name (e.g., 'macro', 'basic', 'modifiers')
+        """
         color = self.category_colors.get(category, self.fill_color)
-
-        idx = 0
-        for r in range(self.rows):
-            for c in range(self.cols):
-                if r < len(layer_data) and c < len(layer_data[r]):
-                    key = layer_data[r][c]
-                    if self._matches_category(category, key):
-                        self.key_colors[str(idx)] = color
-                idx += 1
+        
+        # Determine which keys belong to this category
+        keys_to_color = self.get_keys_for_category(category)
+        
+        for key_idx in keys_to_color:
+            self.key_colors[str(key_idx)] = color
+        
         self.refresh_key_buttons()
+    
+    def apply_all_categories(self):
+        """Apply all category colors at once to their respective keys."""
+        for category in self.category_colors.keys():
+            keys_to_color = self.get_keys_for_category(category)
+            color = self.category_colors[category]
+            for key_idx in keys_to_color:
+                self.key_colors[str(key_idx)] = color
+        
+        self.refresh_key_buttons()
+        ToastNotification.show_message(
+            self, 
+            "All category colors applied to keymap", 
+            "SUCCESS", 
+            2000
+        )
+    
+    def reset_category_colors(self):
+        """Reset all category colors to their default values."""
+        # Default colors
+        default_colors = {
+            "macro": "#FF3366",
+            "basic": "#00D9FF",
+            "modifiers": "#00FF88",
+            "navigation": "#FFD700",
+            "function": "#9D7CFF",
+            "media": "#FF6B35",
+            "mouse": "#FF69B4",
+            "layers": "#7FFF00",
+            "wasd": "#FF1493",
+            "arrows": "#1E90FF",
+            "misc": "#C0C0C0",
+        }
+        
+        self.category_colors = default_colors.copy()
+        
+        # Update all color buttons
+        for cat_key in self.category_colors.keys():
+            btn = getattr(self, f"{cat_key}_color_btn", None)
+            if btn:
+                btn.setStyleSheet(f"background-color: {self.category_colors[cat_key]};")
+        
+        # Save to settings
+        self.save_category_colors()
+        
+        ToastNotification.show_message(
+            self, 
+            "Category colors reset to defaults", 
+            "INFO", 
+            2000
+        )
+    
+    def save_category_colors(self):
+        """Save current category colors to settings for persistence."""
+        settings = load_settings()
+        settings['rgb_category_colors'] = self.category_colors.copy()
+        save_settings(settings)
+    
+    def get_keys_for_category(self, category):
+        """Get list of key indices that belong to a specific category.
+        
+        Args:
+            category: Category name
+            
+        Returns:
+            list: List of key indices (0-19 for 5x4 grid)
+        """
+        if not hasattr(self, 'parent_ref') or not self.parent_ref:
+            return []
+        
+        # Get current keymap from parent
+        keymap = getattr(self.parent_ref, 'keymap_data', [])
+        if not keymap:
+            return []
+        
+        current_layer = getattr(self.parent_ref, 'current_layer', 0)
+        if current_layer >= len(keymap):
+            return []
+        
+        layer = keymap[current_layer]
+        matching_keys = []
+        
+        # Iterate through all keys in the layer
+        for row_idx, row in enumerate(layer):
+            for col_idx, key_code in enumerate(row):
+                key_index = row_idx * 4 + col_idx  # 5x4 grid
+                
+                if self.key_matches_category(key_code, category):
+                    matching_keys.append(key_index)
+        
+        return matching_keys
+    
+    def key_matches_category(self, key_code, category):
+        """Check if a keycode belongs to a specific category.
+        
+        Args:
+            key_code: Key code string (e.g., 'KC.A', 'KC.LSHIFT')
+            category: Category name
+            
+        Returns:
+            bool: True if key belongs to category
+        """
+        if not key_code or key_code == "KC.NO" or key_code == "KC.TRNS":
+            return False
+        
+        key = key_code.upper()
+        
+        if category == "macro":
+            return key.startswith("MACRO(")
+        elif category == "basic":
+            # Letters and numbers
+            return any(key.endswith(f".{c}") for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        elif category == "modifiers":
+            return any(mod in key for mod in ["LSHIFT", "RSHIFT", "LCTRL", "RCTRL", "LALT", "RALT", "LGUI", "RGUI"])
+        elif category == "navigation":
+            return any(nav in key for nav in ["HOME", "END", "PGUP", "PGDN", "INS", "DEL"])
+        elif category == "function":
+            return any(f"F{i}" in key for i in range(1, 25))
+        elif category == "media":
+            return any(med in key for med in ["MUTE", "VOLU", "VOLD", "MPLY", "MSTP", "MNXT", "MPRV"])
+        elif category == "mouse":
+            return "MS_" in key or "MW_" in key or "MB_" in key
+        elif category == "layers":
+            return any(lyr in key for lyr in ["MO(", "TO(", "TG(", "DF(", "LT("])
+        elif category == "wasd":
+            return any(key.endswith(f".{c}") for c in ["W", "A", "S", "D"])
+        elif category == "arrows":
+            # Only match arrow keys, not page up/down or home/end
+            # Note: RIGHT is abbreviated as RGHT in KMK
+            return any(key.endswith(f".{arr}") for arr in ["UP", "DOWN", "LEFT", "RGHT"])
+        
+        return False
 
     def pick_granular_color(self, granular_type):
         current = self.granular_colors.get(granular_type, self.fill_color)
@@ -2368,6 +2682,23 @@ class PerKeyColorDialog(QDialog):
 
         self.refresh_key_buttons()
 
+    def apply_all_granular(self):
+        """Apply all fine-grained preset colors at once"""
+        granular_types = [
+            'numbers', 'letters', 'space', 'enter', 'backspace', 
+            'tab', 'shift', 'ctrl', 'alt', 
+            'keypad_nums', 'keypad_nav', 'keypad_ops'
+        ]
+        
+        for gran_type in granular_types:
+            self.apply_granular_color(gran_type)
+        
+        QMessageBox.information(
+            self, 
+            "Apply All Complete",
+            f"Applied all {len(granular_types)} fine-grained color presets to matching keys!"
+        )
+
     def _get_layer_data(self):
         parent = self.parent_ref
         if not parent or not hasattr(parent, "keymap_data") or not parent.keymap_data:
@@ -2398,8 +2729,6 @@ class PerKeyColorDialog(QDialog):
                 or keycode.startswith('KC.TG(')
                 or keycode.startswith('KC.DF(')
             )
-        if category == 'misc':
-            return keycode in KEYCODES.get('Misc', [])
         return False
 
     def get_maps(self):
@@ -3111,9 +3440,20 @@ class AdvancedSettingsDialog(QDialog):
         return self.divisor_spin.value()
     
     def get_boot_config(self):
-        """Generate boot.py configuration code."""
+        """Generate boot.py configuration code and save board name to settings."""
         if not self.enable_boot_py.isChecked():
             return ""
+        
+        # Save board name to settings if renamed
+        if self.rename_drive_checkbox.isChecked():
+            board_name = self.drive_name_edit.text().strip()
+            if board_name:
+                settings = load_settings()
+                board_names = settings.get('board_names', [])
+                if board_name not in board_names:
+                    board_names.append(board_name)
+                settings['board_names'] = board_names
+                save_settings(settings)
         
         lines = []
         
@@ -3154,9 +3494,352 @@ class AdvancedSettingsDialog(QDialog):
         return "\n".join(lines)
 
 
+# --- Modern UI Helper Widgets ---
+class ToggleSwitch(QCheckBox):
+    """
+    Modern toggle switch widget using QCheckBox with custom styling.
+    
+    Provides a visual toggle switch interface similar to iOS/Material Design
+    switches instead of traditional checkboxes. The switch animates when toggled
+    and uses theme-aware colors (blue when enabled, gray when disabled).
+    
+    Usage:
+        toggle = ToggleSwitch("Enable Feature")
+        toggle.setChecked(True)
+        toggle.toggled.connect(on_toggle_changed)
+    
+    Note:
+        Styling is applied via objectName="toggleSwitch" in the QSS themes.
+        The switch appearance is controlled entirely by stylesheets.
+    """
+    
+    def __init__(self, text="", parent=None):
+        """
+        Initialize toggle switch.
+        
+        Args:
+            text: Label text displayed next to the switch
+            parent: Parent widget
+        """
+        super().__init__(text, parent)
+        self.setObjectName("toggleSwitch")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+
+class CollapsibleCard(QWidget):
+    """
+    Collapsible card widget with header and expandable content area.
+    
+    Provides a modern card-based UI element with:
+    - Clickable header with title and collapse/expand indicator
+    - Smooth animation when expanding/collapsing
+    - Card styling with rounded corners and subtle shadows
+    - Badge support showing item count or status
+    
+    Usage:
+        card = CollapsibleCard("Section Title", badge_text="3")
+        content_layout = card.get_content_layout()
+        content_layout.addWidget(QLabel("Content goes here"))
+        
+    Note:
+        Content is added to the layout returned by get_content_layout().
+        The card starts expanded by default but can be set to collapsed.
+    """
+    
+    def __init__(self, title, badge_text="", parent=None, start_collapsed=False):
+        """
+        Initialize collapsible card.
+        
+        Args:
+            title: Card header title text
+            badge_text: Optional badge text (e.g., item count)
+            parent: Parent widget
+            start_collapsed: If True, card starts in collapsed state
+        """
+        super().__init__(parent)
+        self.setObjectName("card")
+        
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # Header button (clickable to collapse/expand)
+        self.header_btn = QPushButton()
+        self.header_btn.setObjectName("cardHeader")
+        self.header_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header_btn.clicked.connect(self.toggle_collapsed)
+        
+        # Header layout
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(12, 8, 12, 8)
+        
+        # Expand/collapse indicator
+        self.indicator = QLabel("▼")
+        self.indicator.setObjectName("cardIndicator")
+        header_layout.addWidget(self.indicator)
+        
+        # Title
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("cardTitle")
+        header_layout.addWidget(self.title_label)
+        
+        # Badge (optional)
+        if badge_text:
+            self.badge_label = QLabel(badge_text)
+            self.badge_label.setObjectName("cardBadge")
+            header_layout.addWidget(self.badge_label)
+        else:
+            self.badge_label = None
+        
+        header_layout.addStretch()
+        self.header_btn.setLayout(header_layout)
+        main_layout.addWidget(self.header_btn)
+        
+        # Content container
+        self.content_widget = QWidget()
+        self.content_widget.setObjectName("cardContent")
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(12, 12, 12, 12)
+        self.content_layout.setSpacing(8)
+        main_layout.addWidget(self.content_widget)
+        
+        # Start state
+        self.is_collapsed = start_collapsed
+        if start_collapsed:
+            self.content_widget.hide()
+            self.indicator.setText("▶")
+    
+    def toggle_collapsed(self):
+        """Toggle the collapsed state of the card."""
+        self.is_collapsed = not self.is_collapsed
+        if self.is_collapsed:
+            self.content_widget.hide()
+            self.indicator.setText("▶")
+        else:
+            self.content_widget.show()
+            self.indicator.setText("▼")
+    
+    def set_collapsed(self, collapsed: bool):
+        """Set collapsed state explicitly."""
+        if self.is_collapsed != collapsed:
+            self.toggle_collapsed()
+    
+    def get_content_layout(self) -> QVBoxLayout:
+        """Get the content layout to add widgets to."""
+        return self.content_layout
+    
+    def set_badge_text(self, text: str):
+        """Update badge text."""
+        if self.badge_label:
+            self.badge_label.setText(text)
+        elif text:
+            # Create badge if it doesn't exist
+            self.badge_label = QLabel(text)
+            self.badge_label.setObjectName("cardBadge")
+            self.header_btn.layout().insertWidget(2, self.badge_label)
+
+
+class ToastNotification(QWidget):
+    """
+    Modern toast notification widget for brief user feedback.
+    
+    Features:
+    - Appears bottom-right of parent window
+    - Auto-dismisses after timeout (default 3 seconds)
+    - Smooth fade-in/fade-out animations
+    - Can be manually dismissed
+    - Icon support for different message types (info, success, warning, error)
+    
+    Usage:
+        toast = ToastNotification.show_message(
+            parent_window, 
+            "Configuration saved!", 
+            ToastNotification.SUCCESS,
+            duration=3000
+        )
+    
+    Note:
+        Uses QPropertyAnimation for smooth fade effects.
+        Automatically destroys itself after animation completes.
+    """
+    
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+    
+    def __init__(self, parent, message, message_type=INFO, duration=3000):
+        """
+        Initialize toast notification.
+        
+        Args:
+            parent: Parent window
+            message: Message text to display
+            message_type: Type of message (INFO, SUCCESS, WARNING, ERROR)
+            duration: How long to show toast in milliseconds (default 3000)
+        """
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        
+        # Setup UI
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 12, 16, 12)
+        
+        # Icon based on type
+        icon_text = {
+            self.INFO: "ℹ️",
+            self.SUCCESS: "✅",
+            self.WARNING: "⚠️",
+            self.ERROR: "❌"
+        }.get(message_type, "ℹ️")
+        
+        icon_label = QLabel(icon_text)
+        icon_label.setStyleSheet("font-size: 16pt;")
+        layout.addWidget(icon_label)
+        
+        # Message
+        message_label = QLabel(message)
+        message_label.setStyleSheet("""
+            color: #ffffff;
+            font-size: 10pt;
+            padding: 0 8px;
+        """)
+        message_label.setWordWrap(True)
+        layout.addWidget(message_label)
+        
+        # Background color based on type
+        bg_colors = {
+            self.INFO: "#4a9aff",
+            self.SUCCESS: "#4ade80",
+            self.WARNING: "#fb923c",
+            self.ERROR: "#ef4444"
+        }
+        bg_color = bg_colors.get(message_type, "#4a9aff")
+        
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {bg_color};
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }}
+        """)
+        
+        self.adjustSize()
+        self.duration = duration
+        
+    def show_animated(self):
+        """Show toast with fade-in animation."""
+        # Position at bottom-right of parent
+        if self.parent():
+            parent_rect = self.parent().rect()
+            x = parent_rect.width() - self.width() - 20
+            y = parent_rect.height() - self.height() - 20
+            self.move(x, y)
+        
+        # Fade in
+        self.setWindowOpacity(0)
+        self.show()
+        
+        fade_in = QPropertyAnimation(self, b"windowOpacity")
+        fade_in.setDuration(200)
+        fade_in.setStartValue(0)
+        fade_in.setEndValue(0.95)
+        fade_in.setEasingCurve(QEasingCurve.Type.OutCubic)
+        fade_in.finished.connect(self.start_timer)
+        fade_in.start()
+        
+        self.fade_in_anim = fade_in  # Keep reference
+    
+    def start_timer(self):
+        """Start countdown to auto-dismiss."""
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(self.duration, self.hide_animated)
+    
+    def hide_animated(self):
+        """Hide toast with fade-out animation."""
+        fade_out = QPropertyAnimation(self, b"windowOpacity")
+        fade_out.setDuration(200)
+        fade_out.setStartValue(0.95)
+        fade_out.setEndValue(0)
+        fade_out.setEasingCurve(QEasingCurve.Type.InCubic)
+        fade_out.finished.connect(self.deleteLater)
+        fade_out.start()
+        
+        self.fade_out_anim = fade_out  # Keep reference
+    
+    @staticmethod
+    def show_message(parent, message, message_type=INFO, duration=3000):
+        """
+        Static method to show a toast notification.
+        
+        Args:
+            parent: Parent window
+            message: Message text
+            message_type: Type of message (INFO, SUCCESS, WARNING, ERROR)
+            duration: Display duration in milliseconds
+            
+        Returns:
+            ToastNotification instance
+            
+        Example:
+            ToastNotification.show_message(self, "Key assigned: KC.A", ToastNotification.SUCCESS)
+        """
+        toast = ToastNotification(parent, message, message_type, duration)
+        toast.show_animated()
+        return toast
+
+
 # --- Main Application Window ---
 class KMKConfigurator(QMainWindow):
     """The main application window for configuring KMK-based macropads."""
+
+    class KeycodeListItemDelegate(QStyledItemDelegate):
+        """Custom delegate to render keycode entries with right-aligned labels."""
+
+        def __init__(self, parent_list: QListWidget):
+            super().__init__(parent_list)
+            base_font = parent_list.font()
+            self._key_font = QFont(base_font)
+            self._label_font = QFont(base_font)
+
+        def paint(self, painter: QPainter, option, index):
+            if not (index.flags() & Qt.ItemFlag.ItemIsSelectable):
+                super().paint(painter, option, index)
+                return
+
+            painter.save()
+            self.initStyleOption(option, index)
+            text_value = option.text
+            option.text = ""
+            style = option.widget.style() if option.widget else QApplication.style()
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
+
+            rect = option.rect.adjusted(12, 0, -12, 0)
+            label = index.data(Qt.ItemDataRole.UserRole + 1) or ""
+
+            if option.state & QStyle.StateFlag.State_Selected:
+                pen_color = option.palette.highlightedText().color()
+            else:
+                pen_color = option.palette.text().color()
+
+            painter.setPen(pen_color)
+            painter.setFont(self._key_font)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text_value)
+
+            if label:
+                painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, label)
+
+            painter.restore()
+
+        def sizeHint(self, option, index):
+            base_hint = super().sizeHint(option, index)
+            if base_hint.height() < 28:
+                base_hint.setHeight(28)
+            return base_hint
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("KMK Macropad Configurator - Chronos Pad")
@@ -3181,6 +3864,8 @@ class KMKConfigurator(QMainWindow):
         self.selected_key_coords = None
         self.macropad_buttons = {}
         self.current_layer = 0
+        self.layer_clipboard = None  # For copy/paste layer operations
+        self.key_clipboard = None  # For copy/paste individual key operations
         
         # Fixed hardware configuration
         self.rows = FIXED_ROWS
@@ -3237,6 +3922,7 @@ class KMKConfigurator(QMainWindow):
         center_layout.setSpacing(10)
         
         self.setup_layer_management_ui(center_layout)
+        self.setup_grid_actions_bar(center_layout)  # Add grid actions bar
         self.setup_macropad_grid_ui(center_layout)
 
         # --- Right Panel (Keycode Selection, Macros, TapDance) ---
@@ -3246,7 +3932,8 @@ class KMKConfigurator(QMainWindow):
         right_layout.setSpacing(10)
 
         self.setup_keycode_selector_ui(right_layout)
-        self.setup_macro_ui(right_layout)
+        # Macros and TapDance are now integrated into keycode selector
+        # self.setup_macro_ui(right_layout)  # REMOVED: Now part of keycode selector
         
         # Add panels to splitter
         self.main_splitter.addWidget(left_widget)
@@ -3262,7 +3949,7 @@ class KMKConfigurator(QMainWindow):
         
         # --- Final UI Population ---
         self.recreate_macropad_grid()
-        self.load_profiles()
+        # self.load_profiles()  # REMOVED: Profile selector disabled
         self.load_macros()
         self.update_layer_tabs()
         self.update_macropad_display()
@@ -3289,21 +3976,45 @@ class KMKConfigurator(QMainWindow):
             return
         libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
-        bundle_path = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
         
-        if os.path.exists(kmk_path) and os.path.exists(bundle_path):
-            return  # Dependencies already exist
+        # Check if KMK exists
+        if os.path.exists(kmk_path):
+            # Check if CircuitPython bundle exists (either version)
+            bundle_9x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
+            bundle_10x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-10.x-mpy")
+            if os.path.exists(bundle_9x) or os.path.exists(bundle_10x):
+                return  # Both dependencies exist
+        
+        # Load settings to check if user already selected version
+        settings = load_settings()
+        cp_version = settings.get('cp_version')
+        
+        # If version not selected, show selection dialog
+        if not cp_version:
+            cp_version = self.show_cp_version_dialog()
+            if not cp_version:
+                QMessageBox.warning(
+                    self,
+                    "Dependencies Required",
+                    "CircuitPython bundle version selection is required.\n"
+                    "Please restart and select a version."
+                )
+                return
+            
+            # Save selected version
+            settings['cp_version'] = cp_version
+            save_settings(settings)
         
         # Show download dialog
         reply = QMessageBox.question(
             self, 
             "Download Dependencies",
-            "This tool requires KMK firmware and CircuitPython libraries.\n"
-            "Would you like to download them automatically?\n\n"
-            "This will download:\n"
-            "• KMK Firmware (GPL-3.0 license)\n"
-            "• Adafruit CircuitPython Bundle (MIT license)\n\n"
-            "Files will be downloaded to the 'libraries' folder.",
+            f"This tool requires KMK firmware and CircuitPython libraries.\n"
+            f"Would you like to download them automatically?\n\n"
+            f"This will download:\n"
+            f"• KMK Firmware (GPL-3.0 license)\n"
+            f"• Adafruit CircuitPython Bundle {cp_version}.x (MIT license)\n\n"
+            f"Files will be downloaded to the 'libraries' folder.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
@@ -3323,11 +4034,156 @@ class KMKConfigurator(QMainWindow):
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.show()
         
-        # Start download thread
-        self.downloader = DependencyDownloader()
+        # Start download thread with selected version
+        self.downloader = DependencyDownloader(cp_version=cp_version)
         self.downloader.progress.connect(self.on_download_progress)
         self.downloader.finished.connect(self.on_download_finished)
         self.downloader.start()
+    
+    def show_cp_version_dialog(self):
+        """Show dialog to select CircuitPython bundle version
+        
+        Returns:
+            int: Selected version (9 or 10), or None if cancelled
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select CircuitPython Version")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Title and description
+        title_label = QLabel("<h3>CircuitPython Bundle Version</h3>")
+        layout.addWidget(title_label)
+        
+        desc_label = QLabel(
+            "Please select which CircuitPython bundle version to download.\n"
+            "This should match the CircuitPython version installed on your device.\n\n"
+            "• CircuitPython 9.x: For CircuitPython 9.0 and newer (up to 9.x)\n"
+            "• CircuitPython 10.x: For CircuitPython 10.0 and newer\n\n"
+            "If you're unsure, CircuitPython 9.x is recommended for most Pico boards."
+        )
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Version selection buttons
+        button_layout = QHBoxLayout()
+        
+        version_9_btn = QPushButton("CircuitPython 9.x")
+        version_9_btn.setMinimumHeight(60)
+        version_9_btn.clicked.connect(lambda: dialog.done(9))
+        button_layout.addWidget(version_9_btn)
+        
+        version_10_btn = QPushButton("CircuitPython 10.x")
+        version_10_btn.setMinimumHeight(60)
+        version_10_btn.clicked.connect(lambda: dialog.done(10))
+        button_layout.addWidget(version_10_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Note about changing later
+        note_label = QLabel(
+            "<small><i>Note: You can change this later by deleting the 'settings.json' file.</i></small>"
+        )
+        note_label.setWordWrap(True)
+        layout.addWidget(note_label)
+        
+        result = dialog.exec()
+        return result if result in (9, 10) else None
+    
+    def show_macro_import_dialog(self, new_macros):
+        """Show dialog to import new macros from config file
+        
+        Args:
+            new_macros: Dictionary of {macro_name: actions} for macros not in global store
+            
+        Returns:
+            dict: Selected macros to import, or empty dict if none selected
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Import Macros")
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Title and description
+        title_label = QLabel(f"<h3>New Macros Found ({len(new_macros)})</h3>")
+        layout.addWidget(title_label)
+        
+        desc_label = QLabel(
+            "This configuration file contains macros that are not in your global macro store.\n"
+            "Select which macros you want to import. Imported macros will be available\n"
+            "across all configurations."
+        )
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # Scrollable list of macros with checkboxes
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        
+        # Store checkboxes for later retrieval
+        macro_checkboxes = {}
+        
+        for macro_name, actions in new_macros.items():
+            checkbox = QCheckBox(macro_name)
+            checkbox.setChecked(True)  # Default to checked
+            
+            # Add description of macro actions
+            action_count = len(actions)
+            action_preview = f"  ({action_count} action{'s' if action_count != 1 else ''})"
+            if actions:
+                first_action = actions[0]
+                if isinstance(first_action, (list, tuple)) and len(first_action) >= 2:
+                    action_type = first_action[0]
+                    action_preview += f" - starts with {action_type}"
+            
+            checkbox.setText(f"{macro_name}{action_preview}")
+            checkbox.setToolTip(f"Macro: {macro_name}\nActions: {action_count}")
+            
+            scroll_layout.addWidget(checkbox)
+            macro_checkboxes[macro_name] = checkbox
+        
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+        
+        # Button box with Select All / Deselect All / Import / Cancel
+        button_layout = QHBoxLayout()
+        
+        select_all_btn = QPushButton("Select All")
+        select_all_btn.clicked.connect(lambda: [cb.setChecked(True) for cb in macro_checkboxes.values()])
+        button_layout.addWidget(select_all_btn)
+        
+        deselect_all_btn = QPushButton("Deselect All")
+        deselect_all_btn.clicked.connect(lambda: [cb.setChecked(False) for cb in macro_checkboxes.values()])
+        button_layout.addWidget(deselect_all_btn)
+        
+        button_layout.addStretch()
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        button_layout.addWidget(buttons)
+        
+        layout.addLayout(button_layout)
+        
+        # Show dialog and collect results
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Return only checked macros
+            selected_macros = {
+                name: new_macros[name]
+                for name, checkbox in macro_checkboxes.items()
+                if checkbox.isChecked()
+            }
+            return selected_macros
+        
+        return {}
     
     def on_download_progress(self, message, percentage):
         """Handle download progress updates"""
@@ -3407,6 +4263,7 @@ class KMKConfigurator(QMainWindow):
         self.encoder_config_str = DEFAULT_ENCODER_CONFIG
         self.analogin_config_str = DEFAULT_ANALOGIN_CONFIG
         self.display_config_str = ""
+        self.boot_config_str = ""
         
         # Update display
         self.update_layer_tabs()
@@ -3414,6 +4271,7 @@ class KMKConfigurator(QMainWindow):
         self.update_macro_list()
         self.sync_extension_checkboxes()
         self.update_extension_button_states()
+        self.refresh_boot_config_ui()
         try:
             self.save_extension_configs()
         except Exception:
@@ -3426,128 +4284,943 @@ class KMKConfigurator(QMainWindow):
         self.apply_theme(self.current_theme)
 
     def _apply_cheerful_stylesheet(self):
-        """Apply neutral gray theme with subtle highlights."""
+        """
+        Apply modern cheerful theme (vibrant dark variant).
+        
+        Features:
+        - Warmer, more vibrant colors than standard dark theme
+        - Same modern principles as other themes
+        - Consistent hover/focus behavior
+        """
         base = self._base_geometry_qss()
+        cards = self._get_modern_card_stylesheet()
         color_qss = '''
-            QWidget { background-color: #3a3a3a; color: #e0e0e0; }
-            QMainWindow { background-color: #2f2f2f; }
-            QPushButton { background: #454545; border: 1px solid #555555; color: #e0e0e0; }
-            QPushButton:hover { background: #505050; }
-            QPushButton:pressed { background: #3f3f3f; }
+            /* Base colors - warmer grays */
+            QWidget { 
+                background-color: #2d3748; 
+                color: #e5e7eb; 
+            }
+            QMainWindow { 
+                background-color: #1a202c; 
+            }
+            
+            /* Buttons with smooth hover effects */
+            QPushButton { 
+                background: #4a5568; 
+                border: 1px solid #5a6778; 
+                color: #e5e7eb;
+            }
+            QPushButton:hover { 
+                background: #5a6778; 
+                border: 1px solid #6b7888;
+            }
+            QPushButton:pressed { 
+                background: #3a4558; 
+                border: 1px solid #4a5568;
+            }
+            QPushButton:disabled {
+                background: #2d3748;
+                color: #6b7280;
+                border: 1px solid #4a5568;
+            }
+            
+            /* Selected keymap button */
             QPushButton#keymapButton:checked { 
                 background-color: #2a5a8a; 
                 border: 3px solid #4a9aff; 
                 color: #ffffff; 
                 font-weight: bold;
             }
-            QTabBar::tab:selected { background: #454545; }
-            QListWidget::item:hover { background-color: #464646; }
-            QListWidget::item:selected { background-color: #505050; color: #ffffff; font-weight: 600; }
-            QLabel { color: #e5e5e5; }
-            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
-            QLineEdit { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
-            QLineEdit:focus { border: 1px solid #808080; background-color: #484848; }
-            QSpinBox { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
-            QSpinBox:focus { border: 1px solid #808080; background-color: #484848; }
-            QComboBox { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
-            QComboBox:focus { border: 1px solid #808080; background-color: #484848; }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView { background-color: #484848; color: #ffffff; selection-background-color: #585858; }
-            QTextEdit { background-color: #404040; border: 1px solid #606060; color: #ffffff; }
-            QTextEdit:focus { border: 1px solid #808080; background-color: #484848; }
-            QGroupBox { border: 1px solid #555555; color: #e5e5e5; }
+            
+            /* Tab bars */
+            QTabWidget::pane {
+                background: #2d3748;
+                border: 1px solid #4a5568;
+            }
+            QTabBar::tab { 
+                background: #4a5568; 
+                color: #9ca3af;
+            }
+            QTabBar::tab:hover {
+                background: #5a6778;
+                color: #e5e7eb;
+            }
+            QTabBar::tab:selected { 
+                background: #4a9aff; 
+                color: #ffffff;
+                font-weight: 600;
+            }
+            
+            /* List widgets */
+            QListWidget {
+                background: #2d3748;
+                border: 1px solid #4a5568;
+            }
+            QListWidget::item:hover { 
+                background-color: #4a5568; 
+            }
+            QListWidget::item:selected { 
+                background-color: #4a9aff; 
+                color: #ffffff; 
+                font-weight: 600; 
+            }
+            
+            /* Labels */
+            QLabel { 
+                color: #e5e7eb; 
+            }
+            QLabel#cardTitle {
+                color: #f9fafb;
+            }
+            QLabel#infoBox { 
+                background-color: #1e4d2b; 
+                color: #4ade80; 
+                padding: 10px; 
+                border-radius: 6px;
+                border: 1px solid #166534;
+            }
+            
+            /* Input fields */
+            QLineEdit, QTextEdit { 
+                background-color: #4a5568; 
+                border: 1px solid #5a6778; 
+                color: #f9fafb; 
+            }
+            QLineEdit:focus, QTextEdit:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #2d3748; 
+            }
+            QSpinBox, QDoubleSpinBox { 
+                background-color: #4a5568; 
+                border: 1px solid #5a6778; 
+                color: #f9fafb; 
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #2d3748; 
+            }
+            QComboBox { 
+                background-color: #4a5568; 
+                border: 1px solid #5a6778; 
+                color: #f9fafb; 
+            }
+            QComboBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #2d3748; 
+            }
+            QComboBox::drop-down { 
+                border: none; 
+                padding-right: 4px;
+            }
+            QComboBox QAbstractItemView { 
+                background-color: #4a5568; 
+                color: #f9fafb; 
+                selection-background-color: #4a9aff;
+                border: 1px solid #5a6778;
+                border-radius: 4px;
+            }
+            
+            /* Group boxes */
+            QGroupBox { 
+                border: 1px solid #4a5568; 
+                color: #e5e7eb;
+                background-color: #2d3748;
+            }
+            QGroupBox::title {
+                color: #f9fafb;
+            }
+            
+            /* Modern cards */
+            QFrame#card {
+                background-color: #374151;
+                border: 1px solid #4a5568;
+            }
+            
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #4a5568;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #f9fafb;
+            }
+            QLabel#cardIndicator {
+                color: #9ca3af;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #5a6778;
+                border: 2px solid #6b7888;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #4a5568;
+                border: 2px solid #5a6778;
+            }
+            
+            /* Checkboxes */
+            QCheckBox, QRadioButton {
+                color: #e5e7eb;
+            }
+            QCheckBox::indicator:unchecked, QRadioButton::indicator:unchecked {
+                background-color: #4a5568;
+                border: 1px solid #5a6778;
+            }
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+                background-color: #4a9aff;
+                border: 1px solid #4a9aff;
+            }
+            QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+                border: 1px solid #6b7888;
+            }
+            
+            /* Scrollbars */
+            QScrollBar:vertical {
+                background: #2d3748;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #5a6778;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #6b7888;
+            }
+            QScrollBar:horizontal {
+                background: #2d3748;
+                height: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #5a6778;
+                border-radius: 6px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #6b7888;
+            }
         '''
-        self.setStyleSheet(base + color_qss)
+        self.setStyleSheet(base + cards + color_qss)
 
     def _apply_light_stylesheet(self):
-        """Apply neutral gray theme with subtle highlights (light variant)."""
+        """
+        Apply modern light theme with Material Design principles.
+        
+        Features:
+        - Clean, bright surfaces with subtle shadows
+        - Consistent color palette matching dark theme
+        - Smooth hover/focus transitions
+        - High contrast for readability
+        """
         base = self._base_geometry_qss()
+        cards = self._get_modern_card_stylesheet()
         color_qss = '''
-            QWidget { background-color: #f5f5f5; color: #333333; }
-            QMainWindow { background-color: #efefef; }
-            QPushButton { background: #e8e8e8; border: 1px solid #d0d0d0; color: #333333; }
-            QPushButton:hover { background: #e0e0e0; }
-            QPushButton:pressed { background: #d8d8d8; }
+            /* Base colors */
+            QWidget { 
+                background-color: #f9fafb; 
+                color: #1f2937; 
+            }
+            QMainWindow { 
+                background-color: #f3f4f6; 
+            }
+            
+            /* Buttons */
+            QPushButton { 
+                background: #ffffff; 
+                border: 1px solid #d1d5db; 
+                color: #1f2937;
+            }
+            QPushButton:hover { 
+                background: #f3f4f6; 
+                border: 1px solid #9ca3af;
+            }
+            QPushButton:pressed { 
+                background: #e5e7eb; 
+                border: 1px solid #9ca3af;
+            }
+            QPushButton:disabled {
+                background: #f3f4f6;
+                color: #9ca3af;
+                border: 1px solid #e5e7eb;
+            }
+            
+            /* Selected keymap button */
             QPushButton#keymapButton:checked { 
                 background-color: #5a9adf; 
                 border: 3px solid #2070c0; 
                 color: #ffffff; 
                 font-weight: bold;
             }
-            QTabBar::tab:selected { background: #e8e8e8; }
-            QListWidget::item:hover { background-color: #e0e0e0; }
-            QListWidget::item:selected { background-color: #d0d0d0; color: #000000; font-weight: 600; }
-            QLabel { color: #222222; }
-            QLabel#infoBox { background-color: #E8F5E9; color: #1b5e20; padding: 10px; border-radius: 4px; }
-            QLineEdit { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
-            QLineEdit:focus { border: 1px solid #909090; background-color: #fafafa; }
-            QSpinBox { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
-            QSpinBox:focus { border: 1px solid #909090; background-color: #fafafa; }
-            QComboBox { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
-            QComboBox:focus { border: 1px solid #909090; background-color: #fafafa; }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView { background-color: #fafafa; color: #000000; selection-background-color: #e0e0e0; }
-            QTextEdit { background-color: #ffffff; border: 1px solid #c0c0c0; color: #000000; }
-            QTextEdit:focus { border: 1px solid #909090; background-color: #fafafa; }
-            QGroupBox { border: 1px solid #d0d0d0; color: #222222; }
+            
+            /* Tab bars */
+            QTabWidget::pane {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+            }
+            QTabBar::tab { 
+                background: #f3f4f6; 
+                color: #6b7280;
+            }
+            QTabBar::tab:hover {
+                background: #e5e7eb;
+                color: #1f2937;
+            }
+            QTabBar::tab:selected { 
+                background: #4a9aff; 
+                color: #ffffff;
+                font-weight: 600;
+            }
+            
+            /* List widgets */
+            QListWidget {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+            }
+            QListWidget::item:hover { 
+                background-color: #f3f4f6; 
+            }
+            QListWidget::item:selected { 
+                background-color: #4a9aff; 
+                color: #ffffff; 
+                font-weight: 600; 
+            }
+            
+            /* Labels */
+            QLabel { 
+                color: #1f2937; 
+            }
+            QLabel#cardTitle {
+                color: #111827;
+            }
+            QLabel#infoBox { 
+                background-color: #E8F5E9; 
+                color: #1b5e20; 
+                padding: 10px; 
+                border-radius: 6px;
+                border: 1px solid #a5d6a7;
+            }
+            
+            /* Input fields */
+            QLineEdit, QTextEdit { 
+                background-color: #ffffff; 
+                border: 1px solid #d1d5db; 
+                color: #1f2937; 
+            }
+            QLineEdit:focus, QTextEdit:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #f9fafb; 
+            }
+            QSpinBox, QDoubleSpinBox { 
+                background-color: #ffffff; 
+                border: 1px solid #d1d5db; 
+                color: #1f2937; 
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #f9fafb; 
+            }
+            QComboBox { 
+                background-color: #ffffff; 
+                border: 1px solid #d1d5db; 
+                color: #1f2937; 
+            }
+            QComboBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #f9fafb; 
+            }
+            QComboBox::drop-down { 
+                border: none; 
+                padding-right: 4px;
+            }
+            QComboBox QAbstractItemView { 
+                background-color: #ffffff; 
+                color: #1f2937; 
+                selection-background-color: #4a9aff;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+            }
+            
+            /* Group boxes */
+            QGroupBox { 
+                border: 1px solid #e5e7eb; 
+                color: #1f2937;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                color: #111827;
+            }
+            
+            /* Modern cards */
+            QFrame#card {
+                background-color: #ffffff;
+                border: 1px solid #e5e7eb;
+            }
+            
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #f3f4f6;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #111827;
+            }
+            QLabel#cardIndicator {
+                color: #6b7280;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #d1d5db;
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #f3f4f6;
+                border: 2px solid #d1d5db;
+            }
+            
+            /* Checkboxes */
+            QCheckBox, QRadioButton {
+                color: #1f2937;
+            }
+            QCheckBox::indicator:unchecked, QRadioButton::indicator:unchecked {
+                background-color: #ffffff;
+                border: 1px solid #d1d5db;
+            }
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+                background-color: #4a9aff;
+                border: 1px solid #4a9aff;
+            }
+            QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+                border: 1px solid #9ca3af;
+            }
+            
+            /* Scrollbars */
+            QScrollBar:vertical {
+                background: #f9fafb;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #d1d5db;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #9ca3af;
+            }
+            QScrollBar:horizontal {
+                background: #f9fafb;
+                height: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #d1d5db;
+                border-radius: 6px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #9ca3af;
+            }
         '''
-        self.setStyleSheet(base + color_qss)
+        self.setStyleSheet(base + cards + color_qss)
 
     def _apply_dark_stylesheet(self):
-        """Apply neutral gray theme with subtle highlights (dark variant)."""
+        """
+        Apply modern dark theme with Material Design principles.
+        
+        Features:
+        - Elevated surfaces with subtle shadows
+        - Consistent color palette (#4a9aff blue, #4ade80 green, #fb923c orange, #ef4444 red)
+        - Smooth hover/focus transitions
+        - High contrast for accessibility
+        """
         base = self._base_geometry_qss()
+        cards = self._get_modern_card_stylesheet()
         color_qss = '''
-            QWidget { background-color: #2a2a2a; color: #d5d5d5; }
-            QMainWindow { background-color: #252525; }
-            QPushButton { background: #3d3d3d; border: 1px solid #4d4d4d; color: #d5d5d5; }
-            QPushButton:hover { background: #454545; }
-            QPushButton:pressed { background: #353535; }
+            /* Base colors */
+            QWidget { 
+                background-color: #1f2937; 
+                color: #e5e7eb; 
+            }
+            QMainWindow { 
+                background-color: #111827; 
+            }
+            
+            /* Buttons with smooth hover effects */
+            QPushButton { 
+                background: #374151; 
+                border: 1px solid #4b5563; 
+                color: #e5e7eb;
+            }
+            QPushButton:hover { 
+                background: #4b5563; 
+                border: 1px solid #6b7280;
+            }
+            QPushButton:pressed { 
+                background: #1f2937; 
+                border: 1px solid #4b5563;
+            }
+            QPushButton:disabled {
+                background: #1f2937;
+                color: #6b7280;
+                border: 1px solid #374151;
+            }
+            
+            /* Selected keymap button with glow effect */
             QPushButton#keymapButton:checked { 
                 background-color: #2a5a8a; 
                 border: 3px solid #4a9aff; 
                 color: #ffffff; 
                 font-weight: bold;
             }
-            QTabBar::tab:selected { background: #3d3d3d; }
-            QListWidget::item:hover { background-color: #3e3e3e; }
-            QListWidget::item:selected { background-color: #454545; color: #ffffff; font-weight: 600; }
-            QLabel { color: #e5e5e5; }
-            QLabel#infoBox { background-color: #1e4d2b; color: #b3e6c0; padding: 10px; border-radius: 4px; }
-            QLineEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QLineEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QSpinBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QSpinBox:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QComboBox { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QComboBox:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QComboBox::drop-down { border: none; }
-            QComboBox QAbstractItemView { background-color: #3d3d3d; color: #ffffff; selection-background-color: #505050; }
-            QTextEdit { background-color: #353535; border: 1px solid #5d5d5d; color: #ffffff; }
-            QTextEdit:focus { border: 1px solid #7d7d7d; background-color: #3d3d3d; }
-            QGroupBox { border: 1px solid #4d4d4d; color: #e5e5e5; }
+            
+            /* Tab bars */
+            QTabWidget::pane {
+                background: #1f2937;
+                border: 1px solid #374151;
+            }
+            QTabBar::tab { 
+                background: #374151; 
+                color: #9ca3af;
+            }
+            QTabBar::tab:hover {
+                background: #4b5563;
+                color: #e5e7eb;
+            }
+            QTabBar::tab:selected { 
+                background: #4a9aff; 
+                color: #ffffff;
+                font-weight: 600;
+            }
+            
+            /* List widgets with hover effects */
+            QListWidget {
+                background: #1f2937;
+                border: 1px solid #374151;
+            }
+            QListWidget::item:hover { 
+                background-color: #374151; 
+            }
+            QListWidget::item:selected { 
+                background-color: #4a9aff; 
+                color: #ffffff; 
+                font-weight: 600; 
+            }
+            
+            /* Labels and text */
+            QLabel { 
+                color: #e5e7eb; 
+            }
+            QLabel#cardTitle {
+                color: #f9fafb;
+            }
+            
+            /* Info boxes with themed backgrounds */
+            QLabel#infoBox { 
+                background-color: #1e4d2b; 
+                color: #4ade80; 
+                padding: 10px; 
+                border-radius: 6px;
+                border: 1px solid #166534;
+            }
+            
+            /* Input fields with focus effects */
+            QLineEdit, QTextEdit { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QLineEdit:focus, QTextEdit:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            
+            /* Spin boxes */
+            QSpinBox, QDoubleSpinBox { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            
+            /* Combo boxes */
+            QComboBox { 
+                background-color: #374151; 
+                border: 1px solid #4b5563; 
+                color: #f9fafb; 
+            }
+            QComboBox:focus { 
+                border: 2px solid #4a9aff; 
+                background-color: #1f2937; 
+            }
+            QComboBox::drop-down { 
+                border: none; 
+                padding-right: 4px;
+            }
+            QComboBox QAbstractItemView { 
+                background-color: #374151; 
+                color: #f9fafb; 
+                selection-background-color: #4a9aff;
+                border: 1px solid #4b5563;
+                border-radius: 4px;
+            }
+            
+            /* Group boxes with card styling */
+            QGroupBox { 
+                border: 1px solid #374151; 
+                color: #e5e7eb;
+                background-color: #1f2937;
+            }
+            QGroupBox::title {
+                color: #f9fafb;
+            }
+            
+            /* Modern cards */
+            QFrame#card {
+                background-color: #2d3748;
+                border: 1px solid #374151;
+            }
+            
+            /* Collapsible card header */
+            QPushButton#cardHeader {
+                background-color: transparent;
+                border: none;
+                text-align: left;
+                padding: 0;
+            }
+            QPushButton#cardHeader:hover {
+                background-color: #374151;
+            }
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                color: #f9fafb;
+            }
+            QLabel#cardIndicator {
+                color: #9ca3af;
+                font-size: 10pt;
+                margin-right: 8px;
+            }
+            QLabel#cardBadge {
+                background-color: #4a9aff;
+                color: #ffffff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 9pt;
+                font-weight: 600;
+                margin-left: 8px;
+            }
+            QWidget#cardContent {
+                background-color: transparent;
+            }
+            
+            /* Toggle Switch styling */
+            QCheckBox#toggleSwitch {
+                spacing: 8px;
+            }
+            QCheckBox#toggleSwitch::indicator {
+                width: 48px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #4b5563;
+                border: 2px solid #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:checked {
+                background-color: #4a9aff;
+                border: 2px solid #4a9aff;
+            }
+            QCheckBox#toggleSwitch::indicator:hover {
+                border: 2px solid #9ca3af;
+            }
+            QCheckBox#toggleSwitch::indicator:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QCheckBox#toggleSwitch:disabled {
+                color: #6b7280;
+            }
+            QCheckBox#toggleSwitch::indicator:disabled {
+                background-color: #374151;
+                border: 2px solid #4b5563;
+            }
+            
+            /* Category Pills (horizontal keycode category buttons) */
+            QPushButton#categoryPill {
+                background-color: #374151;
+                border: 1px solid #4b5563;
+                border-radius: 16px;
+                padding: 6px 16px;
+                color: #9ca3af;
+                font-weight: 500;
+                min-width: 80px;
+            }
+            QPushButton#categoryPill:hover {
+                background-color: #4b5563;
+                border: 1px solid #6b7280;
+                color: #e5e7eb;
+            }
+            QPushButton#categoryPill:checked {
+                background-color: #4a9aff;
+                border: 2px solid #60a5fa;
+                color: #ffffff;
+                font-weight: 600;
+            }
+            QPushButton#categoryPill:checked:hover {
+                background-color: #60a5fa;
+                border: 2px solid #60a5fa;
+            }
+            QPushButton#categoryPill:pressed {
+                background-color: #2563eb;
+            }
+            
+            /* Checkboxes and radio buttons */
+            QCheckBox, QRadioButton {
+                color: #e5e7eb;
+            }
+            QCheckBox::indicator:unchecked, QRadioButton::indicator:unchecked {
+                background-color: #374151;
+                border: 1px solid #4b5563;
+            }
+            QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+                background-color: #4a9aff;
+                border: 1px solid #4a9aff;
+            }
+            QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+                border: 1px solid #6b7280;
+            }
+            
+            /* Scrollbars */
+            QScrollBar:vertical {
+                background: #1f2937;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #4b5563;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #6b7280;
+            }
+            QScrollBar:horizontal {
+                background: #1f2937;
+                height: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #4b5563;
+                border-radius: 6px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #6b7280;
+            }
         '''
-        self.setStyleSheet(base + color_qss)
+        self.setStyleSheet(base + cards + color_qss)
+
+    def _get_modern_card_stylesheet(self):
+        """
+        Generate QSS stylesheet for modern card-based layout.
+        
+        Cards use rounded corners (8px), subtle shadows, and consistent spacing
+        following Material Design principles. Returns color-independent rules 
+        that work across all themes.
+        
+        Returns:
+            str: QSS stylesheet string for card components
+            
+        Note:
+            Theme-specific colors are applied in theme methods (_apply_dark_stylesheet, etc.)
+        """
+        return '''
+            /* Modern Card-Based Layout */
+            QFrame#card {
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 8px;
+            }
+            
+            QLabel#cardTitle {
+                font-weight: bold;
+                font-size: 11pt;
+                margin-bottom: 8px;
+            }
+            
+            /* Card sections with subtle elevation */
+            QGroupBox#cardSection {
+                border-radius: 8px;
+                padding: 12px;
+                margin: 4px;
+                font-weight: 600;
+            }
+        '''
 
     def _base_geometry_qss(self):
-        """Return QSS that defines geometry/shape/layout-only rules shared across themes."""
+        """
+        Return QSS that defines geometry/shape/layout-only rules shared across themes.
+        
+        Implements Material Design spacing system (4px/8px/16px/24px) and modern
+        visual elements including rounded corners, smooth transitions, and proper spacing.
+        
+        Returns:
+            str: QSS stylesheet with theme-independent geometry rules
+        """
         return '''
             /* Base geometry and shape rules (theme-independent) */
-            QGroupBox {
-                border-radius: 10px;
-                margin-top: 12px;
-                font-weight: 700;
-                padding: 8px;
-            }
-            QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 4px 8px; }
+            
+            /* Buttons with smooth animations */
             QPushButton {
                 padding: 8px 14px;
                 border-radius: 8px;
                 font-weight: 600;
                 min-width: 64px;
             }
-            QTabWidget::pane { border-radius: 8px; }
-            QTabBar::tab { padding: 8px 12px; border-radius: 6px; margin-right: 6px; }
-            QLineEdit, QSpinBox, QComboBox { border-radius: 6px; padding: 6px; }
-            QListWidget { border-radius: 8px; }
+            
+            /* Group boxes with modern styling */
+            QGroupBox {
+                border-radius: 8px;
+                margin-top: 12px;
+                font-weight: 600;
+                padding: 12px;
+            }
+            QGroupBox::title { 
+                subcontrol-origin: margin; 
+                subcontrol-position: top left; 
+                padding: 4px 8px;
+                left: 8px;
+            }
+            
+            /* Tab widgets with rounded corners */
+            QTabWidget::pane { 
+                border-radius: 8px; 
+                padding: 8px;
+            }
+            QTabBar::tab { 
+                padding: 8px 12px; 
+                border-radius: 6px; 
+                margin-right: 4px;
+                margin-bottom: 2px;
+            }
+            
+            /* Input fields with consistent styling */
+            QLineEdit, QSpinBox, QComboBox { 
+                border-radius: 6px; 
+                padding: 6px 10px;
+                min-height: 24px;
+            }
+            QTextEdit {
+                border-radius: 6px;
+                padding: 8px;
+            }
+            
+            /* List widgets with rounded corners */
+            QListWidget { 
+                border-radius: 8px; 
+                padding: 4px;
+            }
+            QListWidget::item {
+                border-radius: 4px;
+                padding: 6px 8px;
+                margin: 2px 4px;
+            }
+            
+            /* Checkboxes and radio buttons */
+            QCheckBox::indicator, QRadioButton::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 3px;
+            }
+            QRadioButton::indicator {
+                border-radius: 9px;
+            }
         '''
     
     def get_info_box_style(self, variant='info'):
@@ -3618,14 +5291,9 @@ class KMKConfigurator(QMainWindow):
             with open(os.path.join(CONFIG_SAVE_DIR, 'display.py'), 'w') as f:
                 f.write(self.display_config_str or '')
             
-            # Save boot.py configuration
+            # Save boot.py configuration - use the stored boot_config_str directly
             with open(os.path.join(CONFIG_SAVE_DIR, 'boot.py'), 'w') as f:
-                # Use generate_boot_config if the UI elements exist, otherwise use stored string
-                if hasattr(self, 'enable_boot_py'):
-                    boot_config = self.generate_boot_config()
-                else:
-                    boot_config = self.boot_config_str
-                f.write(boot_config or '')
+                f.write(self.boot_config_str or '')
 
             rgb_config = self._export_rgb_config()
             with open(os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json'), 'w') as f:
@@ -3666,6 +5334,10 @@ class KMKConfigurator(QMainWindow):
             if os.path.exists(disp_path):
                 with open(disp_path, 'r') as f:
                     self.display_config_str = f.read()
+            boot_path = os.path.join(CONFIG_SAVE_DIR, 'boot.py')
+            if os.path.exists(boot_path):
+                with open(boot_path, 'r') as f:
+                    self.boot_config_str = f.read()
             rgb_path = os.path.join(CONFIG_SAVE_DIR, 'rgb_matrix.json')
             if os.path.exists(rgb_path):
                 with open(rgb_path, 'r') as f:
@@ -3745,7 +5417,7 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def save_session_state(self):
-        """Save current UI session state (layer, selected key, active tabs, splitter sizes)."""
+        """Save current UI session state (layer, selected key, active tabs, splitter sizes, category)."""
         try:
             os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
             
@@ -3758,7 +5430,8 @@ class KMKConfigurator(QMainWindow):
                 'current_layer': self.current_layer,
                 'selected_key_coords': self.selected_key_coords,
                 'extension_tab_index': getattr(self.extensions_tabs, 'currentIndex', lambda: 0)(),
-                'keycode_tab_index': getattr(self.keycode_tabs, 'currentIndex', lambda: 0)(),
+                'keycode_current_category': getattr(self, 'current_category', None),
+                'keycode_search_query': getattr(self.keycode_search_box, 'text', lambda: '')() if hasattr(self, 'keycode_search_box') else '',
                 'splitter_sizes': splitter_sizes,
             }
             session_path = os.path.join(CONFIG_SAVE_DIR, 'session.json')
@@ -3798,12 +5471,16 @@ class KMKConfigurator(QMainWindow):
                     if 0 <= ext_tab_idx <= max_idx:
                         self.extensions_tabs.setCurrentIndex(ext_tab_idx)
                 
-                # Restore keycode tab
-                key_tab_idx = session_data.get('keycode_tab_index', 0)
-                if hasattr(self, 'keycode_tabs'):
-                    max_idx = self.keycode_tabs.count() - 1
-                    if 0 <= key_tab_idx <= max_idx:
-                        self.keycode_tabs.setCurrentIndex(key_tab_idx)
+                # Restore keycode category (new sidebar approach)
+                category = session_data.get('keycode_current_category')
+                if category and hasattr(self, 'select_category'):
+                    if category in KEYCODES:
+                        self.select_category(category)
+                
+                # Restore search query (optional)
+                search_query = session_data.get('keycode_search_query', '')
+                if search_query and hasattr(self, 'keycode_search_box'):
+                    self.keycode_search_box.setText(search_query)
                 
                 # Restore splitter sizes
                 splitter_sizes = session_data.get('splitter_sizes')
@@ -3815,13 +5492,26 @@ class KMKConfigurator(QMainWindow):
             pass
 
     def setup_file_io_ui(self, parent_layout):
-        group = QGroupBox("📁 File Management")
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-
-        # Config file selector (populated from kmk_Config_Save and repo root)
+        """
+        Setup modern file management UI with card-based layout.
+        
+        Features:
+        - Collapsible cards for logical grouping
+        - File Management card: config selector with recent files
+        - Actions card: Load/Save/Generate buttons
+        - Profiles card: Quick access to saved profiles
+        - Theme card: Visual theme selector
+        
+        Note:
+            Uses CollapsibleCard widgets for modern expandable sections.
+        """
+        # === File Management Card ===
+        file_card = CollapsibleCard("📁 File Management")
+        file_layout = file_card.get_content_layout()
+        
+        # Config file selector with refresh button
         file_select_layout = QHBoxLayout()
-        file_select_layout.addWidget(QLabel("Configuration:"))
+        file_select_layout.addWidget(QLabel("Current Config:"))
         self.config_file_combo = QComboBox()
         self.config_file_combo.setToolTip("Select a saved configuration to load")
         file_select_layout.addWidget(self.config_file_combo, 1)
@@ -3830,51 +5520,46 @@ class KMKConfigurator(QMainWindow):
         refresh_btn.clicked.connect(self.populate_config_file_list)
         refresh_btn.setToolTip("Refresh configuration list")
         file_select_layout.addWidget(refresh_btn)
-        layout.addLayout(file_select_layout)
-
-        # Action buttons with icons
-        load_config_button = QPushButton("📂 Load Configuration")
+        file_layout.addLayout(file_select_layout)
+        
+        parent_layout.addWidget(file_card)
+        
+        # === Actions Card ===
+        actions_card = CollapsibleCard("💾 Actions")
+        actions_layout = actions_card.get_content_layout()
+        
+        # Two-column button layout for Load/Save
+        row1_layout = QHBoxLayout()
+        load_config_button = QPushButton("📂 Load")
         load_config_button.clicked.connect(self.load_configuration)
-        load_config_button.setToolTip("Load the selected configuration file")
-        layout.addWidget(load_config_button)
-
-        save_config_button = QPushButton("💾 Save Configuration")
+        load_config_button.setToolTip("Load the selected configuration file (Ctrl+O)")
+        row1_layout.addWidget(load_config_button)
+        
+        save_config_button = QPushButton("💾 Save")
         save_config_button.clicked.connect(self.save_configuration_dialog)
-        save_config_button.setToolTip("Save current keymap and settings")
-        layout.addWidget(save_config_button)
-
+        save_config_button.setToolTip("Save current keymap and settings (Ctrl+S)")
+        row1_layout.addWidget(save_config_button)
+        actions_layout.addLayout(row1_layout)
+        
+        # Generate code.py button (full width, prominent)
         generate_button = QPushButton("⚡ Generate code.py")
         generate_button.clicked.connect(self.generate_code_py_dialog)
         generate_button.setToolTip("Export firmware to CIRCUITPY drive")
         generate_button.setStyleSheet("QPushButton { font-weight: bold; }")
-        layout.addWidget(generate_button)
-
-        layout.addSpacing(10)
+        actions_layout.addWidget(generate_button)
         
-        # Theme selector
-        theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("🎨 Theme:"))
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Cheerful", "Light", "Dark"])
-        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
-        self.theme_combo.setToolTip("Change the UI color theme")
-        # reflect current theme selection if available
-        try:
-            self.theme_combo.setCurrentText(self.current_theme)
-        except Exception:
-            pass
-        theme_layout.addWidget(self.theme_combo, 1)
-        layout.addLayout(theme_layout)
+        parent_layout.addWidget(actions_card)
         
-        layout.addSpacing(10)
+        # === REMOVED: Profiles Card (redundant with config save/load) ===
+        # Profile functionality commented out to simplify UI
+        # Users can use config file save/load instead
         
-        # Profile management section
-        profile_label = QLabel("<b>Quick Profiles</b>")
-        layout.addWidget(profile_label)
+        """
+        profile_card = CollapsibleCard("⭐ Quick Profiles")
+        profile_layout = profile_card.get_content_layout()
         
-        # Profile dropdown and delete button
+        # Profile dropdown with delete button
         profile_selection_layout = QHBoxLayout()
-        profile_selection_layout.addWidget(QLabel("Profile:"))
         self.profile_combo = QComboBox()
         self.profile_combo.currentIndexChanged.connect(self.load_selected_profile)
         self.profile_combo.setToolTip("Quick-load a saved profile with keymap and settings")
@@ -3885,22 +5570,58 @@ class KMKConfigurator(QMainWindow):
         delete_profile_btn.clicked.connect(self.delete_selected_profile)
         delete_profile_btn.setToolTip("Delete selected profile")
         profile_selection_layout.addWidget(delete_profile_btn)
+        profile_layout.addLayout(profile_selection_layout)
         
-        layout.addLayout(profile_selection_layout)
-
+        # Save profile button
         save_profile_btn = QPushButton("💾 Save as Profile")
         save_profile_btn.clicked.connect(self.save_current_profile)
         save_profile_btn.setToolTip("Save current configuration as a named profile")
-        layout.addWidget(save_profile_btn)
-
-        group.setLayout(layout)
-        parent_layout.addWidget(group)
-
+        profile_layout.addWidget(save_profile_btn)
+        
+        parent_layout.addWidget(profile_card)
+        """
+        
+        # === Theme Card ===
+        theme_card = CollapsibleCard("🎨 Theme")
+        theme_layout = theme_card.get_content_layout()
+        
+        # Theme selector (radio buttons would be nice, but combo works for now)
+        theme_select_layout = QHBoxLayout()
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Dark", "Light", "Cheerful"])
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        self.theme_combo.setToolTip("Change the UI color theme")
+        # Reflect current theme selection
+        try:
+            self.theme_combo.setCurrentText(self.current_theme)
+        except Exception:
+            pass
+        theme_select_layout.addWidget(self.theme_combo, 1)
+        theme_layout.addLayout(theme_select_layout)
+        
+        parent_layout.addWidget(theme_card)
+        
         # Fill the combo initially
         self.populate_config_file_list()
 
     def setup_extensions_ui(self, parent_layout):
-        """Setup extensions and advanced settings with tabbed interface"""
+        """
+        Setup extensions and advanced settings with modern toggle switches.
+        
+        Creates collapsible cards for each hardware extension:
+        - Rotary Encoder (GP10, GP11, GP14)
+        - Analog Slider (GP28)
+        - OLED Display (I2C: GP20/GP21)
+        - RGB Matrix (GP9)
+        
+        Each card includes:
+        - Toggle switch for enable/disable (blue = enabled, gray = disabled)
+        - Configuration button for advanced settings
+        - Visual feedback via theme-aware styling
+        
+        Changes to extension state automatically update firmware generation
+        and persist in config.json.
+        """
         group = QGroupBox("Extensions & Settings")
         main_layout = QVBoxLayout()
         
@@ -3918,87 +5639,109 @@ class KMKConfigurator(QMainWindow):
         ext_layout = QVBoxLayout(ext_content)
         ext_layout.setSpacing(12)
         
-        # Encoder Section with icon
-        encoder_group = QGroupBox("🎛 Rotary Encoder")
-        encoder_layout = QVBoxLayout()
-        enc_check_layout = QHBoxLayout()
-        self.enable_encoder_checkbox = QCheckBox("Enable Encoder (GP10, GP11, GP14)")
-        self.enable_encoder_checkbox.setChecked(self.enable_encoder)
-        self.enable_encoder_checkbox.toggled.connect(self.on_encoder_toggled)
-        self.enable_encoder_checkbox.setToolTip("Rotary encoder with button for layer cycling and custom actions")
-        enc_check_layout.addWidget(self.enable_encoder_checkbox)
-        enc_check_layout.addStretch()
-        encoder_layout.addLayout(enc_check_layout)
+        # Encoder Section with modern toggle switch
+        encoder_card = CollapsibleCard("🎛 Rotary Encoder", start_collapsed=False)
+        encoder_layout = encoder_card.get_content_layout()
+        encoder_layout.setSpacing(8)
         
-        enc_btn_layout = QHBoxLayout()
+        # Toggle row: Label + Switch
+        enc_toggle_layout = QHBoxLayout()
+        enc_label = QLabel("Enable Encoder (GP10, GP11, GP14)")
+        enc_label.setToolTip("Rotary encoder with button for layer cycling and custom actions")
+        self.enable_encoder_toggle = ToggleSwitch()
+        self.enable_encoder_toggle.setChecked(self.enable_encoder)
+        self.enable_encoder_toggle.toggled.connect(self.on_encoder_toggled)
+        self.enable_encoder_toggle.setToolTip("Toggle encoder extension on/off")
+        enc_toggle_layout.addWidget(enc_label)
+        enc_toggle_layout.addStretch()
+        enc_toggle_layout.addWidget(self.enable_encoder_toggle)
+        encoder_layout.addLayout(enc_toggle_layout)
+        
+        # Configure button
         enc_cfg_btn = QPushButton("⚙ Configure Actions")
         enc_cfg_btn.clicked.connect(self.configure_encoder)
         enc_cfg_btn.setToolTip("Set up encoder rotation and button press actions")
-        enc_btn_layout.addWidget(enc_cfg_btn)
-        enc_btn_layout.addStretch()
+        enc_cfg_btn.setMaximumWidth(200)
         self.encoder_cfg_btn = enc_cfg_btn
-        encoder_layout.addLayout(enc_btn_layout)
-        encoder_group.setLayout(encoder_layout)
-        ext_layout.addWidget(encoder_group)
-
-        # Analog Input Section with icon
-        analog_group = QGroupBox("📊 Analog Slider")
-        analog_layout = QVBoxLayout()
-        an_check_layout = QHBoxLayout()
-        self.enable_analogin_checkbox = QCheckBox("Enable Analog Input (GP28)")
-        self.enable_analogin_checkbox.setChecked(self.enable_analogin)
-        self.enable_analogin_checkbox.toggled.connect(self.on_analogin_toggled)
-        self.enable_analogin_checkbox.setToolTip("10k potentiometer slider for volume or brightness control")
-        an_check_layout.addWidget(self.enable_analogin_checkbox)
-        an_check_layout.addStretch()
-        analog_layout.addLayout(an_check_layout)
+        encoder_layout.addWidget(enc_cfg_btn)
         
-        an_btn_layout = QHBoxLayout()
+        ext_layout.addWidget(encoder_card)
+
+        # Analog Input Section with modern toggle switch
+        analog_card = CollapsibleCard("📊 Analog Slider", start_collapsed=False)
+        analog_layout = analog_card.get_content_layout()
+        analog_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        an_toggle_layout = QHBoxLayout()
+        an_label = QLabel("Enable Analog Input (GP28)")
+        an_label.setToolTip("10k potentiometer slider for volume or brightness control")
+        self.enable_analogin_toggle = ToggleSwitch()
+        self.enable_analogin_toggle.setChecked(self.enable_analogin)
+        self.enable_analogin_toggle.toggled.connect(self.on_analogin_toggled)
+        self.enable_analogin_toggle.setToolTip("Toggle analog input extension on/off")
+        an_toggle_layout.addWidget(an_label)
+        an_toggle_layout.addStretch()
+        an_toggle_layout.addWidget(self.enable_analogin_toggle)
+        analog_layout.addLayout(an_toggle_layout)
+        
+        # Configure button
         an_cfg_btn = QPushButton("⚙ Configure Function")
         an_cfg_btn.clicked.connect(self.configure_analogin)
         an_cfg_btn.setToolTip("Choose between volume control or LED brightness")
-        an_btn_layout.addWidget(an_cfg_btn)
-        an_btn_layout.addStretch()
+        an_cfg_btn.setMaximumWidth(200)
         self.analogin_cfg_btn = an_cfg_btn
-        analog_layout.addLayout(an_btn_layout)
-        analog_group.setLayout(analog_layout)
-        ext_layout.addWidget(analog_group)
-
-        # Display Section with icon
-        display_group = QGroupBox("🖥 OLED Display")
-        display_layout = QVBoxLayout()
-        disp_check_layout = QHBoxLayout()
-        self.enable_display_checkbox = QCheckBox("Enable Display (I2C: GP20/GP21)")
-        self.enable_display_checkbox.setChecked(self.enable_display)
-        self.enable_display_checkbox.toggled.connect(self.on_display_toggled)
-        self.enable_display_checkbox.setToolTip("128x64 OLED display showing current layer keymap")
-        disp_check_layout.addWidget(self.enable_display_checkbox)
-        disp_check_layout.addStretch()
-        display_layout.addLayout(disp_check_layout)
+        analog_layout.addWidget(an_cfg_btn)
         
-        disp_btn_layout = QHBoxLayout()
+        ext_layout.addWidget(analog_card)
+
+        # Display Section with modern toggle switch
+        display_card = CollapsibleCard("🖥 OLED Display", start_collapsed=False)
+        display_layout = display_card.get_content_layout()
+        display_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        disp_toggle_layout = QHBoxLayout()
+        disp_label = QLabel("Enable Display (I2C: GP20/GP21)")
+        disp_label.setToolTip("128x64 OLED display showing current layer keymap")
+        self.enable_display_toggle = ToggleSwitch()
+        self.enable_display_toggle.setChecked(self.enable_display)
+        self.enable_display_toggle.toggled.connect(self.on_display_toggled)
+        self.enable_display_toggle.setToolTip("Toggle display extension on/off")
+        disp_toggle_layout.addWidget(disp_label)
+        disp_toggle_layout.addStretch()
+        disp_toggle_layout.addWidget(self.enable_display_toggle)
+        display_layout.addLayout(disp_toggle_layout)
+        
+        # Configure button
         disp_cfg_btn = QPushButton("👁 Preview Layout")
         disp_cfg_btn.clicked.connect(self.configure_display)
         disp_cfg_btn.setToolTip("Preview how keys will appear on the OLED display")
-        disp_btn_layout.addWidget(disp_cfg_btn)
-        disp_btn_layout.addStretch()
+        disp_cfg_btn.setMaximumWidth(200)
         self.display_cfg_btn = disp_cfg_btn
-        display_layout.addLayout(disp_btn_layout)
-        display_group.setLayout(display_layout)
-        ext_layout.addWidget(display_group)
-
-        # RGB Matrix Section with icon
-        rgb_group = QGroupBox("💡 RGB Lighting")
-        rgb_layout = QVBoxLayout()
-        rgb_check_layout = QHBoxLayout()
-        self.enable_rgb_checkbox = QCheckBox("Enable RGB Matrix (GP9)")
-        self.enable_rgb_checkbox.setChecked(self.enable_rgb)
-        self.enable_rgb_checkbox.toggled.connect(self.on_rgb_toggled)
-        self.enable_rgb_checkbox.setToolTip("SK6812MINI RGB LEDs - 20 per-key LEDs")
-        rgb_check_layout.addWidget(self.enable_rgb_checkbox)
-        rgb_check_layout.addStretch()
-        rgb_layout.addLayout(rgb_check_layout)
+        display_layout.addWidget(disp_cfg_btn)
         
+        ext_layout.addWidget(display_card)
+
+        # RGB Matrix Section with modern toggle switch
+        rgb_card = CollapsibleCard("💡 RGB Lighting", start_collapsed=False)
+        rgb_layout = rgb_card.get_content_layout()
+        rgb_layout.setSpacing(8)
+        
+        # Toggle row: Label + Switch
+        rgb_toggle_layout = QHBoxLayout()
+        rgb_label = QLabel("Enable RGB Matrix (GP9)")
+        rgb_label.setToolTip("SK6812MINI RGB LEDs - 20 per-key LEDs")
+        self.enable_rgb_toggle = ToggleSwitch()
+        self.enable_rgb_toggle.setChecked(self.enable_rgb)
+        self.enable_rgb_toggle.toggled.connect(self.on_rgb_toggled)
+        self.enable_rgb_toggle.setToolTip("Toggle RGB matrix extension on/off")
+        rgb_toggle_layout.addWidget(rgb_label)
+        rgb_toggle_layout.addStretch()
+        rgb_toggle_layout.addWidget(self.enable_rgb_toggle)
+        rgb_layout.addLayout(rgb_toggle_layout)
+        
+        # Configure buttons row
         rgb_btn_layout = QHBoxLayout()
         rgb_cfg_btn = QPushButton("⚙ Global Settings")
         rgb_cfg_btn.clicked.connect(self.configure_rgb)
@@ -4031,8 +5774,8 @@ class KMKConfigurator(QMainWindow):
         self.rgb_cfg_btn = rgb_cfg_btn
         self.rgb_colors_btn = rgb_colors_btn
         rgb_layout.addLayout(rgb_btn_layout)
-        rgb_group.setLayout(rgb_layout)
-        ext_layout.addWidget(rgb_group)
+        
+        ext_layout.addWidget(rgb_card)
         
         ext_layout.addStretch()
         
@@ -4170,6 +5913,7 @@ class KMKConfigurator(QMainWindow):
             "You won't be able to edit files without special recovery steps!"
         )
         self.disable_storage_checkbox.toggled.connect(self.on_readonly_toggle)
+        self.disable_storage_checkbox.toggled.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.disable_storage_checkbox)
         
         self.disable_usb_hid_checkbox = QCheckBox("Disable USB keyboard/mouse (advanced)")
@@ -4177,6 +5921,7 @@ class KMKConfigurator(QMainWindow):
             "Only disable this if you know what you're doing.\n"
             "Your device won't function as a keyboard!"
         )
+        self.disable_usb_hid_checkbox.toggled.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.disable_usb_hid_checkbox)
         
         rename_layout = QHBoxLayout()
@@ -4187,6 +5932,8 @@ class KMKConfigurator(QMainWindow):
         rename_layout.addWidget(self.rename_drive_checkbox)
         rename_layout.addWidget(self.drive_name_edit)
         rename_layout.addStretch()
+        self.rename_drive_checkbox.toggled.connect(self.on_rename_drive_toggled)
+        self.drive_name_edit.textChanged.connect(self.on_boot_setting_changed)
         boot_options_layout.addLayout(rename_layout)
         
         boot_options_layout.addWidget(QLabel("Custom boot.py code:"))
@@ -4197,6 +5944,7 @@ class KMKConfigurator(QMainWindow):
             "# storage.remount('/', readonly=False)"
         )
         self.boot_code_editor.setMaximumHeight(120)
+        self.boot_code_editor.textChanged.connect(self.on_boot_setting_changed)
         boot_options_layout.addWidget(self.boot_code_editor)
         
         boot_layout.addWidget(self.boot_options_widget)
@@ -4221,7 +5969,7 @@ class KMKConfigurator(QMainWindow):
         
         # Update button states based on checkbox states
         self.update_extension_button_states()
-        self.on_boot_toggle()  # Initialize boot options visibility
+        self.refresh_boot_config_ui()
 
         group.setLayout(main_layout)
         parent_layout.addWidget(group)
@@ -4284,12 +6032,7 @@ class KMKConfigurator(QMainWindow):
         enabled = self.enable_boot_py.isChecked()
         if hasattr(self, 'boot_options_widget'):
             self.boot_options_widget.setEnabled(enabled)
-        
-        # Update boot config string
-        if not enabled:
-            self.boot_config_str = ""
-        else:
-            self.boot_config_str = self.generate_boot_config()
+        self.on_boot_setting_changed()
     
     def on_readonly_toggle(self, checked):
         """Show warning when user tries to enable read-only mode."""
@@ -4311,6 +6054,89 @@ class KMKConfigurator(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 # User cancelled - uncheck the box
                 self.disable_storage_checkbox.setChecked(False)
+
+    def on_boot_setting_changed(self, *_args) -> None:
+        """Regenerate boot.py configuration whenever a related option changes."""
+        if not hasattr(self, 'enable_boot_py'):
+            return
+
+        if self.enable_boot_py.isChecked():
+            self.boot_config_str = self.generate_boot_config()
+        else:
+            self.boot_config_str = ""
+
+        try:
+            self.save_extension_configs()
+        except Exception:
+            # Avoid blocking UI if disk write fails
+            pass
+
+    def on_rename_drive_toggled(self, checked: bool) -> None:
+        """Enable or disable the drive name input and refresh config."""
+        if hasattr(self, 'drive_name_edit'):
+            self.drive_name_edit.setEnabled(checked)
+        self.on_boot_setting_changed()
+
+    def refresh_boot_config_ui(self) -> None:
+        """Synchronize boot configuration controls with the stored script."""
+        if not hasattr(self, 'enable_boot_py'):
+            return
+
+        boot_enabled = bool(self.boot_config_str and self.boot_config_str.strip())
+
+        self.enable_boot_py.blockSignals(True)
+        self.enable_boot_py.setChecked(boot_enabled)
+        self.enable_boot_py.blockSignals(False)
+
+        if hasattr(self, 'boot_options_widget'):
+            self.boot_options_widget.setEnabled(boot_enabled)
+
+        disable_storage = "storage.disable_usb_drive()" in (self.boot_config_str or "")
+        self.disable_storage_checkbox.blockSignals(True)
+        self.disable_storage_checkbox.setChecked(disable_storage)
+        self.disable_storage_checkbox.blockSignals(False)
+
+        disable_usb = "usb_hid.disable()" in (self.boot_config_str or "")
+        self.disable_usb_hid_checkbox.blockSignals(True)
+        self.disable_usb_hid_checkbox.setChecked(disable_usb)
+        self.disable_usb_hid_checkbox.blockSignals(False)
+
+        rename_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*"([^"]+)"', self.boot_config_str or "")
+        rename_enabled = bool(rename_match)
+        self.rename_drive_checkbox.blockSignals(True)
+        self.rename_drive_checkbox.setChecked(rename_enabled)
+        self.rename_drive_checkbox.blockSignals(False)
+
+        self.drive_name_edit.blockSignals(True)
+        self.drive_name_edit.setEnabled(rename_enabled)
+        if rename_match:
+            self.drive_name_edit.setText(rename_match.group(1)[:11])
+        self.drive_name_edit.blockSignals(False)
+
+        custom_code = self._extract_custom_boot_code(self.boot_config_str or "")
+        self.boot_code_editor.blockSignals(True)
+        self.boot_code_editor.setPlainText(custom_code)
+        self.boot_code_editor.blockSignals(False)
+
+    def _extract_custom_boot_code(self, boot_config: str) -> str:
+        """Extract user-provided custom code segment from a boot.py script."""
+        if not boot_config:
+            return ""
+
+        marker = "# Custom configuration:"
+        if marker in boot_config:
+            return boot_config.split(marker, 1)[1].strip()
+
+        toggle_tokens = (
+            "storage.disable_usb_drive()",
+            "usb_hid.disable()",
+            'storage.getmount("/").label',
+        )
+
+        if any(token in boot_config for token in toggle_tokens):
+            return ""
+
+        return boot_config.strip()
     
     def on_encoder_divisor_changed(self, value):
         """Handle encoder divisor spinbox change."""
@@ -4361,17 +6187,29 @@ class KMKConfigurator(QMainWindow):
             self.rgb_colors_btn.setEnabled(self.enable_rgb)
 
     def sync_extension_checkboxes(self):
-        """Ensure extension checkboxes reflect current enabled states without triggering signals."""
-        def _set_state(checkbox, value):
-            if checkbox:
-                checkbox.blockSignals(True)
-                checkbox.setChecked(value)
-                checkbox.blockSignals(False)
+        """
+        Ensure extension toggle switches reflect current enabled states without triggering signals.
+        
+        This method synchronizes the UI state with the internal enabled flags
+        after loading a configuration or applying changes. Signal blocking prevents
+        recursive toggling events during synchronization.
+        
+        Updates:
+        - encoder toggle (enable_encoder_toggle)
+        - analog input toggle (enable_analogin_toggle)
+        - display toggle (enable_display_toggle)
+        - RGB matrix toggle (enable_rgb_toggle)
+        """
+        def _set_state(toggle_switch, value):
+            if toggle_switch:
+                toggle_switch.blockSignals(True)
+                toggle_switch.setChecked(value)
+                toggle_switch.blockSignals(False)
 
-        _set_state(getattr(self, 'enable_encoder_checkbox', None), self.enable_encoder)
-        _set_state(getattr(self, 'enable_analogin_checkbox', None), self.enable_analogin)
-        _set_state(getattr(self, 'enable_display_checkbox', None), self.enable_display)
-        _set_state(getattr(self, 'enable_rgb_checkbox', None), self.enable_rgb)
+        _set_state(getattr(self, 'enable_encoder_toggle', None), self.enable_encoder)
+        _set_state(getattr(self, 'enable_analogin_toggle', None), self.enable_analogin)
+        _set_state(getattr(self, 'enable_display_toggle', None), self.enable_display)
+        _set_state(getattr(self, 'enable_rgb_toggle', None), self.enable_rgb)
 
     # --- Extension configuration handlers ---
     def open_advanced_settings(self):
@@ -4388,6 +6226,7 @@ class KMKConfigurator(QMainWindow):
             
             # Update boot.py config
             self.boot_config_str = dialog.get_boot_config()
+            self.refresh_boot_config_ui()
             
             # Save settings
             self.save_extension_configs()
@@ -4517,14 +6356,7 @@ class KMKConfigurator(QMainWindow):
                 self.update_tapdance_list()
     
     def update_tapdance_list(self):
-        """Parse custom extension code to find TapDance definitions and update both selectors"""
-        if not hasattr(self, 'tapdance_keycode_list'):
-            return
-        
-        self.tapdance_keycode_list.clear()
-        if hasattr(self, 'tapdance_management_list'):
-            self.tapdance_management_list.clear()
-        
+        """Parse custom extension code to find TapDance definitions and update the list"""
         # Parse the custom extension code for TapDance definitions
         custom_code = self.custom_extension_code.toPlainText() if hasattr(self, 'custom_extension_code') else ""
         
@@ -4538,11 +6370,22 @@ class KMKConfigurator(QMainWindow):
             if match:
                 td_names.append(match.group(1))
         
-        if td_names:
-            sorted_names = sorted(td_names)
-            self.tapdance_keycode_list.addItems(sorted_names)
-            if hasattr(self, 'tapdance_management_list'):
-                self.tapdance_management_list.addItems(sorted_names)
+        # Update keycode list if TapDance category is active
+        if hasattr(self, 'current_category') and self.current_category == "TapDance":
+            self.keycode_list.clear()
+            if td_names:
+                sorted_names = sorted(td_names)
+                self.keycode_list.addItems(sorted_names)
+        
+        # Update tapdance button count
+        if hasattr(self, 'category_buttons') and "TapDance" in self.category_buttons:
+            self.category_buttons["TapDance"].setText(f"🎯 TapDance\n({len(td_names)})")
+        
+        # Also update management list if it exists (for left panel)
+        if hasattr(self, 'tapdance_management_list'):
+            self.tapdance_management_list.clear()
+            if td_names:
+                self.tapdance_management_list.addItems(sorted(td_names))
 
     
     def add_combo_helper(self):
@@ -4558,25 +6401,33 @@ class KMKConfigurator(QMainWindow):
                 self.custom_extension_code.setPlainText(current_code + code)
 
     def populate_config_file_list(self):
-        """Scans kmk_Config_Save and repo root for JSON files starting with 'KMK_Config' and populates the combo box."""
-        paths = []
-        save_dir = CONFIG_SAVE_DIR
-        if os.path.isdir(save_dir):
-            for f in os.listdir(save_dir):
-                if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                    full = os.path.join(save_dir, f)
-                    paths.append(full)
+        """Populate config selector with saved JSON configs from kmk_Config_Save and project root."""
 
-        for f in os.listdir(BASE_DIR):
-            if f.lower().startswith('kmk_config') and f.lower().endswith('.json'):
-                full = os.path.join(BASE_DIR, f)
-                if full not in paths:
-                    paths.append(full)
+        def _collect(folder: str) -> list[str]:
+            results: list[str] = []
+            if not os.path.isdir(folder):
+                return results
+            for name in os.listdir(folder):
+                lower = name.lower()
+                if lower.startswith('config') and lower.endswith('.json'):
+                    full_path = os.path.join(folder, name)
+                    if os.path.isfile(full_path):
+                        results.append(full_path)
+            return results
+
+        paths = _collect(CONFIG_SAVE_DIR)
+        # Include project-root configs if present (maintains backward compatibility)
+        for path in _collect(BASE_DIR):
+            if path not in paths:
+                paths.append(path)
+
+        paths.sort(key=lambda p: (os.path.dirname(p).lower(), os.path.basename(p).lower()))
 
         self.config_file_combo.blockSignals(True)
         self.config_file_combo.clear()
         display_names = [os.path.relpath(p, BASE_DIR) for p in paths]
         self.config_file_combo.addItems(display_names)
+        self.config_file_combo.setEnabled(bool(display_names))
         self.config_file_combo.blockSignals(False)
     
     def setup_layer_management_ui(self, parent_layout):
@@ -4633,14 +6484,73 @@ class KMKConfigurator(QMainWindow):
         
         parent_layout.addWidget(container)
 
+    def setup_grid_actions_bar(self, parent_layout):
+        """
+        Setup grid actions bar with quick action buttons and selection display.
+        
+        Features:
+        - Clear Layer: Resets all keys in current layer to KC.NO
+        - Copy Layer: Copies current layer to clipboard
+        - Paste Layer: Pastes clipboard layer data to current layer
+        - Selection Display: Shows currently selected key coordinates and assignment
+        
+        Note:
+            Actions bar provides quick access to common layer operations.
+        """
+        actions_frame = QFrame()
+        actions_frame.setObjectName("card")
+        actions_layout = QVBoxLayout(actions_frame)
+        actions_layout.setContentsMargins(12, 8, 12, 8)
+        actions_layout.setSpacing(8)
+        
+        # Action buttons row
+        buttons_layout = QHBoxLayout()
+        
+        clear_layer_btn = QPushButton("🗑 Clear Layer")
+        clear_layer_btn.clicked.connect(self.clear_current_layer)
+        clear_layer_btn.setToolTip("Clear all keys in the current layer (set to KC.NO)")
+        buttons_layout.addWidget(clear_layer_btn)
+        
+        copy_layer_btn = QPushButton("📋 Copy")
+        copy_layer_btn.clicked.connect(self.copy_current_layer)
+        copy_layer_btn.setToolTip("Copy current layer to clipboard")
+        buttons_layout.addWidget(copy_layer_btn)
+        
+        paste_layer_btn = QPushButton("📌 Paste")
+        paste_layer_btn.clicked.connect(self.paste_to_current_layer)
+        paste_layer_btn.setToolTip("Paste layer from clipboard")
+        buttons_layout.addWidget(paste_layer_btn)
+        
+        buttons_layout.addStretch()
+        actions_layout.addLayout(buttons_layout)
+        
+        # Selection display label
+        self.grid_selection_label = QLabel("Selected: None")
+        self.grid_selection_label.setStyleSheet("font-size: 9pt; color: #888; padding: 4px;")
+        actions_layout.addWidget(self.grid_selection_label)
+        
+        parent_layout.addWidget(actions_frame)
+
+
 
     def setup_macropad_grid_ui(self, parent_layout):
-        """Setup macropad grid with enhanced visual styling."""
+        """
+        Setup macropad grid with enhanced visual styling.
+        
+        Features:
+        - 100x100px buttons for better visibility (up from 80x80)
+        - 12px spacing for cleaner modern layout
+        - Coordinate labels for easy identification
+        - Visual feedback on hover and selection
+        
+        Note:
+            Grid layout is 180° rotated to match physical hardware orientation.
+        """
         self.macropad_group = QGroupBox(f"⌨ Keymap Grid (Layer {self.current_layer})")
         self.macropad_group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.macropad_layout = QGridLayout()
-        self.macropad_layout.setHorizontalSpacing(8)
-        self.macropad_layout.setVerticalSpacing(8)
+        self.macropad_layout.setHorizontalSpacing(12)  # Increased from 8px for modern spacing
+        self.macropad_layout.setVerticalSpacing(12)  # Increased from 8px for modern spacing
         self.macropad_layout.setContentsMargins(10, 10, 10, 10)
         self.macropad_group.setLayout(self.macropad_layout)
         parent_layout.addWidget(self.macropad_group, 1)
@@ -4708,6 +6618,192 @@ class KMKConfigurator(QMainWindow):
             self.update_macropad_display()
         else:
             QMessageBox.information(self, "No Key Selected", "Please select a key on the grid first.")
+
+    def clear_current_layer(self):
+        """
+        Clear all keys in the current layer to KC.NO.
+        
+        Prompts user for confirmation before clearing. This operation can be
+        undone by reloading a saved configuration.
+        
+        Note:
+            Updates the grid display immediately after clearing.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Clear Layer",
+            f"Clear all keys in Layer {self.current_layer}?\n\nThis will set all keys to KC.NO.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Clear all keys in current layer
+            for r in range(self.rows):
+                for c in range(self.cols):
+                    self.keymap_data[self.current_layer][r][c] = "KC.NO"
+            self.update_macropad_display()
+            QMessageBox.information(self, "Layer Cleared", f"Layer {self.current_layer} has been cleared.")
+
+    def copy_current_layer(self):
+        """
+        Copy the current layer to clipboard (internal storage).
+        
+        Stores layer data as JSON in an internal clipboard variable.
+        Can be pasted to any layer using paste_to_current_layer().
+        
+        Note:
+            Only one layer can be in the clipboard at a time.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        # Store layer data in clipboard
+        self.layer_clipboard = [row[:] for row in self.keymap_data[self.current_layer]]
+        QMessageBox.information(
+            self, 
+            "Layer Copied", 
+            f"Layer {self.current_layer} copied to clipboard.\n\nYou can now paste it to another layer."
+        )
+
+    def paste_to_current_layer(self):
+        """
+        Paste clipboard layer data to the current layer.
+        
+        Replaces all keys in the current layer with the copied layer data.
+        Prompts for confirmation before overwriting.
+        
+        Note:
+            Requires copy_current_layer() to have been called first.
+        """
+        if not hasattr(self, 'layer_clipboard') or not self.layer_clipboard:
+            QMessageBox.warning(
+                self, 
+                "No Layer Copied", 
+                "No layer data in clipboard.\n\nUse 'Copy' first to copy a layer."
+            )
+            return
+        
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Paste Layer",
+            f"Paste clipboard to Layer {self.current_layer}?\n\nThis will overwrite all current keys.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Paste layer data
+            for r in range(min(self.rows, len(self.layer_clipboard))):
+                for c in range(min(self.cols, len(self.layer_clipboard[r]))):
+                    self.keymap_data[self.current_layer][r][c] = self.layer_clipboard[r][c]
+            self.update_macropad_display()
+            QMessageBox.information(self, "Layer Pasted", f"Layer data pasted to Layer {self.current_layer}.")
+
+    def show_key_context_menu(self, row, col, pos):
+        """
+        Show context menu for grid key with common operations.
+        
+        Menu options:
+        - Copy Key: Copies key value to internal clipboard
+        - Paste Key: Pastes clipboard value to this key
+        - Set to Transparent: Sets key to KC.TRNS
+        - Set to No Key: Sets key to KC.NO
+        - Delete: Same as Set to No Key
+        
+        Args:
+            row: Row index of the key
+            col: Column index of the key
+            pos: Position where context menu should appear
+            
+        Note:
+            All operations update the grid display immediately.
+        """
+        if self.current_layer >= len(self.keymap_data):
+            return
+        
+        menu = QMenu(self)
+        
+        # Copy key action
+        copy_action = menu.addAction("📋 Copy Key")
+        copy_action.triggered.connect(lambda: self.copy_key_value(row, col))
+        
+        # Paste key action
+        paste_action = menu.addAction("📌 Paste Key")
+        paste_action.triggered.connect(lambda: self.paste_key_value(row, col))
+        if not hasattr(self, 'key_clipboard') or not self.key_clipboard:
+            paste_action.setEnabled(False)
+        
+        menu.addSeparator()
+        
+        # Set to transparent
+        transparent_action = menu.addAction("🔄 Set to Transparent")
+        transparent_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.TRNS"))
+        
+        # Set to no key
+        no_key_action = menu.addAction("✖ Set to No Key")
+        no_key_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.NO"))
+        
+        menu.addSeparator()
+        
+        # Delete (same as no key)
+        delete_action = menu.addAction("🗑 Delete")
+        delete_action.triggered.connect(lambda: self.set_key_value(row, col, "KC.NO"))
+        
+        # Show menu at button position
+        button = self.macropad_buttons.get((row, col))
+        if button:
+            menu.exec(button.mapToGlobal(pos))
+
+    def copy_key_value(self, row, col):
+        """Copy the value of a specific key to clipboard."""
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.key_clipboard = self.keymap_data[self.current_layer][row][col]
+        # Show toast notification
+        ToastNotification.show_message(
+            self, 
+            f"Key copied: {self.key_clipboard}", 
+            ToastNotification.INFO,
+            duration=2000
+        )
+
+    def paste_key_value(self, row, col):
+        """Paste clipboard value to a specific key."""
+        if not hasattr(self, 'key_clipboard') or not self.key_clipboard:
+            return
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.keymap_data[self.current_layer][row][col] = self.key_clipboard
+        self.update_macropad_display()
+        # Show toast notification
+        ToastNotification.show_message(
+            self, 
+            f"Key pasted: {self.key_clipboard}", 
+            ToastNotification.SUCCESS,
+            duration=2000
+        )
+
+    def set_key_value(self, row, col, value):
+        """Set a specific key to a given value."""
+        if self.current_layer >= len(self.keymap_data):
+            return
+        self.keymap_data[self.current_layer][row][col] = value
+        self.update_macropad_display()
+        # Show toast notification
+        value_display = "No Key" if value == "KC.NO" else ("Transparent" if value == "KC.TRNS" else value)
+        ToastNotification.show_message(
+            self, 
+            f"Key set to: {value_display}", 
+            ToastNotification.SUCCESS,
+            duration=2000
+        )
 
     def setup_macro_ui(self, parent_layout):
         """Setup macro and TapDance management with tabbed interface."""
@@ -4890,7 +6986,7 @@ class KMKConfigurator(QMainWindow):
 
     def save_macros(self):
         try:
-            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            # MACRO_FILE is at BASE_DIR root, no subfolder needed
             with open(MACRO_FILE, 'w') as f:
                 json.dump(self.macros, f, indent=4)
         except Exception as e:
@@ -4906,10 +7002,29 @@ class KMKConfigurator(QMainWindow):
                 QMessageBox.critical(self, "Error", f"Could not parse macros file ({MACRO_FILE}):\n{e}")
                 self.macros = {}
         else:
-            # Ensure the save directory exists for future saves
-            os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
+            # MACRO_FILE is at BASE_DIR root, no subfolder needed
             self.macros = {}
         self.update_macro_list()
+
+    def get_macros_used_in_keymap(self):
+        """Scan the current keymap and return macros that are actually used.
+        
+        Returns:
+            dict: Dictionary of {macro_name: actions} for macros used in keymap
+        """
+        used_macros = {}
+        
+        # Scan all layers for macro references
+        for layer in self.keymap_data:
+            for row in layer:
+                for key in row:
+                    if isinstance(key, str) and key.startswith("MACRO(") and key.endswith(")"):
+                        # Extract macro name from MACRO(name) format
+                        macro_name = key[6:-1]  # Strip "MACRO(" and ")"
+                        if macro_name in self.macros:
+                            used_macros[macro_name] = self.macros[macro_name]
+        
+        return used_macros
 
     def _sanitize_macros(self, raw_macros):
         sanitized = {}
@@ -4972,6 +7087,9 @@ class KMKConfigurator(QMainWindow):
             QMessageBox.critical(self, "Error", f"Could not save profiles:\n{e}")
 
     def load_profiles(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         if os.path.exists(PROFILE_FILE):
             try:
                 with open(PROFILE_FILE, 'r') as f:
@@ -4985,6 +7103,9 @@ class KMKConfigurator(QMainWindow):
         self.profile_combo.blockSignals(False)
 
     def save_current_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         name, ok = QInputDialog.getText(self, "Save Profile", "Enter profile name:")
         if ok and name:
             keymap_snapshot = json.loads(json.dumps(self.keymap_data))
@@ -5017,6 +7138,9 @@ class KMKConfigurator(QMainWindow):
             self.profile_combo.setCurrentText(name)
 
     def load_selected_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         profile_name = self.profile_combo.currentText()
         if profile_name and profile_name != "Custom":
             profile = self.profiles.get(profile_name)
@@ -5070,6 +7194,7 @@ class KMKConfigurator(QMainWindow):
                 # Load boot.py configuration
                 if "boot_config" in profile:
                     self.boot_config_str = profile.get("boot_config", "")
+                    self.refresh_boot_config_ui()
 
                 self.update_layer_tabs()
                 try:
@@ -5086,6 +7211,9 @@ class KMKConfigurator(QMainWindow):
                     pass
 
     def delete_selected_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         profile_name = self.profile_combo.currentText()
         if profile_name and profile_name != "Custom":
             reply = QMessageBox.question(self, "Delete Profile", f"Are you sure you want to delete the '{profile_name}' profile?")
@@ -5098,78 +7226,308 @@ class KMKConfigurator(QMainWindow):
             
     # --- Key Assignment ---
     def create_keycode_selector(self):
-        """Create keycode selector with improved organization and search."""
-        tab_widget = QTabWidget()
-        tab_widget.setTabPosition(QTabWidget.TabPosition.North)
+        """
+        Create modern keycode selector with sidebar + content layout.
         
-        # Create tabs for each keycode category with improved styling
-        for category, key_list in KEYCODES.items():
-            # Create container widget for this tab
-            tab_container = QWidget()
-            tab_layout = QVBoxLayout(tab_container)
-            tab_layout.setContentsMargins(5, 5, 5, 5)
-            tab_layout.setSpacing(5)
-            
-            # Add search filter
-            search_box = QLineEdit()
-            search_box.setPlaceholderText(f"🔍 Search {category}...")
-            search_box.setClearButtonEnabled(True)
-            tab_layout.addWidget(search_box)
-            
-            # Create list widget
-            list_widget = QListWidget()
-            list_widget.addItems(key_list)
-            list_widget.itemClicked.connect(self.on_keycode_assigned)
-            list_widget.setSpacing(2)
-            tab_layout.addWidget(list_widget)
-            
-            # Connect search filter
-            search_box.textChanged.connect(
-                lambda text, lw=list_widget, keys=key_list: self._filter_keycode_list(lw, keys, text)
-            )
-            
-            # Add tab with icon based on category
+        Features:
+        - Left sidebar with vertical category list
+        - Right content area with keycode list
+        - Global search across all categories
+        - Separate Macros/TapDance section below
+        - Quick action buttons (Combo, Clear, Transparent)
+        - Keyboard navigation support
+        
+        Layout:
+        1. Search bar at top
+        2. Horizontal splitter: [Category Sidebar | Keycode Content]
+        3. Quick action buttons below keycode list
+        4. Macros/TapDance tabbed section at bottom
+        
+        Returns:
+            QWidget container with complete keycode selector UI
+        """
+        container = QWidget()
+        container.setMinimumWidth(450)
+        container.setMinimumHeight(600)
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+
+        # Global search bar
+        self.keycode_search_box = QLineEdit()
+        self.keycode_search_box.setPlaceholderText("🔍 Search all keycodes...")
+        self.keycode_search_box.setClearButtonEnabled(True)
+        self.keycode_search_box.textChanged.connect(self._filter_all_keycodes)
+        main_layout.addWidget(self.keycode_search_box)
+
+        # Horizontal splitter: Category Sidebar | Keycode Content
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # LEFT: Category Sidebar
+        sidebar_widget = QWidget()
+        sidebar_widget.setMinimumWidth(140)
+        sidebar_widget.setMaximumWidth(220)
+        sidebar_layout = QVBoxLayout(sidebar_widget)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(2)  # Very tight spacing for compact windowed display
+        
+        # Store category buttons for state management
+        self.category_buttons = {}
+        self.category_list = list(KEYCODES.keys())
+        
+        # Create category button for each keycode category
+        for category in self.category_list:
             icon = self._get_category_icon(category)
-            tab_widget.addTab(tab_container, f"{icon} {category}")
+            count = len(KEYCODES[category])
+            btn = QPushButton(f"{icon} {category}\n({count})")
+            btn.setObjectName("categoryButton")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"Show {category} keycodes")
+            btn.setCheckable(True)
+            btn.setMinimumHeight(44)  # Smaller for windowed mode
+            btn.setMaximumHeight(48)  # More compact maximum
+            btn.setMinimumWidth(135)
+            btn.setMaximumWidth(180)  # Narrower max to prevent stretching
+            btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            btn.clicked.connect(lambda checked, cat=category: self.select_category(cat))
+            sidebar_layout.addWidget(btn)
+            self.category_buttons[category] = btn
         
-        # Tab for macros (populated dynamically)
-        macro_container = QWidget()
-        macro_layout = QVBoxLayout(macro_container)
-        macro_layout.setContentsMargins(5, 5, 5, 5)
+        # Add Macros button to sidebar
+        macro_count = len(self.macros) if hasattr(self, 'macros') else 0
+        macros_btn = QPushButton(f"⚡ Macros\n({macro_count})")
+        macros_btn.setObjectName("categoryButton")
+        macros_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        macros_btn.setToolTip("Show available macros")
+        macros_btn.setCheckable(True)
+        macros_btn.setMinimumHeight(44)
+        macros_btn.setMaximumHeight(48)
+        macros_btn.setMinimumWidth(135)
+        macros_btn.setMaximumWidth(180)
+        macros_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        macros_btn.clicked.connect(lambda: self.select_category("Macros"))
+        sidebar_layout.addWidget(macros_btn)
+        self.category_buttons["Macros"] = macros_btn
         
-        macro_info = QLabel("<small>Click a macro to assign it to selected key</small>")
-        macro_info.setStyleSheet("color: #888; padding: 3px;")
-        macro_layout.addWidget(macro_info)
+        # Add TapDance button to sidebar
+        tapdance_btn = QPushButton(f"🎯 TapDance\n(0)")
+        tapdance_btn.setObjectName("categoryButton")
+        tapdance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        tapdance_btn.setToolTip("Show TapDance keys from custom code")
+        tapdance_btn.setCheckable(True)
+        tapdance_btn.setMinimumHeight(44)
+        tapdance_btn.setMaximumHeight(48)
+        tapdance_btn.setMinimumWidth(135)
+        tapdance_btn.setMaximumWidth(180)
+        tapdance_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        tapdance_btn.clicked.connect(lambda: self.select_category("TapDance"))
+        sidebar_layout.addWidget(tapdance_btn)
+        self.category_buttons["TapDance"] = tapdance_btn
         
-        self.macro_keycode_list = QListWidget()
-        self.macro_keycode_list.itemClicked.connect(self.on_keycode_assigned)
-        self.macro_keycode_list.setSpacing(2)
-        macro_layout.addWidget(self.macro_keycode_list)
+        # Add stretch at bottom to push buttons to top in fullscreen
+        sidebar_layout.addStretch(1)
         
-        tab_widget.addTab(macro_container, "⚡ Macros")
+        # RIGHT: Keycode Content Area
+        content_widget = QWidget()
+        content_widget.setMinimumWidth(300)
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
         
-        # Tab for TapDance (populated dynamically from custom code)
-        td_container = QWidget()
-        td_layout = QVBoxLayout(td_container)
-        td_layout.setContentsMargins(5, 5, 5, 5)
+        # Keycode list
+        self.keycode_list = QListWidget()
+        self.keycode_list.setSpacing(2)
+        self.keycode_list.setMinimumHeight(300)
+        self.keycode_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.keycode_delegate = self.KeycodeListItemDelegate(self.keycode_list)
+        self.keycode_list.setItemDelegate(self.keycode_delegate)
+        self.keycode_list.itemClicked.connect(self.on_keycode_assigned)
+        self.keycode_list.itemDoubleClicked.connect(self.on_keycode_assigned)
+        content_layout.addWidget(self.keycode_list, 1)  # Stretch factor to grow
         
-        td_info = QLabel("<small>TapDance keys from Custom Code</small>")
-        td_info.setStyleSheet("color: #888; padding: 3px;")
-        td_layout.addWidget(td_info)
+        # Container for action buttons (will change based on category)
+        self.action_buttons_container = QWidget()
+        self.action_buttons_layout = QHBoxLayout(self.action_buttons_container)
+        self.action_buttons_layout.setSpacing(8)
+        self.action_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.addWidget(self.action_buttons_container)
         
-        self.tapdance_keycode_list = QListWidget()
-        self.tapdance_keycode_list.itemClicked.connect(self.on_keycode_assigned)
-        self.tapdance_keycode_list.setSpacing(2)
-        td_layout.addWidget(self.tapdance_keycode_list)
+        # Add sidebar and content to splitter
+        splitter.addWidget(sidebar_widget)
+        splitter.addWidget(content_widget)
+        splitter.setSizes([180, 400])  # Give sidebar more room (was 150)
+        splitter.setStretchFactor(0, 0)  # Sidebar fixed-ish
+        splitter.setStretchFactor(1, 1)  # Content grows
         
-        tab_widget.addTab(td_container, "🎯 TapDance")
+        main_layout.addWidget(splitter, 1)  # Full height for splitter
         
-        # Store reference for session persistence
-        self.keycode_tabs = tab_widget
-        # Connect tab change signal to save session state
-        tab_widget.currentChanged.connect(lambda: self.save_session_state())
+        # Store references to macro and tapdance lists for compatibility
+        self.macro_keycode_list = self.keycode_list
+        self.tapdance_keycode_list = self.keycode_list
         
-        return tab_widget
+        # Initialize state
+        self.current_category = None
+        self._all_keycodes_flat = []
+        
+        # Build flat keycode list for search
+        for category, key_list in KEYCODES.items():
+            for keycode in key_list:
+                self._all_keycodes_flat.append((category, keycode))
+        
+        # Select first category by default
+        if self.category_list:
+            self.select_category(self.category_list[0])
+        
+        return container
+
+    def _add_keycode_list_item(self, keycode: str) -> None:
+        """Insert a keycode row with metadata for custom delegate rendering."""
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.DisplayRole, keycode)
+        item.setData(Qt.ItemDataRole.UserRole, keycode)
+        label = KEYCODE_LABELS.get(keycode, "")
+        if label:
+            item.setData(Qt.ItemDataRole.UserRole + 1, label)
+        self.keycode_list.addItem(item)
+    
+    def select_category(self, category_name: str) -> None:
+        """
+        Switch to selected category and populate keycode list.
+        
+        Updates sidebar button states and displays keycodes for the selected category.
+        Handles special categories (Macros, TapDance) with appropriate action buttons.
+        Saves the selection to session state for persistence across app restarts.
+        
+        Args:
+            category_name: Name of the category to display (e.g., "Letters", "Modifiers", "Macros", "TapDance")
+        """
+        # Update button states (only one active at a time)
+        for name, btn in self.category_buttons.items():
+            if name == category_name:
+                btn.setChecked(True)
+                self._apply_active_button_style(btn)
+            else:
+                btn.setChecked(False)
+                self._apply_inactive_button_style(btn)
+        
+        # Clear action buttons
+        while self.action_buttons_layout.count():
+            child = self.action_buttons_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Populate keycode list based on category
+        self.keycode_list.clear()
+        
+        if category_name == "Macros":
+            # Show macros
+            macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
+            self.keycode_list.addItems(macro_keys)
+            
+            # Add macro action buttons
+            create_btn = QPushButton("➕ Create")
+            create_btn.clicked.connect(self.add_macro)
+            create_btn.setToolTip("Create a new macro")
+            self.action_buttons_layout.addWidget(create_btn)
+            
+            edit_btn = QPushButton("✎ Edit")
+            edit_btn.clicked.connect(self.edit_macro)
+            edit_btn.setToolTip("Edit selected macro")
+            self.action_buttons_layout.addWidget(edit_btn)
+            
+            delete_btn = QPushButton("🗑 Delete")
+            delete_btn.clicked.connect(self.remove_macro)
+            delete_btn.setToolTip("Delete selected macro")
+            self.action_buttons_layout.addWidget(delete_btn)
+            
+            self.action_buttons_layout.addStretch()
+            
+        elif category_name == "TapDance":
+            # Show tapdance keys (will be populated by update_tapdance_list)
+            self.update_tapdance_list()
+            
+            # Add tapdance action buttons
+            refresh_btn = QPushButton("🔄 Refresh")
+            refresh_btn.clicked.connect(self.update_tapdance_list)
+            refresh_btn.setToolTip("Refresh TapDance list from custom code")
+            self.action_buttons_layout.addWidget(refresh_btn)
+            
+            self.action_buttons_layout.addStretch()
+            
+        elif category_name in KEYCODES:
+            # Regular keycode category
+            keycodes = KEYCODES[category_name]
+            
+            # Add keycodes with right-aligned labels (fixed position from right)
+            for keycode in keycodes:
+                self._add_keycode_list_item(keycode)
+            
+            # Add standard keycode action buttons
+            combo_btn = QPushButton("⌨ Combo")
+            combo_btn.setToolTip("Create a key combination")
+            combo_btn.clicked.connect(self.assign_combo)
+            self.action_buttons_layout.addWidget(combo_btn)
+            
+            clear_btn = QPushButton("✖ Clear")
+            clear_btn.setToolTip("Set key to KC.NO (no action)")
+            clear_btn.clicked.connect(lambda: self.set_key_value("KC.NO"))
+            self.action_buttons_layout.addWidget(clear_btn)
+            
+            transparent_btn = QPushButton("🔄 Transparent")
+            transparent_btn.setToolTip("Set key to KC.TRNS (pass-through to lower layer)")
+            transparent_btn.clicked.connect(lambda: self.set_key_value("KC.TRNS"))
+            self.action_buttons_layout.addWidget(transparent_btn)
+            
+            self.action_buttons_layout.addStretch()
+        
+        # Update current category tracking
+        self.current_category = category_name
+        
+        # Save to session state
+        self.save_session_state()
+    
+    def _apply_active_button_style(self, button: QPushButton) -> None:
+        """
+        Apply active (selected) styling to a category button.
+        
+        Args:
+            button: The QPushButton to style as active
+        """
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #4a9aff;
+                color: white;
+                font-weight: bold;
+                border-radius: 6px;
+                padding: 6px 10px;
+                text-align: center;
+                font-size: 9pt;
+            }
+            QPushButton:hover {
+                background-color: #60a5fa;
+            }
+        """)
+    
+    def _apply_inactive_button_style(self, button: QPushButton) -> None:
+        """
+        Apply inactive (unselected) styling to a category button.
+        
+        Args:
+            button: The QPushButton to style as inactive
+        """
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #374151;
+                color: #e5e7eb;
+                border-radius: 6px;
+                padding: 6px 10px;
+                text-align: center;
+                font-size: 9pt;
+            }
+            QPushButton:hover {
+                background-color: #4b5563;
+            }
+        """)
     
     def _get_category_icon(self, category):
         """Return an appropriate icon emoji for each category."""
@@ -5189,19 +7547,132 @@ class KMKConfigurator(QMainWindow):
         }
         return icons.get(category, "🔸")
     
-    def _filter_keycode_list(self, list_widget, all_keys, filter_text):
-        """Filter keycode list based on search text."""
-        list_widget.clear()
-        filter_text = filter_text.lower()
+    def _filter_all_keycodes(self, filter_text: str) -> None:
+        """
+        Search across all categories and display results grouped by category.
         
-        if not filter_text:
-            list_widget.addItems(all_keys)
-        else:
-            filtered_keys = [key for key in all_keys if filter_text in key.lower()]
-            list_widget.addItems(filtered_keys)
+        When search is active, results are organized with category headers.
+        When search is cleared, returns to showing the current category.
+        
+        Args:
+            filter_text: User-entered search text (case-insensitive)
+        """
+        if not hasattr(self, "_all_keycodes_flat"):
+            return
+
+        search_value = (filter_text or "").strip().lower()
+
+        # If search is empty, show current category
+        if not search_value:
+            if hasattr(self, 'current_category') and self.current_category:
+                self.select_category(self.current_category)
+            elif hasattr(self, 'category_list') and self.category_list:
+                self.select_category(self.category_list[0])
+            return
+
+        # Search across all categories
+        self.keycode_list.clear()
+        found_any = False
+        current_category_shown = None
+
+        for category, keycode in self._all_keycodes_flat:
+            # Get label for search matching
+            label = KEYCODE_LABELS.get(keycode, "")
+            search_text = f"{keycode} {label}".lower()
+            
+            if search_value in search_text:
+                found_any = True
+                
+                # Add category header if this is first result from this category
+                if category != current_category_shown:
+                    header_item = QListWidgetItem(f"━━━ {category} ━━━")
+                    header_item.setForeground(QColor("#9ca3af"))
+                    header_item.setBackground(QColor("#1f2937"))
+                    header_item.setFlags(header_item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                    self.keycode_list.addItem(header_item)
+                    current_category_shown = category
+                
+                # Add matching keycode with right-aligned label (fixed position from right)
+                self._add_keycode_list_item(keycode)
+
+        if not found_any:
+            no_results = QListWidgetItem("No matching keycodes found")
+            no_results.setForeground(QColor("#9ca3af"))
+            no_results.setFlags(no_results.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+            self.keycode_list.addItem(no_results)
+
+    def _on_search_result_selected(self, item: QListWidgetItem) -> None:
+        """Assign keycode chosen from the global search result list."""
+        keycode = item.data(Qt.ItemDataRole.UserRole)
+        if keycode:
+            proxy_item = QListWidgetItem(keycode)
+            self.on_keycode_assigned(proxy_item)
+            # Clear search to return to tab view
+            self.keycode_search_box.clear()
+    
+    def _on_category_pill_clicked(self, index: int):
+        """
+        Handle category pill button clicks for quick navigation.
+        
+        Updates the active tab to match the clicked category pill and
+        synchronizes the visual state of all pills (only one active).
+        
+        Args:
+            index: Tab index to navigate to (matches pill button index)
+        """
+        # Update tab selection
+        if hasattr(self, 'keycode_tabs') and self.keycode_tabs:
+            self.keycode_tabs.setCurrentIndex(index)
+        
+        # Update pill visual states (uncheck all except clicked)
+        for i, pill in enumerate(self.category_pills):
+            pill.setChecked(i == index)
+        
+        # Save session state
+        self.save_session_state()
+    
+    def _on_tab_changed(self, index: int):
+        """
+        Handle tab widget changes to synchronize category pills.
+        
+        When user clicks a tab directly (not via pill), this updates
+        the pill button states to match the selected tab.
+        
+        Args:
+            index: New active tab index
+        """
+        # Update pill visual states
+        if hasattr(self, 'category_pills'):
+            for i, pill in enumerate(self.category_pills):
+                pill.setChecked(i == index)
+        
+        # Save session state
+        self.save_session_state()
+    
+    def _get_category_icon(self, category):
+        """Return an appropriate icon emoji for each category."""
+        icons = {
+            "Letters": "🔤",
+            "Numbers & Symbols": "🔢",
+            "Editing": "✏",
+            "Modifiers": "⌨",
+            "Navigation": "🧭",
+            "Function Keys": "🔧",
+            "Media & Volume": "🔊",
+            "Brightness": "💡",
+            "Numpad": "🔢",
+            "Mouse": "🖱",
+            "Layer Switching": "📚",
+            "Special": "⭐"
+        }
+        return icons.get(category, "🔸")
 
     def on_keycode_assigned(self, item):
-        keycode = item.text()
+        # Extract actual keycode from UserRole data, fall back to text for macros/tapdance
+        keycode = item.data(Qt.ItemDataRole.UserRole)
+        if not keycode:
+            keycode = item.text()  # For macros/tapdance which don't have UserRole data
+        
         if self.selected_key_coords:
             row, col = self.selected_key_coords
             self.keymap_data[self.current_layer][row][col] = keycode
@@ -5240,12 +7711,25 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
 
     def edit_macro(self):
-        selected_items = self.macro_list_widget.selectedItems()
+        """
+        Edit an existing macro.
+        
+        Opens the macro editor dialog pre-populated with the selected macro's
+        data. If the macro name changes, updates all keymap references.
+        Prompts user to select a macro from the list if none is selected.
+        """
+        selected_items = self.macro_keycode_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "No Macro Selected", "Please select a macro to edit.")
+            QMessageBox.warning(self, "No Macro Selected", "Please select a macro from the list to edit.")
             return
         
-        name = selected_items[0].text()
+        # Extract macro name from "MACRO(name)" format
+        item_text = selected_items[0].text()
+        if item_text.startswith("MACRO(") and item_text.endswith(")"):
+            name = item_text[6:-1]  # Strip "MACRO(" and ")"
+        else:
+            name = item_text
+        
         sequence = self.macros.get(name, [])
         
         dialog = MacroEditorDialog(macro_name=name, macro_sequence=sequence, parent=self)
@@ -5275,10 +7759,24 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
 
     def remove_macro(self):
-        selected_items = self.macro_list_widget.selectedItems()
-        if not selected_items: return
+        """
+        Remove a macro from the configuration.
         
-        name = selected_items[0].text()
+        Prompts for confirmation before deletion. Replaces all keymap
+        occurrences of the deleted macro with the default key (KC.NO).
+        """
+        selected_items = self.macro_keycode_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Macro Selected", "Please select a macro from the list to delete.")
+            return
+        
+        # Extract macro name from "MACRO(name)" format
+        item_text = selected_items[0].text()
+        if item_text.startswith("MACRO(") and item_text.endswith(")"):
+            name = item_text[6:-1]  # Strip "MACRO(" and ")"
+        else:
+            name = item_text
+        
         reply = QMessageBox.question(self, "Remove Macro", f"Are you sure you want to remove the '{name}' macro?")
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -5296,15 +7794,28 @@ class KMKConfigurator(QMainWindow):
             self.save_macros()
             
     def update_macro_list(self):
-        self.macro_list_widget.clear()
-        self.macro_list_widget.addItems(sorted(self.macros.keys()))
+        """
+        Refresh the macro list displays with current macro data.
         
-        self.macro_keycode_list.clear()
-        macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
-        self.macro_keycode_list.addItems(macro_keys)
-
-        # Allow double-clicking a macro name in the left list to edit it
-        self.macro_list_widget.itemDoubleClicked.connect(lambda item: self.edit_macro_by_name(item.text()))
+        Updates the keycode list if Macros category is active, updates
+        the Macros button count, and updates left panel list if it exists.
+        """
+        # Update left panel list if it exists
+        if hasattr(self, 'macro_list_widget'):
+            self.macro_list_widget.clear()
+            self.macro_list_widget.addItems(sorted(self.macros.keys()))
+            # Allow double-clicking a macro name in the left list to edit it
+            self.macro_list_widget.itemDoubleClicked.connect(lambda item: self.edit_macro_by_name(item.text()))
+        
+        # Update keycode list if Macros category is active
+        if hasattr(self, 'current_category') and self.current_category == "Macros":
+            self.keycode_list.clear()
+            macro_keys = [f"MACRO({name})" for name in sorted(self.macros.keys())]
+            self.keycode_list.addItems(macro_keys)
+        
+        # Update Macros button count
+        if hasattr(self, 'category_buttons') and "Macros" in self.category_buttons:
+            self.category_buttons["Macros"].setText(f"⚡ Macros\n({len(self.macros)})")
 
     def edit_macro_by_name(self, name):
         # Open MacroEditorDialog for the macro with given name
@@ -6094,9 +8605,148 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 if os.path.exists(path):
                     return path
         return BASE_DIR  # Fallback to application directory
+    
+    def find_board_drive(self, drive_name="CIRCUITPY"):
+        """Find a specific board drive by name.
+        
+        Args:
+            drive_name: Name of the drive to find (e.g., 'CIRCUITPY', 'CHRONOSPAD')
+            
+        Returns:
+            str: Path to the drive if found, None otherwise
+        """
+        import platform
+        system = platform.system()
+        
+        if system == "Windows":
+            import string
+            from ctypes import windll
+            drives = []
+            bitmask = windll.kernel32.GetLogicalDrives()
+            for letter in string.ascii_uppercase:
+                if bitmask & 1:
+                    drives.append(f"{letter}:")
+                bitmask >>= 1
+            
+            for drive in drives:
+                try:
+                    label = windll.kernel32.GetVolumeInformationW(
+                        f"{drive}\\", None, 0, None, None, None, None, 0
+                    )
+                    # Try to get volume label
+                    import subprocess
+                    result = subprocess.run(
+                        ['cmd', '/c', 'vol', drive],
+                        capture_output=True,
+                        text=True,
+                        timeout=1
+                    )
+                    if drive_name in result.stdout:
+                        return drive + "\\"
+                except:
+                    continue
+                    
+        elif system == "Darwin":  # macOS
+            path = f"/Volumes/{drive_name}"
+            if os.path.exists(path):
+                return path
+                
+        else:  # Linux
+            username = os.getlogin()
+            for base_path in [f"/media/{username}", f"/run/media/{username}"]:
+                path = os.path.join(base_path, drive_name)
+                if os.path.exists(path):
+                    return path
+        
+        return None
+    
+    def select_board_dialog(self, found_drives):
+        """Show dialog to select which board to flash when multiple are found.
+        
+        Args:
+            found_drives: Dictionary of {drive_name: drive_path}
+            
+        Returns:
+            str: Selected drive name, or None if cancelled
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Board")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel(
+            f"<h3>Multiple Boards Found ({len(found_drives)})</h3>"
+            "Select which board you want to flash:"
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        
+        # List of drives
+        drive_list = QListWidget()
+        for drive_name, drive_path in found_drives.items():
+            item = QListWidgetItem(f"{drive_name} ({drive_path})")
+            item.setData(Qt.ItemDataRole.UserRole, drive_name)
+            drive_list.addItem(item)
+        
+        drive_list.setCurrentRow(0)
+        layout.addWidget(drive_list)
+        
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            current_item = drive_list.currentItem()
+            if current_item:
+                return current_item.data(Qt.ItemDataRole.UserRole)
+        
+        return None
+
+    def find_circuitpy_drive(self):
+        """Legacy method - find CIRCUITPY drive specifically."""
+        return self.find_board_drive("CIRCUITPY") or BASE_DIR
 
     def generate_code_py_dialog(self):
-        default_path = self.find_circuitpy_drive()
+        """Generate code.py and offer to save to board drive.
+        Checks for saved custom board names and auto-navigates to found drives."""
+        
+        # Check for any saved board names
+        settings = load_settings()
+        board_names = settings.get('board_names', [])
+        
+        # Always include CIRCUITPY as default
+        all_drive_names = ['CIRCUITPY'] + board_names
+        
+        # Find which drives are currently mounted
+        found_drives = {}
+        for drive_name in all_drive_names:
+            drive_path = self.find_board_drive(drive_name)
+            if drive_path and os.path.exists(drive_path):
+                found_drives[drive_name] = drive_path
+        
+        # Determine default path based on found drives
+        default_path = BASE_DIR  # Fallback
+        selected_drive_name = None
+        
+        if len(found_drives) == 0:
+            # No drives found, use fallback
+            default_path = BASE_DIR
+        elif len(found_drives) == 1:
+            # Only one drive found, use it automatically
+            selected_drive_name = list(found_drives.keys())[0]
+            default_path = found_drives[selected_drive_name]
+        else:
+            # Multiple drives found, ask user which one to use
+            selected_drive_name = self.select_board_dialog(found_drives)
+            if selected_drive_name:
+                default_path = found_drives[selected_drive_name]
+            else:
+                default_path = BASE_DIR  # User cancelled
         
         folder_path = QFileDialog.getExistingDirectory(
             self,
@@ -6185,11 +8835,11 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 QMessageBox.critical(self, "Error", f"Could not save code.py file:\n{e}")
 
     def save_configuration_dialog(self):
-        save_dir = "kmk_Config_Save"
-        os.makedirs(save_dir, exist_ok=True)
+        # Ensure config save directory exists
+        os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)
         
-        # Set the initial directory to kmk_Config_Save
-        initial_path = os.path.join(save_dir, "config.json")
+        # Set the initial directory to CONFIG_SAVE_DIR
+        initial_path = os.path.join(CONFIG_SAVE_DIR, "config.json")
         
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -6204,6 +8854,13 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             
             try:
                 self.save_configuration_to_path(file_path)
+                # Refresh config list to include the newly saved file
+                if hasattr(self, 'config_file_combo'):
+                    self.populate_config_file_list()
+                    rel_path = os.path.relpath(file_path, BASE_DIR)
+                    idx = self.config_file_combo.findText(rel_path)
+                    if idx >= 0:
+                        self.config_file_combo.setCurrentIndex(idx)
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{e}\n\nTraceback:\n{traceback.format_exc()}")
@@ -6212,8 +8869,11 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             print("Save cancelled by user")
 
     def save_configuration_to_path(self, file_path):
-        """Save complete configuration including all layers, RGB colors, and extension settings
-        Note: Macros are stored globally and not in individual config files."""
+        """Save complete configuration including all layers, RGB colors, extension settings, and used macros.
+        
+        Note: Only macros that are actually used in the keymap are saved with the config.
+        All macros remain in the global macros.json file as well.
+        """
         config_data = {
             "version": "2.0",  # New version format
             "hardware": {
@@ -6227,7 +8887,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "layers": self.keymap_data,
                 "current_layer": self.current_layer,
             },
-            # Macros are no longer saved per-config - they are global
+            "macros": self.get_macros_used_in_keymap(),  # Save macros used in this config
             "rgb": {
                 "enabled": self.enable_rgb,
                 "matrix": self._export_rgb_config(),
@@ -6241,6 +8901,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 "analogin": {
                     "enabled": self.enable_analogin,
                     "config_str": self.analogin_config_str,
+                    "settings": load_settings().get('analog_input', {}),  # Save analog input settings
                 },
                 "display": {
                     "enabled": self.enable_display,
@@ -6271,7 +8932,14 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         selected_path = candidate
 
         if not selected_path:
-            selected_path, _ = QFileDialog.getOpenFileName(self, "Load Configuration", "", "JSON Files (*.json)")
+            # Open file dialog starting in kmk_Config_Save folder
+            start_dir = CONFIG_SAVE_DIR if os.path.exists(CONFIG_SAVE_DIR) else BASE_DIR
+            selected_path, _ = QFileDialog.getOpenFileName(
+                self, 
+                "Load Configuration", 
+                start_dir,  # Start in config save directory
+                "JSON Files (*.json)"
+            )
             if not selected_path:
                 return False
 
@@ -6290,16 +8958,30 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 self.keymap_data = keymap_section.get("layers", [])
                 current_layer = keymap_section.get("current_layer", 0)
                 
-                # Load macros (merge into global store)
+                # Load macros (check for new macros and offer to import)
                 config_macros = self._sanitize_macros(config_data.get("macros", {}))
                 if config_macros:
-                    merged_macros = dict(self.macros)
-                    merged_macros.update(config_macros)
-                    self.macros = merged_macros
-                    try:
-                        self.save_macros()
-                    except Exception:
-                        pass
+                    # Find macros that are NEW (not already in global store)
+                    new_macros = {name: actions for name, actions in config_macros.items() 
+                                 if name not in self.macros}
+                    
+                    if new_macros:
+                        # Ask user if they want to import new macros
+                        imported_macros = self.show_macro_import_dialog(new_macros)
+                        if imported_macros:
+                            # Merge imported macros into global store
+                            self.macros.update(imported_macros)
+                            try:
+                                self.save_macros()
+                            except Exception:
+                                pass
+                    
+                    # Also merge any existing macros (in case config uses them)
+                    existing_config_macros = {name: actions for name, actions in config_macros.items() 
+                                            if name in self.macros}
+                    if existing_config_macros:
+                        # Silently include existing macros without asking
+                        pass  # They're already in self.macros
                 
                 # Load RGB settings
                 rgb_section = config_data.get("rgb", {})
@@ -6335,6 +9017,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 
                 # Load boot.py configuration
                 self.boot_config_str = config_data.get("boot_config", "")
+                self.refresh_boot_config_ui()
                 
             else:
                 # Old format (v1.0) - backward compatibility
@@ -6369,7 +9052,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             else:
                 self.current_layer = 0
             
-            self.profile_combo.setCurrentText("Custom")
+            if hasattr(self, 'profile_combo'):
+                self.profile_combo.setCurrentText("Custom")
 
             # Refresh UI - order matters!
             self.update_layer_tabs()  # First update tabs to match layer count
@@ -6426,7 +9110,19 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         # still exists in the new grid.
 
     def recreate_macropad_grid(self):
-        """Clears and rebuilds the macropad grid buttons with enhanced visual design."""
+        """
+        Clears and rebuilds the macropad grid buttons with enhanced modern visual design.
+        
+        Features:
+        - 100×100px buttons (increased from 80×80)
+        - 12px spacing for cleaner modern layout
+        - Coordinate labels for easy identification
+        - Visual hover effects and selection states
+        - 180° rotation to match physical hardware orientation
+        
+        Note:
+            Restores previous selection state if the key still exists after rebuild.
+        """
         self.clear_macropad_grid()
         # Iterate in reverse (180° rotation) to match physical board orientation
         for r in range(self.rows - 1, -1, -1):
@@ -6434,11 +9130,15 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 button = QPushButton()
                 button.setObjectName("keymapButton")
                 button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-                button.setMinimumSize(80, 80)  # Minimum size for better visibility
+                button.setMinimumSize(100, 100)  # Increased from 80 to 100 for modern layout
                 button.setCheckable(True)
                 button.clicked.connect(partial(self.on_key_selected, r, c))
                 # allow double-click detection via the main window's eventFilter
                 button.installEventFilter(self)
+                
+                # Enable context menu (right-click)
+                button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                button.customContextMenuRequested.connect(partial(self.show_key_context_menu, r, c))
                 
                 # Add coordinate label for easier identification
                 button.setProperty("coords", f"({r},{c})")
@@ -6541,10 +9241,17 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         if self.selected_key_coords == clicked_coords:
             self.selected_key_coords = None
             self.selected_key_label.setText("Selected Key: None")
+            # Update grid selection label if it exists
+            if hasattr(self, 'grid_selection_label'):
+                self.grid_selection_label.setText("Selected: None")
             # The button's check state is toggled automatically by PyQt
         else: # Otherwise, select the new key
             self.selected_key_coords = clicked_coords
+            key_value = self.keymap_data[self.current_layer][row][col] if self.current_layer < len(self.keymap_data) else "KC.NO"
             self.selected_key_label.setText(f"Selected Key: ({row}, {col})")
+            # Update grid selection label if it exists
+            if hasattr(self, 'grid_selection_label'):
+                self.grid_selection_label.setText(f"Selected: (Row {row}, Col {col}) | {key_value}")
             current_button = self.macropad_buttons.get(clicked_coords)
             if current_button:
                 current_button.setChecked(True)

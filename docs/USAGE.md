@@ -1,5 +1,9 @@
 # Usage Guide
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from D10D3K1NG.
+
+---
+
 Learn how to use the Chronos Pad Configurator to create your custom keyboard configuration.
 
 ---

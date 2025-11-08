@@ -1,5 +1,9 @@
 # Extensions & Hardware Configuration
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from D10D3K1NG.
+
+---
+
 This guide covers configuring all hardware extensions: Encoder, Analog Input, Display, and RGB Lighting.
 
 ---

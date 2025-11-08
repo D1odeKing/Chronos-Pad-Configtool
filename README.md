@@ -7,8 +7,11 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![CircuitPython](https://img.shields.io/badge/CircuitPython-10.0.3-blueviolet.svg)
 ![KMK Firmware](https://img.shields.io/badge/KMK-GPL--3.0-orange.svg)
+![AI Generated](https://img.shields.io/badge/AI-Generated%20Code-blueviolet.svg)
 
-> **⚠️ Important Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
+> **🤖 AI-Generated Code Notice**: This project's codebase was primarily written by **GitHub Copilot AI** with project direction, testing, and bug detection by **D10D3K1NG**. See [Attribution](docs/ATTRIBUTION.md) for details.
+
+> **⚠️ Hardware Notice**: This configuration tool is specifically designed for the [Chronos Pad](https://github.com/D1odeKing/Chronos-Pad) hardware project. It is pre-configured with the exact pin mappings, hardware specifications, and features of the Chronos Pad macropad. For the hardware design, PCB files, and build instructions, please visit the [Chronos Pad repository](https://github.com/D1odeKing/Chronos-Pad).
 
 ---
 
@@ -16,14 +19,23 @@ A professional GUI configurator for KMK firmware-based macropads, specifically d
 
 Complete documentation is organized in the [`docs/`](docs/) folder for easy navigation:
 
+### Getting Started
 | Document | Purpose |
 |----------|---------|
-| **[Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
-| **[CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 10.0.3 on Pico 2 |
-| **[Usage Guide](docs/USAGE.md)** | How to use the configurator |
-| **[Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
-| **[Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
-| **[Build Exe Guide](docs/BUILD_EXE.md)** | Creating your own executable |
+| **[📋 Documentation Index](docs/README.md)** | Complete documentation overview |
+| **[🤖 AI Attribution](docs/ATTRIBUTION.md)** | AI-generated code notice & credits |
+| **[📥 Installation Guide](docs/INSTALLATION.md)** | Getting started (exe or source) |
+| **[⚡ CircuitPython Setup](docs/CIRCUITPYTHON_SETUP.md)** | Installing CircuitPython 10.0.3 on Pico 2 |
+| **[📖 Usage Guide](docs/USAGE.md)** | How to use the configurator |
+
+### Advanced Topics
+| Document | Purpose |
+|----------|---------|
+| **[🔌 Extensions Guide](docs/EXTENSIONS.md)** | Encoder, display, RGB, analog input |
+| **[🖥 Display Guide](docs/DISPLAY.md)** | OLED layer-aware visualization |
+| **[🎨 Layer RGB Guide](docs/LAYER_RGB_SWITCHING.md)** | Layer-aware RGB lighting |
+| **[🏗 Architecture Guide](docs/ARCHITECTURE.md)** | Codebase structure & design |
+| **[📦 Build Exe Guide](docs/BUILD_EXE.md)** | Creating your own executable |
 
 ---
 
@@ -51,10 +63,18 @@ Complete documentation is organized in the [`docs/`](docs/) folder for easy navi
 
 ### Advanced Settings
 - ✅ **Encoder Sensitivity Control**: Adjust steps per pulse (1-16) for perfect responsiveness
-- ✅ **Boot Configuration**: Full boot.py customization with safety warnings
+- ✅ **Boot Configuration**: Full boot.py customization with automatic persistence
 - ⚠️ **Read-Only Protection**: Comprehensive warnings before enabling read-only mode
-- ✅ **Drive Renaming**: Customize CIRCUITPY drive label
+- ✅ **Drive Renaming**: Customize CIRCUITPY drive label with automatic sync
 - ✅ **USB Configuration**: Control USB HID and storage settings
+- ✅ **Boot.py Persistence**: Settings survive saves, loads, and profile switches
+
+### UI Improvements
+- ✅ **Keycode Selector**: Right-aligned labels for better readability
+- ✅ **Custom Delegate**: Professional rendering with proper text alignment
+- ✅ **Config Auto-Discovery**: Automatically scans and displays all saved configs
+- ✅ **Boot.py Sync**: UI controls stay in sync with persisted boot configuration
+- ✅ **Session Persistence**: Remembers theme, layer, and search state between sessions
 
 ### Macro System
 - ✅ **Visual Macro Builder**: Create complex sequences with GUI
@@ -232,7 +252,29 @@ This configuration tool is designed specifically for the Chronos Pad. All hardwa
 
 ## 🔄 Version History
 
-### v1.1.0 (2025-11-01) - Current
+### v1.2.0 (2025-11-08) - Current
+- ✅ **Boot Configuration Enhancements**:
+  - Full boot.py control with read-only drive, USB HID, and drive rename options
+  - Automatic persistence: settings survive saves, loads, and profile switches
+  - Boot UI auto-sync when loading configs/profiles
+  - Settings refresh on any change
+- ✅ **Keycode Selector Improvements**:
+  - Custom delegate rendering for right-aligned labels
+  - Professional appearance with consistent spacing
+  - Labels always visible regardless of keycode length
+  - Works perfectly in both category view and search results
+- ✅ **Config File Management**:
+  - Auto-discovery of all `config*.json` files in `kmk_Config_Save`
+  - Backward compatibility with root-level configs
+  - Auto-refresh after saving new configs
+  - Sorted display for better organization
+- ✅ **Bug Fixes**:
+  - Boot configuration now properly saved to `config.json` and `boot.py`
+  - Keycode labels render correctly on all displays
+  - Config picker updates immediately after save
+  - Boot settings reset alongside other defaults
+
+### v1.1.0 (2025-11-01)
 - ✅ **OLED Display Enhancements**:
   - Layer-aware display updates in real-time
   - Correct left/right orientation (column mirroring)

@@ -1,5 +1,9 @@
 # Chronos Pad Layer-Switching RGB System
 
+> **AI-Generated Documentation**: This guide was written by GitHub Copilot AI based on requirements and validation from D10D3K1NG.
+
+---
+
 ## Overview
 This document explains the architecture, configuration, and runtime behavior of the per-layer RGB lighting system for the Chronos Pad, as implemented in the Configtool and generated firmware. It covers how per-layer color maps are stored, how the physical LED order is handled, and how the firmware updates the LEDs in real time as layers change.
 

@@ -1,0 +1,10 @@
+{
+  "analog_input": {
+    "mode": "brightness",
+    "poll_interval": 0.05,
+    "threshold": 2000,
+    "step_size": 1,
+    "min_brightness": 0.0,
+    "max_brightness": 0.3
+  }
+}
