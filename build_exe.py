@@ -60,6 +60,10 @@ try:
     data_folder.mkdir(parents=True, exist_ok=True)
     libraries_folder.mkdir(parents=True, exist_ok=True)
     
+    # Create kmk_Config_Save subfolder in data
+    config_save_folder = data_folder / "kmk_Config_Save"
+    config_save_folder.mkdir(parents=True, exist_ok=True)
+    
     # Move the exe into the ChronosPadConfigurator folder
     exe_source = Path("dist/ChronosPadConfigurator.exe")
     exe_dest = dist_root / "ChronosPadConfigurator.exe"
@@ -73,31 +77,60 @@ try:
         shutil.copy2('profiles.json', data_folder / 'profiles.json')
         print(f"  ✓ Copied profiles.json to data/")
     
+    # Create a .gitkeep in kmk_Config_Save to preserve folder structure
+    (config_save_folder / ".gitkeep").touch()
+    print(f"  ✓ Created kmk_Config_Save/ folder structure")
+    
     # Create README.txt with instructions
     readme_content = """
 Chronos Pad Configurator - Portable Distribution
 ================================================
 
-CONTENTS:
----------
-ChronosPadConfigurator.exe  - Main application (double-click to run)
-data/                       - Configuration files and profiles
-libraries/                  - Auto-downloaded KMK firmware and libraries
-                             (will be populated on first run)
+FOLDER STRUCTURE:
+-----------------
+ChronosPadConfigurator/
+├── ChronosPadConfigurator.exe  (Main application - double-click to run)
+├── data/                        (Your configurations and settings)
+│   ├── kmk_Config_Save/        (Auto-saved extension configs)
+│   ├── settings.json           (App preferences - auto-created)
+│   ├── macros.json             (Global macros - auto-created)
+│   └── profiles.json           (Quick-load presets)
+└── libraries/                   (Auto-downloaded dependencies)
+    ├── kmk_firmware-main/      (Downloaded on first run)
+    └── adafruit-circuitpython-bundle-.../  (Downloaded on first run)
 
 FIRST RUN:
 ----------
 1. Double-click ChronosPadConfigurator.exe
-2. The app will automatically download required libraries
-3. Wait for the download to complete (~30-60 seconds)
-4. Start configuring your Chronos Pad!
+2. Choose CircuitPython version (9.x or 10.x)
+3. The app will automatically download required libraries (~30-60 seconds)
+4. Wait for "Dependencies installed successfully!"
+5. Start configuring your Chronos Pad!
+
+HOW IT WORKS:
+-------------
+The executable is FULLY PORTABLE:
+- All paths are relative to ChronosPadConfigurator.exe location
+- Copy the entire ChronosPadConfigurator/ folder anywhere (USB drive, desktop, etc.)
+- The app will always find its data/ and libraries/ folders
+- Your configs stay with the app - no installation needed!
 
 USAGE:
 ------
-- All your saved configurations will be stored in the data/ folder
-- Profiles are quick-load presets you can save and switch between
+- All your saved configurations are stored in data/kmk_Config_Save/
+- App settings (theme, version, RGB colors) are in data/settings.json
+- Macros are shared across configs in data/macros.json
 - The libraries/ folder contains KMK firmware (auto-managed)
-- You can safely delete the libraries/ folder to force a fresh download
+- You can safely delete libraries/ to force a fresh download
+
+SAVED CONFIGURATIONS:
+---------------------
+When you save a config file, it goes to: data/kmk_Config_Save/YourConfigName.json
+This includes:
+- Keymap layout for all layers
+- Extension configurations (encoder, RGB, display, analog input)
+- RGB matrix colors and layer-specific colors
+- Boot.py settings
 
 REQUIREMENTS:
 -------------
@@ -105,10 +138,23 @@ REQUIREMENTS:
 - Raspberry Pi Pico 2 with CircuitPython 10.0.3
 - USB connection to your Chronos Pad
 
+TROUBLESHOOTING:
+----------------
+If the app can't find libraries:
+1. Make sure data/ and libraries/ folders are in the same directory as the .exe
+2. Delete libraries/ folder and restart the app to re-download
+3. Check that you're not running from a compressed/zipped folder
+
+If settings aren't saving:
+1. Make sure the data/ folder exists next to the .exe
+2. Check that you have write permissions in the folder
+3. Try running as administrator (right-click .exe → Run as administrator)
+
 SUPPORT:
 --------
 GitHub: https://github.com/D1odeKing/Chronos-Pad-Configtool
-Documentation: See docs/ folder in the repository
+Documentation: https://github.com/D1odeKing/Chronos-Pad-Configtool/tree/main/docs
+Issues: https://github.com/D1odeKing/Chronos-Pad-Configtool/issues
 
 Enjoy your Chronos Pad! 🎹
 """

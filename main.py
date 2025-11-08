@@ -72,6 +72,7 @@ DEFAULT_KEY = "KC.NO"
 
 # Store configs in data/ subfolder for organized structure
 CONFIG_SAVE_DIR = os.path.join(DATA_DIR, "kmk_Config_Save")
+os.makedirs(CONFIG_SAVE_DIR, exist_ok=True)  # Ensure config folder exists
 
 # Try to load profiles.json from data/ first, fallback to BASE_DIR for backward compatibility
 PROFILE_FILE_NEW = os.path.join(DATA_DIR, "profiles.json")
@@ -1488,6 +1489,10 @@ class AnalogInConfigDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Analog Slider Configuration (GP28)")
         self.resize(550, 500)
+        
+        # Load saved settings from settings.json
+        settings = load_settings()
+        analog_settings = settings.get('analog_input', {})
 
         main_layout = QVBoxLayout(self)
         
@@ -1506,13 +1511,17 @@ class AnalogInConfigDialog(QDialog):
         mode_group = QGroupBox("Slider Function")
         mode_layout = QVBoxLayout()
         
+        # Load saved mode (default to volume)
+        saved_mode = analog_settings.get('mode', 'volume')
+        
         self.mode_volume = QCheckBox("Volume Control")
-        self.mode_volume.setChecked(True)
+        self.mode_volume.setChecked(saved_mode == 'volume')
         self.mode_volume.setToolTip("Use slider to control system volume (up/down)")
         self.mode_volume.toggled.connect(self.on_mode_changed)
         mode_layout.addWidget(self.mode_volume)
         
         self.mode_brightness = QCheckBox("LED Brightness Control")
+        self.mode_brightness.setChecked(saved_mode == 'brightness')
         self.mode_brightness.setToolTip("Use slider to control RGB LED brightness (0-100%)")
         self.mode_brightness.toggled.connect(self.on_mode_changed)
         mode_layout.addWidget(self.mode_brightness)
@@ -1529,7 +1538,7 @@ class AnalogInConfigDialog(QDialog):
         self.poll_interval_spin = QDoubleSpinBox()
         self.poll_interval_spin.setRange(0.01, 1.0)
         self.poll_interval_spin.setSingleStep(0.01)
-        self.poll_interval_spin.setValue(0.05)
+        self.poll_interval_spin.setValue(analog_settings.get('poll_interval', 0.05))
         self.poll_interval_spin.setSuffix(" sec")
         self.poll_interval_spin.setToolTip("How often to check the slider position (seconds)")
         form_layout.addRow("Poll Interval:", self.poll_interval_spin)
@@ -1538,7 +1547,7 @@ class AnalogInConfigDialog(QDialog):
         self.threshold_spin = QSpinBox()
         self.threshold_spin.setRange(100, 10000)
         self.threshold_spin.setSingleStep(100)
-        self.threshold_spin.setValue(2000)
+        self.threshold_spin.setValue(analog_settings.get('threshold', 2000))
         self.threshold_spin.setToolTip("Minimum slider movement to trigger change (0-65535 range)")
         form_layout.addRow("Sensitivity Threshold:", self.threshold_spin)
         
@@ -1546,9 +1555,12 @@ class AnalogInConfigDialog(QDialog):
         self.step_size_label = QLabel("Volume Step Size:")
         self.step_size_spin = QSpinBox()
         self.step_size_spin.setRange(1, 5)
-        self.step_size_spin.setValue(1)
+        self.step_size_spin.setValue(analog_settings.get('step_size', 1))
         self.step_size_spin.setToolTip("Number of volume steps per slider movement")
         form_layout.addRow(self.step_size_label, self.step_size_spin)
+        
+        # Load RGB max brightness from settings for consistency
+        rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
         
         # Min/Max brightness (only for brightness mode)
         self.min_brightness_label = QLabel("Min Brightness:")
@@ -1556,7 +1568,7 @@ class AnalogInConfigDialog(QDialog):
         self.min_brightness_spin.setRange(0.0, 1.0)
         self.min_brightness_spin.setSingleStep(0.05)
         self.min_brightness_spin.setDecimals(2)
-        self.min_brightness_spin.setValue(0.0)
+        self.min_brightness_spin.setValue(analog_settings.get('min_brightness', 0.0))
         self.min_brightness_spin.setToolTip("Minimum brightness when slider is at bottom (0.0-1.0)")
         form_layout.addRow(self.min_brightness_label, self.min_brightness_spin)
         
@@ -1565,8 +1577,8 @@ class AnalogInConfigDialog(QDialog):
         self.max_brightness_spin.setRange(0.0, 1.0)
         self.max_brightness_spin.setSingleStep(0.05)
         self.max_brightness_spin.setDecimals(2)
-        self.max_brightness_spin.setValue(0.3)
-        self.max_brightness_spin.setToolTip("Maximum brightness when slider is at top (0.0-1.0)")
+        self.max_brightness_spin.setValue(min(analog_settings.get('max_brightness', 0.3), rgb_max_brightness))
+        self.max_brightness_spin.setToolTip(f"Maximum brightness when slider is at top (0.0-1.0)\nEnforced max from settings: {rgb_max_brightness}")
         form_layout.addRow(self.max_brightness_label, self.max_brightness_spin)
         
         main_layout.addLayout(form_layout)
@@ -1618,13 +1630,24 @@ class AnalogInConfigDialog(QDialog):
 
     def get_config(self):
         """Generate the slider configuration code"""
+        # Save settings to settings.json for persistence
+        settings = load_settings()
+        is_volume_mode = self.mode_volume.isChecked()
+        
+        settings['analog_input'] = {
+            'mode': 'volume' if is_volume_mode else 'brightness',
+            'poll_interval': self.poll_interval_spin.value(),
+            'threshold': self.threshold_spin.value(),
+            'step_size': self.step_size_spin.value(),
+            'min_brightness': self.min_brightness_spin.value(),
+            'max_brightness': self.max_brightness_spin.value(),
+        }
+        save_settings(settings)
+        
         # If custom code is provided, use it
         custom_code = self.custom_code_editor.toPlainText().strip()
         if custom_code:
             return custom_code
-        
-        # Check which mode is selected
-        is_volume_mode = self.mode_volume.isChecked()
         
         # Get form values
         poll_interval = self.poll_interval_spin.value()
@@ -1632,6 +1655,10 @@ class AnalogInConfigDialog(QDialog):
         step_size = self.step_size_spin.value()
         min_brightness = self.min_brightness_spin.value()
         max_brightness = self.max_brightness_spin.value()
+        
+        # Enforce RGB max brightness globally
+        rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
+        max_brightness = min(max_brightness, rgb_max_brightness)
         
         if is_volume_mode:
             # Generate volume control code
@@ -1827,6 +1854,10 @@ class PegRgbConfigDialog(QDialog):
         layout = QVBoxLayout(self)
         cfg = config or build_default_rgb_matrix_config()
         self._base_config = cfg
+        
+        # Load RGB max brightness from settings
+        settings = load_settings()
+        self.rgb_max_brightness = settings.get('rgb_max_brightness', 0.3)
 
         form = QFormLayout()
 
@@ -1837,7 +1868,11 @@ class PegRgbConfigDialog(QDialog):
         self.brightness_spin.setRange(0.0, 1.0)
         self.brightness_spin.setSingleStep(0.05)
         self.brightness_spin.setDecimals(2)
-        self.brightness_spin.setValue(float(cfg.get("brightness_limit", 0.5)))
+        # Enforce max brightness from settings
+        current_brightness = float(cfg.get("brightness_limit", 0.5))
+        self.brightness_spin.setValue(min(current_brightness, self.rgb_max_brightness))
+        self.brightness_spin.setMaximum(self.rgb_max_brightness)
+        self.brightness_spin.setToolTip(f"Brightness limit (0.0-1.0)\nGlobal max enforced: {self.rgb_max_brightness}")
         form.addRow("Brightness limit:", self.brightness_spin)
 
         self.underglow_spin = QSpinBox()
@@ -1918,7 +1953,9 @@ class PegRgbConfigDialog(QDialog):
         result["key_colors"] = dict(self._base_config.get("key_colors", {}))
         result["underglow_colors"] = dict(self._base_config.get("underglow_colors", {}))
         result["pixel_pin"] = self.pixel_pin_edit.text().strip() or FIXED_RGB_PIN
-        result["brightness_limit"] = float(self.brightness_spin.value())
+        # Enforce global max brightness
+        brightness_value = float(self.brightness_spin.value())
+        result["brightness_limit"] = min(brightness_value, self.rgb_max_brightness)
         result["num_underglow"] = int(self.underglow_spin.value())
         order = self.rgb_order_combo.currentText()
         if order not in RGB_ORDER_TUPLES:
@@ -2077,9 +2114,8 @@ class PerKeyColorDialog(QDialog):
             "media": "#FF6B35",      # Orange
             "mouse": "#FF69B4",      # Hot Pink
             "layers": "#7FFF00",     # Chartreuse
-            "wasd": "#FF1493",       # Deep Pink (NEW)
-            "arrows": "#1E90FF",     # Dodger Blue (NEW)
-            "misc": "#C0C0C0",       # Silver
+            "wasd": "#FF1493",       # Deep Pink
+            "arrows": "#1E90FF",     # Dodger Blue
         }
         
         # Merge saved colors with defaults
@@ -2096,7 +2132,6 @@ class PerKeyColorDialog(QDialog):
             "layers": "Layers",
             "wasd": "WASD Keys",
             "arrows": "Arrow Keys",
-            "misc": "Misc",
         }
 
         preset_group = QGroupBox("Keycode Category Presets")
@@ -2492,10 +2527,9 @@ class PerKeyColorDialog(QDialog):
         elif category == "wasd":
             return any(key.endswith(f".{c}") for c in ["W", "A", "S", "D"])
         elif category == "arrows":
-            return any(arr in key for arr in ["UP", "DOWN", "LEFT", "RIGHT"])
-        elif category == "misc":
-            # Everything else that doesn't match other categories
-            return True
+            # Only match arrow keys, not page up/down or home/end
+            # Note: RIGHT is abbreviated as RGHT in KMK
+            return any(key.endswith(f".{arr}") for arr in ["UP", "DOWN", "LEFT", "RGHT"])
         
         return False
 
@@ -2601,8 +2635,6 @@ class PerKeyColorDialog(QDialog):
                 or keycode.startswith('KC.TG(')
                 or keycode.startswith('KC.DF(')
             )
-        if category == 'misc':
-            return keycode in KEYCODES.get('Misc', [])
         return False
 
     def get_maps(self):
