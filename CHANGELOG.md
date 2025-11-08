@@ -133,7 +133,7 @@ https://github.com/D1odeKing/Chronos-Pad-Configtool/issues
 ### Known Issues
 - Analog input functionality under active development
 
-## [1.0.0] - 2025-10-25
+## [1.0.0-beta] - 2025-10-25
 
 ### Added
 - **Initial Release**
