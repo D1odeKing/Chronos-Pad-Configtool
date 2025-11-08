@@ -2063,17 +2063,27 @@ class PerKeyColorDialog(QDialog):
         presets_widget = QWidget()
         presets_layout = QVBoxLayout(presets_widget)
 
-        self.category_colors = {
-            "macro": "#FF6B6B",
-            "basic": "#4ECDC4",
-            "modifiers": "#A8E6CF",
-            "navigation": "#FFD93D",
-            "function": "#95E1D3",
-            "media": "#F38181",
-            "mouse": "#AA96DA",
-            "layers": "#FCBAD3",
-            "misc": "#B4B4B4",
+        # Load saved category colors from settings, or use defaults
+        settings = load_settings()
+        saved_colors = settings.get('rgb_category_colors', {})
+        
+        # Default colors - brighter and more distinctive
+        default_colors = {
+            "macro": "#FF3366",      # Bright Pink/Red
+            "basic": "#00D9FF",      # Cyan
+            "modifiers": "#00FF88",  # Bright Green
+            "navigation": "#FFD700", # Gold
+            "function": "#9D7CFF",   # Purple
+            "media": "#FF6B35",      # Orange
+            "mouse": "#FF69B4",      # Hot Pink
+            "layers": "#7FFF00",     # Chartreuse
+            "wasd": "#FF1493",       # Deep Pink (NEW)
+            "arrows": "#1E90FF",     # Dodger Blue (NEW)
+            "misc": "#C0C0C0",       # Silver
         }
+        
+        # Merge saved colors with defaults
+        self.category_colors = {**default_colors, **saved_colors}
 
         category_labels = {
             "macro": "Macros",
@@ -2084,6 +2094,8 @@ class PerKeyColorDialog(QDialog):
             "media": "Media",
             "mouse": "Mouse",
             "layers": "Layers",
+            "wasd": "WASD Keys",
+            "arrows": "Arrow Keys",
             "misc": "Misc",
         }
 
@@ -2091,7 +2103,7 @@ class PerKeyColorDialog(QDialog):
         preset_grid = QGridLayout(preset_group)
         row = 0
         for cat_key, cat_label in category_labels.items():
-            preset_grid.addWidget(QLabel(f"{cat_label}:") , row, 0)
+            preset_grid.addWidget(QLabel(f"{cat_label}:"), row, 0)
 
             color_btn = QPushButton()
             color_btn.setFixedSize(25, 25)
@@ -2105,6 +2117,18 @@ class PerKeyColorDialog(QDialog):
             apply_btn.clicked.connect(lambda _, k=cat_key: self.apply_category_color(k))
             preset_grid.addWidget(apply_btn, row, 2)
             row += 1
+        
+        # Add Apply All and Reset buttons at the bottom
+        preset_grid.addWidget(QLabel(""), row, 0)  # Spacer
+        
+        apply_all_btn = QPushButton("Apply All Categories")
+        apply_all_btn.setStyleSheet("font-weight: bold; padding: 8px;")
+        apply_all_btn.clicked.connect(self.apply_all_categories)
+        preset_grid.addWidget(apply_all_btn, row + 1, 0, 1, 3)
+        
+        reset_btn = QPushButton("Reset to Default Colors")
+        reset_btn.clicked.connect(self.reset_category_colors)
+        preset_grid.addWidget(reset_btn, row + 2, 0, 1, 3)
 
         presets_layout.addWidget(preset_group)
 
@@ -2323,24 +2347,157 @@ class PerKeyColorDialog(QDialog):
             btn = getattr(self, f"{category}_color_btn", None)
             if btn:
                 btn.setStyleSheet(f"background-color: {hexc};")
+            # Save to settings for persistence
+            self.save_category_colors()
 
     def apply_category_color(self, category):
-        _, layer_data = self._get_layer_data()
-        if layer_data is None:
-            QMessageBox.warning(self, "Error", "Cannot access keymap data")
-            return
-
+        """Apply category color to all matching keys on the grid.
+        
+        Args:
+            category: Category name (e.g., 'macro', 'basic', 'modifiers')
+        """
         color = self.category_colors.get(category, self.fill_color)
-
-        idx = 0
-        for r in range(self.rows):
-            for c in range(self.cols):
-                if r < len(layer_data) and c < len(layer_data[r]):
-                    key = layer_data[r][c]
-                    if self._matches_category(category, key):
-                        self.key_colors[str(idx)] = color
-                idx += 1
+        
+        # Determine which keys belong to this category
+        keys_to_color = self.get_keys_for_category(category)
+        
+        for key_idx in keys_to_color:
+            self.key_colors[str(key_idx)] = color
+        
         self.refresh_key_buttons()
+    
+    def apply_all_categories(self):
+        """Apply all category colors at once to their respective keys."""
+        for category in self.category_colors.keys():
+            keys_to_color = self.get_keys_for_category(category)
+            color = self.category_colors[category]
+            for key_idx in keys_to_color:
+                self.key_colors[str(key_idx)] = color
+        
+        self.refresh_key_buttons()
+        ToastNotification.show_message(
+            self, 
+            "All category colors applied to keymap", 
+            "SUCCESS", 
+            2000
+        )
+    
+    def reset_category_colors(self):
+        """Reset all category colors to their default values."""
+        # Default colors
+        default_colors = {
+            "macro": "#FF3366",
+            "basic": "#00D9FF",
+            "modifiers": "#00FF88",
+            "navigation": "#FFD700",
+            "function": "#9D7CFF",
+            "media": "#FF6B35",
+            "mouse": "#FF69B4",
+            "layers": "#7FFF00",
+            "wasd": "#FF1493",
+            "arrows": "#1E90FF",
+            "misc": "#C0C0C0",
+        }
+        
+        self.category_colors = default_colors.copy()
+        
+        # Update all color buttons
+        for cat_key in self.category_colors.keys():
+            btn = getattr(self, f"{cat_key}_color_btn", None)
+            if btn:
+                btn.setStyleSheet(f"background-color: {self.category_colors[cat_key]};")
+        
+        # Save to settings
+        self.save_category_colors()
+        
+        ToastNotification.show_message(
+            self, 
+            "Category colors reset to defaults", 
+            "INFO", 
+            2000
+        )
+    
+    def save_category_colors(self):
+        """Save current category colors to settings for persistence."""
+        settings = load_settings()
+        settings['rgb_category_colors'] = self.category_colors.copy()
+        save_settings(settings)
+    
+    def get_keys_for_category(self, category):
+        """Get list of key indices that belong to a specific category.
+        
+        Args:
+            category: Category name
+            
+        Returns:
+            list: List of key indices (0-19 for 5x4 grid)
+        """
+        if not hasattr(self, 'parent_ref') or not self.parent_ref:
+            return []
+        
+        # Get current keymap from parent
+        keymap = getattr(self.parent_ref, 'keymap_data', [])
+        if not keymap:
+            return []
+        
+        current_layer = getattr(self.parent_ref, 'current_layer', 0)
+        if current_layer >= len(keymap):
+            return []
+        
+        layer = keymap[current_layer]
+        matching_keys = []
+        
+        # Iterate through all keys in the layer
+        for row_idx, row in enumerate(layer):
+            for col_idx, key_code in enumerate(row):
+                key_index = row_idx * 4 + col_idx  # 5x4 grid
+                
+                if self.key_matches_category(key_code, category):
+                    matching_keys.append(key_index)
+        
+        return matching_keys
+    
+    def key_matches_category(self, key_code, category):
+        """Check if a keycode belongs to a specific category.
+        
+        Args:
+            key_code: Key code string (e.g., 'KC.A', 'KC.LSHIFT')
+            category: Category name
+            
+        Returns:
+            bool: True if key belongs to category
+        """
+        if not key_code or key_code == "KC.NO" or key_code == "KC.TRNS":
+            return False
+        
+        key = key_code.upper()
+        
+        if category == "macro":
+            return key.startswith("MACRO(")
+        elif category == "basic":
+            # Letters and numbers
+            return any(key.endswith(f".{c}") for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        elif category == "modifiers":
+            return any(mod in key for mod in ["LSHIFT", "RSHIFT", "LCTRL", "RCTRL", "LALT", "RALT", "LGUI", "RGUI"])
+        elif category == "navigation":
+            return any(nav in key for nav in ["HOME", "END", "PGUP", "PGDN", "INS", "DEL"])
+        elif category == "function":
+            return any(f"F{i}" in key for i in range(1, 25))
+        elif category == "media":
+            return any(med in key for med in ["MUTE", "VOLU", "VOLD", "MPLY", "MSTP", "MNXT", "MPRV"])
+        elif category == "mouse":
+            return "MS_" in key or "MW_" in key or "MB_" in key
+        elif category == "layers":
+            return any(lyr in key for lyr in ["MO(", "TO(", "TG(", "DF(", "LT("])
+        elif category == "wasd":
+            return any(key.endswith(f".{c}") for c in ["W", "A", "S", "D"])
+        elif category == "arrows":
+            return any(arr in key for arr in ["UP", "DOWN", "LEFT", "RIGHT"])
+        elif category == "misc":
+            # Everything else that doesn't match other categories
+            return True
+        
+        return False
 
     def pick_granular_color(self, granular_type):
         current = self.granular_colors.get(granular_type, self.fill_color)
@@ -3157,9 +3314,20 @@ class AdvancedSettingsDialog(QDialog):
         return self.divisor_spin.value()
     
     def get_boot_config(self):
-        """Generate boot.py configuration code."""
+        """Generate boot.py configuration code and save board name to settings."""
         if not self.enable_boot_py.isChecked():
             return ""
+        
+        # Save board name to settings if renamed
+        if self.rename_drive_checkbox.isChecked():
+            board_name = self.drive_name_edit.text().strip()
+            if board_name:
+                settings = load_settings()
+                board_names = settings.get('board_names', [])
+                if board_name not in board_names:
+                    board_names.append(board_name)
+                settings['board_names'] = board_names
+                save_settings(settings)
         
         lines = []
         
@@ -3610,7 +3778,7 @@ class KMKConfigurator(QMainWindow):
         
         # --- Final UI Population ---
         self.recreate_macropad_grid()
-        self.load_profiles()
+        # self.load_profiles()  # REMOVED: Profile selector disabled
         self.load_macros()
         self.update_layer_tabs()
         self.update_macropad_display()
@@ -5210,7 +5378,11 @@ class KMKConfigurator(QMainWindow):
         
         parent_layout.addWidget(actions_card)
         
-        # === Profiles Card ===
+        # === REMOVED: Profiles Card (redundant with config save/load) ===
+        # Profile functionality commented out to simplify UI
+        # Users can use config file save/load instead
+        
+        """
         profile_card = CollapsibleCard("⭐ Quick Profiles")
         profile_layout = profile_card.get_content_layout()
         
@@ -5235,6 +5407,7 @@ class KMKConfigurator(QMainWindow):
         profile_layout.addWidget(save_profile_btn)
         
         parent_layout.addWidget(profile_card)
+        """
         
         # === Theme Card ===
         theme_card = CollapsibleCard("🎨 Theme")
@@ -6631,6 +6804,9 @@ class KMKConfigurator(QMainWindow):
             QMessageBox.critical(self, "Error", f"Could not save profiles:\n{e}")
 
     def load_profiles(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         if os.path.exists(PROFILE_FILE):
             try:
                 with open(PROFILE_FILE, 'r') as f:
@@ -6644,6 +6820,9 @@ class KMKConfigurator(QMainWindow):
         self.profile_combo.blockSignals(False)
 
     def save_current_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         name, ok = QInputDialog.getText(self, "Save Profile", "Enter profile name:")
         if ok and name:
             keymap_snapshot = json.loads(json.dumps(self.keymap_data))
@@ -6676,6 +6855,9 @@ class KMKConfigurator(QMainWindow):
             self.profile_combo.setCurrentText(name)
 
     def load_selected_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         profile_name = self.profile_combo.currentText()
         if profile_name and profile_name != "Custom":
             profile = self.profiles.get(profile_name)
@@ -6745,6 +6927,9 @@ class KMKConfigurator(QMainWindow):
                     pass
 
     def delete_selected_profile(self):
+        if not hasattr(self, 'profile_combo'):
+            return  # Profile UI disabled
+        
         profile_name = self.profile_combo.currentText()
         if profile_name and profile_name != "Custom":
             reply = QMessageBox.question(self, "Delete Profile", f"Are you sure you want to delete the '{profile_name}' profile?")
@@ -8114,9 +8299,148 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 if os.path.exists(path):
                     return path
         return BASE_DIR  # Fallback to application directory
+    
+    def find_board_drive(self, drive_name="CIRCUITPY"):
+        """Find a specific board drive by name.
+        
+        Args:
+            drive_name: Name of the drive to find (e.g., 'CIRCUITPY', 'CHRONOSPAD')
+            
+        Returns:
+            str: Path to the drive if found, None otherwise
+        """
+        import platform
+        system = platform.system()
+        
+        if system == "Windows":
+            import string
+            from ctypes import windll
+            drives = []
+            bitmask = windll.kernel32.GetLogicalDrives()
+            for letter in string.ascii_uppercase:
+                if bitmask & 1:
+                    drives.append(f"{letter}:")
+                bitmask >>= 1
+            
+            for drive in drives:
+                try:
+                    label = windll.kernel32.GetVolumeInformationW(
+                        f"{drive}\\", None, 0, None, None, None, None, 0
+                    )
+                    # Try to get volume label
+                    import subprocess
+                    result = subprocess.run(
+                        ['cmd', '/c', 'vol', drive],
+                        capture_output=True,
+                        text=True,
+                        timeout=1
+                    )
+                    if drive_name in result.stdout:
+                        return drive + "\\"
+                except:
+                    continue
+                    
+        elif system == "Darwin":  # macOS
+            path = f"/Volumes/{drive_name}"
+            if os.path.exists(path):
+                return path
+                
+        else:  # Linux
+            username = os.getlogin()
+            for base_path in [f"/media/{username}", f"/run/media/{username}"]:
+                path = os.path.join(base_path, drive_name)
+                if os.path.exists(path):
+                    return path
+        
+        return None
+    
+    def select_board_dialog(self, found_drives):
+        """Show dialog to select which board to flash when multiple are found.
+        
+        Args:
+            found_drives: Dictionary of {drive_name: drive_path}
+            
+        Returns:
+            str: Selected drive name, or None if cancelled
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Board")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel(
+            f"<h3>Multiple Boards Found ({len(found_drives)})</h3>"
+            "Select which board you want to flash:"
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        
+        # List of drives
+        drive_list = QListWidget()
+        for drive_name, drive_path in found_drives.items():
+            item = QListWidgetItem(f"{drive_name} ({drive_path})")
+            item.setData(Qt.ItemDataRole.UserRole, drive_name)
+            drive_list.addItem(item)
+        
+        drive_list.setCurrentRow(0)
+        layout.addWidget(drive_list)
+        
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            current_item = drive_list.currentItem()
+            if current_item:
+                return current_item.data(Qt.ItemDataRole.UserRole)
+        
+        return None
+
+    def find_circuitpy_drive(self):
+        """Legacy method - find CIRCUITPY drive specifically."""
+        return self.find_board_drive("CIRCUITPY") or BASE_DIR
 
     def generate_code_py_dialog(self):
-        default_path = self.find_circuitpy_drive()
+        """Generate code.py and offer to save to board drive.
+        Checks for saved custom board names and auto-navigates to found drives."""
+        
+        # Check for any saved board names
+        settings = load_settings()
+        board_names = settings.get('board_names', [])
+        
+        # Always include CIRCUITPY as default
+        all_drive_names = ['CIRCUITPY'] + board_names
+        
+        # Find which drives are currently mounted
+        found_drives = {}
+        for drive_name in all_drive_names:
+            drive_path = self.find_board_drive(drive_name)
+            if drive_path and os.path.exists(drive_path):
+                found_drives[drive_name] = drive_path
+        
+        # Determine default path based on found drives
+        default_path = BASE_DIR  # Fallback
+        selected_drive_name = None
+        
+        if len(found_drives) == 0:
+            # No drives found, use fallback
+            default_path = BASE_DIR
+        elif len(found_drives) == 1:
+            # Only one drive found, use it automatically
+            selected_drive_name = list(found_drives.keys())[0]
+            default_path = found_drives[selected_drive_name]
+        else:
+            # Multiple drives found, ask user which one to use
+            selected_drive_name = self.select_board_dialog(found_drives)
+            if selected_drive_name:
+                default_path = found_drives[selected_drive_name]
+            else:
+                default_path = BASE_DIR  # User cancelled
         
         folder_path = QFileDialog.getExistingDirectory(
             self,
@@ -8403,7 +8727,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             else:
                 self.current_layer = 0
             
-            self.profile_combo.setCurrentText("Custom")
+            if hasattr(self, 'profile_combo'):
+                self.profile_combo.setCurrentText("Custom")
 
             # Refresh UI - order matters!
             self.update_layer_tabs()  # First update tabs to match layer count
