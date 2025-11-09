@@ -8863,10 +8863,16 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Refresh config list to include the newly saved file
                 if hasattr(self, 'config_file_combo'):
                     self.populate_config_file_list()
-                    rel_path = os.path.relpath(file_path, BASE_DIR)
-                    idx = self.config_file_combo.findText(rel_path)
-                    if idx >= 0:
-                        self.config_file_combo.setCurrentIndex(idx)
+                    # Try to set dropdown to the saved file (only works if in BASE_DIR)
+                    try:
+                        rel_path = os.path.relpath(file_path, BASE_DIR)
+                        idx = self.config_file_combo.findText(rel_path)
+                        if idx >= 0:
+                            self.config_file_combo.setCurrentIndex(idx)
+                    except ValueError:
+                        # File is on a different drive, can't compute relative path
+                        # This is fine - just skip updating the dropdown
+                        pass
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{e}\n\nTraceback:\n{traceback.format_exc()}")
