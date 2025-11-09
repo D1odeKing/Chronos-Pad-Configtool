@@ -12,6 +12,9 @@ data/kmk_Config_Save/*
 macros.json
 *.json.backup
 
+# User settings (private) - custom drive names, themes, preferences
+settings.json
+
 # Test and temporary files
 code.py
 test_*.py

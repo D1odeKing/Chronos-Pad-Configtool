@@ -5480,6 +5480,7 @@ class KMKConfigurator(QMainWindow):
         file_select_layout.addWidget(QLabel("Current Config:"))
         self.config_file_combo = QComboBox()
         self.config_file_combo.setToolTip("Select a saved configuration to load")
+        self.config_file_combo.activated.connect(self.load_config_from_dropdown)
         file_select_layout.addWidget(self.config_file_combo, 1)
         refresh_btn = QPushButton("🔄")
         refresh_btn.setFixedWidth(35)
@@ -8586,31 +8587,34 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         
         if system == "Windows":
             import string
-            from ctypes import windll
-            drives = []
-            bitmask = windll.kernel32.GetLogicalDrives()
-            for letter in string.ascii_uppercase:
-                if bitmask & 1:
-                    drives.append(f"{letter}:")
-                bitmask >>= 1
+            from ctypes import windll, create_unicode_buffer
             
-            for drive in drives:
-                try:
-                    label = windll.kernel32.GetVolumeInformationW(
-                        f"{drive}\\", None, 0, None, None, None, None, 0
+            # Check all drive letters
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                # Check if drive exists
+                drive_type = windll.kernel32.GetDriveTypeW(drive)
+                # DRIVE_REMOVABLE = 2, DRIVE_FIXED = 3
+                if drive_type in (2, 3):
+                    # Get volume label
+                    volume_name_buffer = create_unicode_buffer(261)
+                    file_system_buffer = create_unicode_buffer(261)
+                    
+                    result = windll.kernel32.GetVolumeInformationW(
+                        drive,
+                        volume_name_buffer,
+                        261,
+                        None,
+                        None,
+                        None,
+                        file_system_buffer,
+                        261
                     )
-                    # Try to get volume label
-                    import subprocess
-                    result = subprocess.run(
-                        ['cmd', '/c', 'vol', drive],
-                        capture_output=True,
-                        text=True,
-                        timeout=1
-                    )
-                    if drive_name in result.stdout:
-                        return drive + "\\"
-                except:
-                    continue
+                    
+                    if result:
+                        volume_label = volume_name_buffer.value
+                        if volume_label == drive_name:
+                            return drive
                     
         elif system == "Darwin":  # macOS
             path = f"/Volumes/{drive_name}"
@@ -8800,6 +8804,22 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         with open(boot_path, 'w') as f:
                             f.write(self.boot_config_str)
                         boot_saved = True
+                        
+                        # Extract and save custom drive name from boot.py
+                        import re
+                        label_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*["\']([^"\']+)["\']', 
+                                              self.boot_config_str)
+                        if label_match:
+                            custom_drive_name = label_match.group(1).strip()
+                            if custom_drive_name and custom_drive_name != "CIRCUITPY":
+                                # Save to settings for future auto-detection
+                                settings = load_settings()
+                                board_names = settings.get('board_names', [])
+                                if custom_drive_name not in board_names:
+                                    board_names.append(custom_drive_name)
+                                    settings['board_names'] = board_names
+                                    save_settings(settings)
+                                    
                     except Exception as e:
                         QMessageBox.warning(self, "Warning", f"Could not save boot.py:\n{e}")
                 
@@ -8904,21 +8924,29 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             QMessageBox.critical(self, "Error", f"Could not save configuration file:\n{e}")
             raise e
 
+    def load_config_from_dropdown(self):
+        """Load configuration when selected from dropdown."""
+        if not hasattr(self, 'config_file_combo'):
+            return
+        
+        sel = self.config_file_combo.currentText()
+        if not sel:
+            return
+            
+        file_path = os.path.join(BASE_DIR, sel)
+        if os.path.exists(file_path):
+            self.load_configuration(file_path=file_path, show_message=True)
+
     def load_configuration(self, file_path=None, show_message=True):
-        """Load a saved configuration from disk."""
+        """Load a saved configuration from disk.
+        
+        When called from the Load button (file_path=None), ALWAYS opens file dialog.
+        When called from dropdown or programmatically, uses the provided path.
+        """
         selected_path = file_path
 
         if not selected_path:
-            # If a file is selected in the config combo, use that; otherwise open a file dialog
-            if hasattr(self, 'config_file_combo') and self.config_file_combo.count() > 0:
-                sel = self.config_file_combo.currentText()
-                if sel:
-                    candidate = os.path.join(BASE_DIR, sel)
-                    if os.path.exists(candidate):
-                        selected_path = candidate
-
-        if not selected_path:
-            # Open file dialog starting in kmk_Config_Save folder
+            # Always open file dialog when Load button is clicked
             start_dir = CONFIG_SAVE_DIR if os.path.exists(CONFIG_SAVE_DIR) else BASE_DIR
             selected_path, _ = QFileDialog.getOpenFileName(
                 self, 
