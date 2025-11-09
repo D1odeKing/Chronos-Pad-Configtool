@@ -90,11 +90,11 @@ class DependencyDownloader(QThread):
     progress = pyqtSignal(str, int)  # message, percentage
     finished = pyqtSignal(bool)  # success
     
-    def __init__(self, cp_version=9):
+    def __init__(self, cp_version=10):
         super().__init__()
         # Use organized libraries folder
         self.libraries_dir = LIBRARIES_DIR
-        self.cp_version = cp_version  # Store user's version choice
+        self.cp_version = cp_version  # Store user's version choice (default to 10)
         
     def run(self):
         """Download all required dependencies"""
@@ -3842,7 +3842,7 @@ class KMKConfigurator(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("KMK Macropad Configurator - Chronos Pad")
+        self.setWindowTitle("KMK Macropad Configurator - Chronos Pad v1.0.0-beta")
         
         # Set minimum window size and better default size
         self.setMinimumSize(1200, 700)
@@ -3974,67 +3974,33 @@ class KMKConfigurator(QMainWindow):
         """Check if KMK firmware and CircuitPython libraries are available, download if not"""
         if os.environ.get("KMK_SKIP_DEP_CHECK"):
             return
+        
         libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
         
-        # Check if KMK exists
-        if os.path.exists(kmk_path):
-            # Check if CircuitPython bundle exists (either version)
-            bundle_9x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
-            bundle_10x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-10.x-mpy")
-            if os.path.exists(bundle_9x) or os.path.exists(bundle_10x):
-                return  # Both dependencies exist
+        # Always use CircuitPython 10.x
+        cp_version = 10
+        bundle_path = os.path.join(libraries_dir, f"adafruit-circuitpython-bundle-{cp_version}.x-mpy")
         
-        # Load settings to check if user already selected version
-        settings = load_settings()
-        cp_version = settings.get('cp_version')
+        # Check if both dependencies exist
+        if os.path.exists(kmk_path) and os.path.exists(bundle_path):
+            return  # Both dependencies exist
         
-        # If version not selected, show selection dialog
-        if not cp_version:
-            cp_version = self.show_cp_version_dialog()
-            if not cp_version:
-                QMessageBox.warning(
-                    self,
-                    "Dependencies Required",
-                    "CircuitPython bundle version selection is required.\n"
-                    "Please restart and select a version."
-                )
-                return
-            
-            # Save selected version
-            settings['cp_version'] = cp_version
-            save_settings(settings)
-        
-        # Show download dialog
-        reply = QMessageBox.question(
-            self, 
-            "Download Dependencies",
-            f"This tool requires KMK firmware and CircuitPython libraries.\n"
-            f"Would you like to download them automatically?\n\n"
-            f"This will download:\n"
-            f"• KMK Firmware (GPL-3.0 license)\n"
-            f"• Adafruit CircuitPython Bundle {cp_version}.x (MIT license)\n\n"
-            f"Files will be downloaded to the 'libraries' folder.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        # Dependencies missing - download automatically
+        self.progress_dialog = QProgressDialog(
+            "Downloading required dependencies...\n\n"
+            "• KMK Firmware (GPL-3.0 license)\n"
+            "• Adafruit CircuitPython Bundle 10.x (MIT license)\n\n"
+            "This only happens once on first run.",
+            None, 0, 100, self
         )
-        
-        if reply != QMessageBox.StandardButton.Yes:
-            QMessageBox.warning(
-                self,
-                "Dependencies Required",
-                "This tool requires KMK firmware and CircuitPython libraries to function.\n"
-                "Please download them manually or restart and choose to download automatically."
-            )
-            return
-        
-        # Show progress dialog and start download
-        self.progress_dialog = QProgressDialog("Preparing download...", "Cancel", 0, 100, self)
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
+        self.progress_dialog.setCancelButton(None)  # No cancel button
         self.progress_dialog.show()
         
-        # Start download thread with selected version
+        # Start download thread with CircuitPython 10
         self.downloader = DependencyDownloader(cp_version=cp_version)
         self.downloader.progress.connect(self.on_download_progress)
         self.downloader.finished.connect(self.on_download_finished)
@@ -8779,10 +8745,22 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 else:
                     kmk_copied = False
                 
-                # Copy required libraries
+                # Copy required libraries from CircuitPython 10.x bundle
                 lib_source = os.path.join(BASE_DIR, "libraries", 
-                                         "adafruit-circuitpython-bundle-9.x-mpy", "lib")
+                                         "adafruit-circuitpython-bundle-10.x-mpy", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
+                
+                if not os.path.exists(lib_source):
+                    QMessageBox.warning(self, "Warning",
+                        "CircuitPython 10.x libraries not found!\n\n"
+                        "The application will download them automatically on next startup.\n"
+                        "For now, code.py will be saved but libraries must be manually copied.\n\n"
+                        "Required files:\n"
+                        "  • adafruit_displayio_sh1106.mpy\n"
+                        "  • adafruit_display_text/ (folder)\n"
+                        "  • neopixel.mpy\n\n"
+                        f"Expected location: {lib_source}")
+                    lib_source = None
                 
                 # Create lib folder if it doesn't exist
                 os.makedirs(lib_dest, exist_ok=True)
@@ -8795,23 +8773,24 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 ]
                 
                 copied_files = []
-                for lib_name in required_libs:
-                    src = os.path.join(lib_source, lib_name)
-                    dst = os.path.join(lib_dest, lib_name)
-                    
-                    if os.path.exists(src):
-                        if os.path.isdir(src):
-                            # Copy directory
-                            if os.path.exists(dst):
+                if lib_source:  # Only copy if libraries were found
+                    for lib_name in required_libs:
+                        src = os.path.join(lib_source, lib_name)
+                        dst = os.path.join(lib_dest, lib_name)
+                        
+                        if os.path.exists(src):
+                            if os.path.isdir(src):
+                                # Copy directory
+                                if os.path.exists(dst):
+                                    import shutil
+                                    shutil.rmtree(dst)
+                                shutil.copytree(src, dst)
+                                copied_files.append(f"{lib_name}/ (folder)")
+                            else:
+                                # Copy file
                                 import shutil
-                                shutil.rmtree(dst)
-                            shutil.copytree(src, dst)
-                            copied_files.append(f"{lib_name}/ (folder)")
-                        else:
-                            # Copy file
-                            import shutil
-                            shutil.copy2(src, dst)
-                            copied_files.append(lib_name)
+                                shutil.copy2(src, dst)
+                                copied_files.append(lib_name)
                 
                 # Save boot.py if configured
                 boot_saved = False
@@ -8829,7 +8808,14 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     msg += f"✓ KMK firmware copied to {kmk_dest}\n\n"
                 if boot_saved:
                     msg += f"✓ boot.py saved to {os.path.join(folder_path, 'boot.py')}\n\n"
-                msg += f"Libraries copied to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
+                
+                if copied_files:
+                    msg += f"✓ Libraries copied from CircuitPython 10.x bundle to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
+                else:
+                    msg += f"⚠️ No libraries were copied.\n\n"
+                    msg += "CircuitPython 10.x libraries not found.\n"
+                    msg += "Please restart the app to download dependencies automatically."
+                
                 QMessageBox.information(self, "Success", msg)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not save code.py file:\n{e}")
