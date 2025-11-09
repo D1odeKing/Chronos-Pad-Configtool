@@ -1,6 +1,6 @@
 # Chronos Pad Configuration Tool
 
-A professional GUI configurator for KMK firmware-based macropads, specifically designed for custom Raspberry Pi Pico keyboards with display and RGB support.
+A GUI configurator for KMK firmware-based macropads, specifically designed for custom Raspberry Pi Pico keyboards with display and RGB support.
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![PyQt6](https://img.shields.io/badge/PyQt6-6.0+-green.svg)
