@@ -122,7 +122,7 @@ python main.py
 1. Launch the configurator
 2. Design your keymap (5×4 grid)
 3. Add layers, macros, RGB colors
-4. Click "Save code.py" and select CIRCUITPY drive
+4. Click "⚡Generate code.py" and select CIRCUITPY drive
 5. Tool auto-deploys firmware and libraries
 
 👉 **Full details**: See [Usage Guide](docs/USAGE.md)
