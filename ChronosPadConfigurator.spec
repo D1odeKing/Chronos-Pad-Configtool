@@ -13,6 +13,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('profiles.json', '.'),  # Include profiles.json in the exe
+        ('libraries/kmk', 'libraries/kmk'),  # Bundle KMK firmware (essential folder only)
+        ('libraries/lib', 'libraries/lib'),  # Bundle required CircuitPython 10.x libraries
     ],
     hiddenimports=[
         'PyQt6',

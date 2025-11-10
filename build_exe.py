@@ -56,11 +56,12 @@ try:
     print("\n📁 Creating organized distribution structure...")
     
     dist_root = Path("dist/ChronosPadConfigurator")
-    libraries_folder = dist_root / "libraries"
     config_save_folder = dist_root / "kmk_Config_Save"
     
-    # Create folders at root level (no data subfolder)
-    libraries_folder.mkdir(parents=True, exist_ok=True)
+    # Note: libraries are already bundled inside the exe by PyInstaller
+    # They will be extracted to _internal/ when the exe runs
+    
+    # Create config save folder
     config_save_folder.mkdir(parents=True, exist_ok=True)
     
     # Move the exe into the ChronosPadConfigurator folder
@@ -89,37 +90,35 @@ FOLDER STRUCTURE:
 -----------------
 ChronosPadConfigurator/
 ├── ChronosPadConfigurator.exe  (Main application - double-click to run)
+├── _internal/                  (PyInstaller runtime files - bundled libraries)
 ├── kmk_Config_Save/            (Your saved configurations)
 ├── settings.json               (App preferences - auto-created)
 ├── macros.json                 (Global macros - auto-created)
 ├── profiles.json               (Quick-load presets)
-└── libraries/                  (Auto-downloaded dependencies)
-    ├── kmk_firmware-main/     (Downloaded on first run)
-    └── adafruit-circuitpython-bundle-.../  (Downloaded on first run)
+└── README.txt                  (This file)
 
 FIRST RUN:
 ----------
 1. Double-click ChronosPadConfigurator.exe
-2. Choose CircuitPython version (9.x or 10.x)
-3. The app will automatically download required libraries (~30-60 seconds)
-4. Wait for "Dependencies installed successfully!"
-5. Start configuring your Chronos Pad!
+2. Start configuring your Chronos Pad immediately!
+
+NO DOWNLOAD REQUIRED - All libraries are bundled with the exe!
 
 HOW IT WORKS:
 -------------
 The executable is FULLY PORTABLE:
 - All paths are relative to ChronosPadConfigurator.exe location
 - Copy the entire ChronosPadConfigurator/ folder anywhere (USB drive, desktop, etc.)
-- The app will always find its kmk_Config_Save/ and libraries/ folders
+- KMK firmware and CircuitPython libraries are bundled inside
 - Your configs stay with the app - no installation needed!
+- No internet connection required!
 
 USAGE:
 ------
 - All your saved configurations are stored in kmk_Config_Save/
 - App settings (theme, version, RGB colors) are in settings.json
 - Macros are shared across configs in macros.json
-- The libraries/ folder contains KMK firmware (auto-managed)
-- You can safely delete libraries/ to force a fresh download
+- Libraries (KMK firmware + CircuitPython) are bundled in _internal/
 
 SAVED CONFIGURATIONS:
 ---------------------
@@ -139,9 +138,9 @@ REQUIREMENTS:
 TROUBLESHOOTING:
 ----------------
 If the app can't find libraries:
-1. Make sure kmk_Config_Save/ and libraries/ folders are in the same directory as the .exe
-2. Delete libraries/ folder and restart the app to re-download
-3. Check that you're not running from a compressed/zipped folder
+1. Make sure _internal/ folder and kmk_Config_Save/ are in the same directory as the .exe
+2. Don't run the exe from inside a compressed/zipped folder - extract first!
+3. Check that antivirus hasn't quarantined files
 
 If settings aren't saving:
 1. Make sure you have write permissions in the folder
@@ -161,22 +160,15 @@ Enjoy your Chronos Pad! 🎹
         f.write(readme_content.strip())
     print(f"  ✓ Created README.txt with usage instructions")
     
-    # Create a .gitignore for the libraries folder
-    gitignore_content = """# Auto-downloaded dependencies
-*
-!.gitignore
-"""
-    with open(libraries_folder / ".gitignore", 'w') as f:
-        f.write(gitignore_content.strip())
-    print(f"  ✓ Created .gitignore in libraries/")
-    
     print("\n" + "=" * 60)
     print("✅ Build completed successfully!")
     print("=" * 60)
     print(f"\n📦 Distribution folder: dist\\ChronosPadConfigurator\\")
     print(f"📄 Executable: dist\\ChronosPadConfigurator\\ChronosPadConfigurator.exe")
-    print(f"� Config folder: dist\\ChronosPadConfigurator\\kmk_Config_Save\\")
-    print(f"📚 Libraries folder: dist\\ChronosPadConfigurator\\libraries\\")
+    print(f"📁 Config folder: dist\\ChronosPadConfigurator\\kmk_Config_Save\\")
+    print(f"📚 Libraries: Bundled inside exe (_internal/ folder)")
+    print(f"\n💡 The exe is fully portable with all libraries included!")
+    print(f"🚀 No download needed - ready to use immediately!\n")
     print(f"\n💡 The exe is fully portable - copy the entire folder anywhere!")
     print(f"🚀 The app will auto-download dependencies on first run.\n")
     

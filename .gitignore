@@ -1,9 +1,6 @@
 # AI Context folder
 ai-Context/
 
-# Auto-downloaded dependencies - these will be downloaded automatically
-libraries/
-
 # User configuration data (private) - keep folder but ignore all contents except .gitkeep
 kmk_Config_Save/*
 !kmk_Config_Save/.gitkeep

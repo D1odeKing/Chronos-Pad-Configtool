@@ -8736,7 +8736,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Check if kmk folder exists, if not copy it
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
-                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk_firmware-main", "kmk")
+                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk")
                     if os.path.exists(kmk_source):
                         import shutil
                         shutil.copytree(kmk_source, kmk_dest)
@@ -8749,9 +8749,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 else:
                     kmk_copied = False
                 
-                # Copy required libraries from CircuitPython 10.x bundle
-                lib_source = os.path.join(BASE_DIR, "libraries", 
-                                         "adafruit-circuitpython-bundle-10.x-mpy", "lib")
+                # Copy required libraries from bundled CircuitPython 10.x libs
+                lib_source = os.path.join(BASE_DIR, "libraries", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
                 
                 if not os.path.exists(lib_source):
