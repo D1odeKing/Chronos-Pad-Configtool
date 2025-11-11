@@ -8734,6 +8734,10 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     f.write(py_code_str)
                 
                 # Check if kmk folder exists, if not copy it
+                # Note: Libraries are bundled in simplified structure:
+                # - libraries/kmk/ contains the complete KMK firmware (formerly kmk_firmware-main/kmk)
+                # - libraries/lib/ contains only essential CircuitPython 10.x libraries (formerly adafruit-circuitpython-bundle-10.x-mpy/lib)
+                # This reduced structure is bundled directly into the executable for offline functionality
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
                     kmk_source = os.path.join(BASE_DIR, "libraries", "kmk")
