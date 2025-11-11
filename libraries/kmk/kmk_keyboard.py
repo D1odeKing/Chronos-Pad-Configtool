@@ -1,6 +1,8 @@
 try:
     from typing import Callable, Optional
 except ImportError:
+    # Typing is only used for type hints and is not required at runtime.
+    # This allows the code to run on microcontrollers or environments where 'typing' is unavailable.
     pass
 
 from collections import namedtuple
