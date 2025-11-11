@@ -1,6 +1,8 @@
 try:
     from typing import Callable, Optional, Tuple
 except ImportError:
+    # Typing module is not available in some minimal Python environments (e.g., CircuitPython).
+    # These imports are only used for type hints and are not required at runtime.
     pass
 
 import kmk.handlers.stock as handlers
