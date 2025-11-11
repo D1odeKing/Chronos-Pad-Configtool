@@ -6072,7 +6072,7 @@ class KMKConfigurator(QMainWindow):
         self.disable_usb_hid_checkbox.setChecked(disable_usb)
         self.disable_usb_hid_checkbox.blockSignals(False)
 
-        rename_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*"([^"]+)"', self.boot_config_str or "")
+        rename_match = re.search(BOOT_DRIVE_LABEL_PATTERN, self.boot_config_str or "")
         rename_enabled = bool(rename_match)
         self.rename_drive_checkbox.blockSignals(True)
         self.rename_drive_checkbox.setChecked(rename_enabled)
