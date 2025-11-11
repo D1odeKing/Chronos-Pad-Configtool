@@ -75,6 +75,10 @@ PROFILE_FILE = os.path.join(BASE_DIR, "profiles.json")
 MACRO_FILE = os.path.join(BASE_DIR, "macros.json")
 SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 
+# --- Regex Patterns ---
+# Pattern for extracting custom drive name from boot.py storage.getmount() call
+BOOT_DRIVE_LABEL_PATTERN = r'storage\.getmount\("/"\)\.label\s*=\s*["\']([^"\']+)["\']'
+
 # --- Dependency URLs ---
 KMK_FIRMWARE_URL = "https://github.com/KMKfw/kmk_firmware/archive/refs/heads/main.zip"
 # CircuitPython bundle URLs - version selected by user on first startup
@@ -8805,9 +8809,7 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         boot_saved = True
                         
                         # Extract and save custom drive name from boot.py
-                        import re
-                        label_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*["\']([^"\']+)["\']', 
-                                              self.boot_config_str)
+                        label_match = re.search(BOOT_DRIVE_LABEL_PATTERN, self.boot_config_str)
                         if label_match:
                             custom_drive_name = label_match.group(1).strip()
                             if custom_drive_name and custom_drive_name != "CIRCUITPY":
