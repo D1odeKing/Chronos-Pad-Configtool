@@ -85,16 +85,16 @@ class DependencyDownloader(QThread):
     """Downloads KMK firmware and CircuitPython libraries automatically
     
     Args:
-        cp_version: CircuitPython version to download (9 or 10)
+        cp_version: CircuitPython version to download (fixed at 10.x)
     """
     progress = pyqtSignal(str, int)  # message, percentage
     finished = pyqtSignal(bool)  # success
     
-    def __init__(self, cp_version=9):
+    def __init__(self, cp_version=10):
         super().__init__()
         # Use organized libraries folder
         self.libraries_dir = LIBRARIES_DIR
-        self.cp_version = cp_version  # Store user's version choice
+        self.cp_version = cp_version  # Fixed to CircuitPython 10.x (required version)
         
     def run(self):
         """Download all required dependencies"""
@@ -3842,7 +3842,7 @@ class KMKConfigurator(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("KMK Macropad Configurator - Chronos Pad")
+        self.setWindowTitle("KMK Macropad Configurator - Chronos Pad v1.0.0-beta")
         
         # Set minimum window size and better default size
         self.setMinimumSize(1200, 700)
@@ -3974,67 +3974,33 @@ class KMKConfigurator(QMainWindow):
         """Check if KMK firmware and CircuitPython libraries are available, download if not"""
         if os.environ.get("KMK_SKIP_DEP_CHECK"):
             return
+        
         libraries_dir = os.path.join(BASE_DIR, "libraries")
         kmk_path = os.path.join(libraries_dir, "kmk_firmware-main")
         
-        # Check if KMK exists
-        if os.path.exists(kmk_path):
-            # Check if CircuitPython bundle exists (either version)
-            bundle_9x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-9.x-mpy")
-            bundle_10x = os.path.join(libraries_dir, "adafruit-circuitpython-bundle-10.x-mpy")
-            if os.path.exists(bundle_9x) or os.path.exists(bundle_10x):
-                return  # Both dependencies exist
+        # Always use CircuitPython 10.x
+        cp_version = 10
+        bundle_path = os.path.join(libraries_dir, f"adafruit-circuitpython-bundle-{cp_version}.x-mpy")
         
-        # Load settings to check if user already selected version
-        settings = load_settings()
-        cp_version = settings.get('cp_version')
+        # Check if both dependencies exist
+        if os.path.exists(kmk_path) and os.path.exists(bundle_path):
+            return  # Both dependencies exist
         
-        # If version not selected, show selection dialog
-        if not cp_version:
-            cp_version = self.show_cp_version_dialog()
-            if not cp_version:
-                QMessageBox.warning(
-                    self,
-                    "Dependencies Required",
-                    "CircuitPython bundle version selection is required.\n"
-                    "Please restart and select a version."
-                )
-                return
-            
-            # Save selected version
-            settings['cp_version'] = cp_version
-            save_settings(settings)
-        
-        # Show download dialog
-        reply = QMessageBox.question(
-            self, 
-            "Download Dependencies",
-            f"This tool requires KMK firmware and CircuitPython libraries.\n"
-            f"Would you like to download them automatically?\n\n"
-            f"This will download:\n"
-            f"• KMK Firmware (GPL-3.0 license)\n"
-            f"• Adafruit CircuitPython Bundle {cp_version}.x (MIT license)\n\n"
-            f"Files will be downloaded to the 'libraries' folder.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        # Dependencies missing - download automatically
+        self.progress_dialog = QProgressDialog(
+            "Downloading required dependencies...\n\n"
+            "• KMK Firmware (GPL-3.0 license)\n"
+            "• Adafruit CircuitPython Bundle 10.x (MIT license)\n\n"
+            "This only happens once on first run.",
+            None, 0, 100, self
         )
-        
-        if reply != QMessageBox.StandardButton.Yes:
-            QMessageBox.warning(
-                self,
-                "Dependencies Required",
-                "This tool requires KMK firmware and CircuitPython libraries to function.\n"
-                "Please download them manually or restart and choose to download automatically."
-            )
-            return
-        
-        # Show progress dialog and start download
-        self.progress_dialog = QProgressDialog("Preparing download...", "Cancel", 0, 100, self)
         self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
+        self.progress_dialog.setCancelButton(None)  # No cancel button
         self.progress_dialog.show()
         
-        # Start download thread with selected version
+        # Start download thread with CircuitPython 10
         self.downloader = DependencyDownloader(cp_version=cp_version)
         self.downloader.progress.connect(self.on_download_progress)
         self.downloader.finished.connect(self.on_download_finished)
@@ -5514,6 +5480,7 @@ class KMKConfigurator(QMainWindow):
         file_select_layout.addWidget(QLabel("Current Config:"))
         self.config_file_combo = QComboBox()
         self.config_file_combo.setToolTip("Select a saved configuration to load")
+        self.config_file_combo.activated.connect(self.load_config_from_dropdown)
         file_select_layout.addWidget(self.config_file_combo, 1)
         refresh_btn = QPushButton("🔄")
         refresh_btn.setFixedWidth(35)
@@ -8620,31 +8587,34 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
         
         if system == "Windows":
             import string
-            from ctypes import windll
-            drives = []
-            bitmask = windll.kernel32.GetLogicalDrives()
-            for letter in string.ascii_uppercase:
-                if bitmask & 1:
-                    drives.append(f"{letter}:")
-                bitmask >>= 1
+            from ctypes import windll, create_unicode_buffer
             
-            for drive in drives:
-                try:
-                    label = windll.kernel32.GetVolumeInformationW(
-                        f"{drive}\\", None, 0, None, None, None, None, 0
+            # Check all drive letters
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                # Check if drive exists
+                drive_type = windll.kernel32.GetDriveTypeW(drive)
+                # DRIVE_REMOVABLE = 2, DRIVE_FIXED = 3
+                if drive_type in (2, 3):
+                    # Get volume label
+                    volume_name_buffer = create_unicode_buffer(261)
+                    file_system_buffer = create_unicode_buffer(261)
+                    
+                    result = windll.kernel32.GetVolumeInformationW(
+                        drive,
+                        volume_name_buffer,
+                        261,
+                        None,
+                        None,
+                        None,
+                        file_system_buffer,
+                        261
                     )
-                    # Try to get volume label
-                    import subprocess
-                    result = subprocess.run(
-                        ['cmd', '/c', 'vol', drive],
-                        capture_output=True,
-                        text=True,
-                        timeout=1
-                    )
-                    if drive_name in result.stdout:
-                        return drive + "\\"
-                except:
-                    continue
+                    
+                    if result:
+                        volume_label = volume_name_buffer.value
+                        if volume_label == drive_name:
+                            return drive
                     
         elif system == "Darwin":  # macOS
             path = f"/Volumes/{drive_name}"
@@ -8764,9 +8734,13 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     f.write(py_code_str)
                 
                 # Check if kmk folder exists, if not copy it
+                # Note: Libraries are bundled in simplified structure:
+                # - libraries/kmk/ contains the complete KMK firmware (formerly kmk_firmware-main/kmk)
+                # - libraries/lib/ contains only essential CircuitPython 10.x libraries (formerly adafruit-circuitpython-bundle-10.x-mpy/lib)
+                # This reduced structure is bundled directly into the executable for offline functionality
                 kmk_dest = os.path.join(folder_path, "kmk")
                 if not os.path.exists(kmk_dest):
-                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk_firmware-main", "kmk")
+                    kmk_source = os.path.join(BASE_DIR, "libraries", "kmk")
                     if os.path.exists(kmk_source):
                         import shutil
                         shutil.copytree(kmk_source, kmk_dest)
@@ -8779,10 +8753,21 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 else:
                     kmk_copied = False
                 
-                # Copy required libraries
-                lib_source = os.path.join(BASE_DIR, "libraries", 
-                                         "adafruit-circuitpython-bundle-9.x-mpy", "lib")
+                # Copy required libraries from bundled CircuitPython 10.x libs
+                lib_source = os.path.join(BASE_DIR, "libraries", "lib")
                 lib_dest = os.path.join(folder_path, "lib")
+                
+                if not os.path.exists(lib_source):
+                    QMessageBox.warning(self, "Warning",
+                        "CircuitPython 10.x libraries not found!\n\n"
+                        "The application will download them automatically on next startup.\n"
+                        "For now, code.py will be saved but libraries must be manually copied.\n\n"
+                        "Required files:\n"
+                        "  • adafruit_displayio_sh1106.mpy\n"
+                        "  • adafruit_display_text/ (folder)\n"
+                        "  • neopixel.mpy\n\n"
+                        f"Expected location: {lib_source}")
+                    lib_source = None
                 
                 # Create lib folder if it doesn't exist
                 os.makedirs(lib_dest, exist_ok=True)
@@ -8795,23 +8780,24 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 ]
                 
                 copied_files = []
-                for lib_name in required_libs:
-                    src = os.path.join(lib_source, lib_name)
-                    dst = os.path.join(lib_dest, lib_name)
-                    
-                    if os.path.exists(src):
-                        if os.path.isdir(src):
-                            # Copy directory
-                            if os.path.exists(dst):
+                if lib_source:  # Only copy if libraries were found
+                    for lib_name in required_libs:
+                        src = os.path.join(lib_source, lib_name)
+                        dst = os.path.join(lib_dest, lib_name)
+                        
+                        if os.path.exists(src):
+                            if os.path.isdir(src):
+                                # Copy directory
+                                if os.path.exists(dst):
+                                    import shutil
+                                    shutil.rmtree(dst)
+                                shutil.copytree(src, dst)
+                                copied_files.append(f"{lib_name}/ (folder)")
+                            else:
+                                # Copy file
                                 import shutil
-                                shutil.rmtree(dst)
-                            shutil.copytree(src, dst)
-                            copied_files.append(f"{lib_name}/ (folder)")
-                        else:
-                            # Copy file
-                            import shutil
-                            shutil.copy2(src, dst)
-                            copied_files.append(lib_name)
+                                shutil.copy2(src, dst)
+                                copied_files.append(lib_name)
                 
                 # Save boot.py if configured
                 boot_saved = False
@@ -8821,6 +8807,22 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         with open(boot_path, 'w') as f:
                             f.write(self.boot_config_str)
                         boot_saved = True
+                        
+                        # Extract and save custom drive name from boot.py
+                        import re
+                        label_match = re.search(r'storage\.getmount\("/"\)\.label\s*=\s*["\']([^"\']+)["\']', 
+                                              self.boot_config_str)
+                        if label_match:
+                            custom_drive_name = label_match.group(1).strip()
+                            if custom_drive_name and custom_drive_name != "CIRCUITPY":
+                                # Save to settings for future auto-detection
+                                settings = load_settings()
+                                board_names = settings.get('board_names', [])
+                                if custom_drive_name not in board_names:
+                                    board_names.append(custom_drive_name)
+                                    settings['board_names'] = board_names
+                                    save_settings(settings)
+                                    
                     except Exception as e:
                         QMessageBox.warning(self, "Warning", f"Could not save boot.py:\n{e}")
                 
@@ -8829,7 +8831,14 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                     msg += f"✓ KMK firmware copied to {kmk_dest}\n\n"
                 if boot_saved:
                     msg += f"✓ boot.py saved to {os.path.join(folder_path, 'boot.py')}\n\n"
-                msg += f"Libraries copied to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
+                
+                if copied_files:
+                    msg += f"✓ Libraries copied from CircuitPython 10.x bundle to {lib_dest}:\n" + "\n".join(f"  • {f}" for f in copied_files)
+                else:
+                    msg += f"⚠️ No libraries were copied.\n\n"
+                    msg += "CircuitPython 10.x libraries not found.\n"
+                    msg += "Please restart the app to download dependencies automatically."
+                
                 QMessageBox.information(self, "Success", msg)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not save code.py file:\n{e}")
@@ -8857,10 +8866,16 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                 # Refresh config list to include the newly saved file
                 if hasattr(self, 'config_file_combo'):
                     self.populate_config_file_list()
-                    rel_path = os.path.relpath(file_path, BASE_DIR)
-                    idx = self.config_file_combo.findText(rel_path)
-                    if idx >= 0:
-                        self.config_file_combo.setCurrentIndex(idx)
+                    # Try to set dropdown to the saved file (only works if in BASE_DIR)
+                    try:
+                        rel_path = os.path.relpath(file_path, BASE_DIR)
+                        idx = self.config_file_combo.findText(rel_path)
+                        if idx >= 0:
+                            self.config_file_combo.setCurrentIndex(idx)
+                    except ValueError:
+                        # On Windows, os.path.relpath raises ValueError when paths are on different drive letters
+                        # (e.g., file saved to D:\ while BASE_DIR is on C:\). Skip updating the dropdown in this case.
+                        pass
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{e}\n\nTraceback:\n{traceback.format_exc()}")
@@ -8918,21 +8933,29 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
             QMessageBox.critical(self, "Error", f"Could not save configuration file:\n{e}")
             raise e
 
+    def load_config_from_dropdown(self):
+        """Load configuration when selected from dropdown."""
+        if not hasattr(self, 'config_file_combo'):
+            return
+        
+        sel = self.config_file_combo.currentText()
+        if not sel:
+            return
+            
+        file_path = os.path.join(BASE_DIR, sel)
+        if os.path.exists(file_path):
+            self.load_configuration(file_path=file_path, show_message=True)
+
     def load_configuration(self, file_path=None, show_message=True):
-        """Load a saved configuration from disk."""
+        """Load a saved configuration from disk.
+        
+        When called from the Load button (file_path=None), ALWAYS opens file dialog.
+        When called from dropdown or programmatically, uses the provided path.
+        """
         selected_path = file_path
 
         if not selected_path:
-            # If a file is selected in the config combo, use that; otherwise open a file dialog
-            if hasattr(self, 'config_file_combo') and self.config_file_combo.count() > 0:
-                sel = self.config_file_combo.currentText()
-                if sel:
-                    candidate = os.path.join(BASE_DIR, sel)
-                    if os.path.exists(candidate):
-                        selected_path = candidate
-
-        if not selected_path:
-            # Open file dialog starting in kmk_Config_Save folder
+            # Always open file dialog when Load button is clicked
             start_dir = CONFIG_SAVE_DIR if os.path.exists(CONFIG_SAVE_DIR) else BASE_DIR
             selected_path, _ = QFileDialog.getOpenFileName(
                 self, 
