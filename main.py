@@ -85,7 +85,7 @@ class DependencyDownloader(QThread):
     """Downloads KMK firmware and CircuitPython libraries automatically
     
     Args:
-        cp_version: CircuitPython version to download (9 or 10)
+        cp_version: CircuitPython version to download (fixed at 10.x)
     """
     progress = pyqtSignal(str, int)  # message, percentage
     finished = pyqtSignal(bool)  # success
@@ -94,7 +94,7 @@ class DependencyDownloader(QThread):
         super().__init__()
         # Use organized libraries folder
         self.libraries_dir = LIBRARIES_DIR
-        self.cp_version = cp_version  # Store user's version choice (default to 10)
+        self.cp_version = cp_version  # Fixed to CircuitPython 10.x (required version)
         
     def run(self):
         """Download all required dependencies"""
