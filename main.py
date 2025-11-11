@@ -8869,8 +8869,8 @@ layer_cycler = LayerCycler(keyboard, num_layers=len(keyboard.keymap))
                         if idx >= 0:
                             self.config_file_combo.setCurrentIndex(idx)
                     except ValueError:
-                        # File is on a different drive, can't compute relative path
-                        # This is fine - just skip updating the dropdown
+                        # On Windows, os.path.relpath raises ValueError when paths are on different drive letters
+                        # (e.g., file saved to D:\ while BASE_DIR is on C:\). Skip updating the dropdown in this case.
                         pass
                 QMessageBox.information(self, "Success", f"Configuration saved to:\n{file_path}")
             except Exception as e:
